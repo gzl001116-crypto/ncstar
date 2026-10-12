@@ -34,8 +34,8 @@ type StoreValue = {
   addComment: (postId: string, text: string) => Promise<string | null>;
   addToCart: (productId: string) => Promise<void>;
   removeFromCart: (productId: string) => Promise<void>;
-  checkoutCart: (locale: string) => Promise<{ error: string | null; url?: string }>;
-  checkoutTier: (tierId: string, locale: string) => Promise<{ error: string | null; url?: string }>;
+  checkoutCart: (locale: string, pay?: "crypto") => Promise<{ error: string | null; url?: string }>;
+  checkoutTier: (tierId: string, locale: string, pay?: "crypto") => Promise<{ error: string | null; url?: string }>;
   completeCheckout: (sessionId: string) => Promise<{ error: string | null; code?: string; name?: string }>;
   publishPost: (input: { title: string; excerpt: string; body: string; minRank: number }) => Promise<string | null>;
   publishProduct: (input: {
@@ -67,7 +67,7 @@ type StoreValue = {
   updateProfile: (input: { name: string; bio: string; location?: string; category?: Category; tags?: string }) => Promise<string | null>;
   updateTier: (input: { id: string; name: string; price: number; blurb: string; perks: string[] }) => Promise<string | null>;
   openStudio: (input: { handle: string; category: string; location: string; bio: string }) => Promise<string | null>;
-  checkoutProduct: (productId: string, locale: string) => Promise<{ error: string | null; url?: string }>;
+  checkoutProduct: (productId: string, locale: string, pay?: "crypto") => Promise<{ error: string | null; url?: string }>;
   savePayout: (input: { country: string; holder: string; accountNumber: string; routing?: string; bankCode?: string; branchCode?: string; transit?: string; institution?: string }) => Promise<{ error: string | null; method?: string }>;
   uploadAvatar: (file: File) => Promise<string | null>;
   deleteAccount: (password: string) => Promise<string | null>;
@@ -244,7 +244,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return Boolean(tier && tier.rank >= post.minRank);
   };
 
-  const startCheckout = async (body: { tierId?: string; productId?: string; locale: string }) => {
+  const startCheckout = async (body: { tierId?: string; productId?: string; locale: string; pay?: "crypto" }) => {
     try {
       const { response, data } = await call("/api/checkout", body);
       if (!response.ok) return { error: say(data.code, data.name, data.error) };
@@ -287,9 +287,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     removeFromCart: async (productId) => {
       await mutate("/api/cart", { productId, op: "remove" });
     },
-    checkoutCart: (locale) => startCheckout({ locale }),
-    checkoutTier: (tierId, locale) => startCheckout({ tierId, locale }),
-    checkoutProduct: (productId, locale) => startCheckout({ productId, locale }),
+    checkoutCart: (locale, pay) => startCheckout({ locale, pay }),
+    checkoutTier: (tierId, locale, pay) => startCheckout({ tierId, locale, pay }),
+    checkoutProduct: (productId, locale, pay) => startCheckout({ productId, locale, pay }),
     savePayout: async (input) => {
       try {
         const { response, data } = await call("/api/payout/method", input);

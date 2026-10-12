@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
 import type { Creator, Post, Product } from "../types";
@@ -59,28 +58,19 @@ export function PostCard({ post, large = false, ratio }: { post: Post; large?: b
 }
 
 export function ProductCard({ product }: { product: Product }) {
-  const { t, phrase, lang } = useI18n();
-  const { creatorById, user, owns, checkoutProduct } = useStore();
+  const { t, phrase } = useI18n();
+  const { creatorById, user, owns } = useStore();
   const navigate = useNavigate();
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
   const creator = creatorById(product.creatorId);
   const mine = user?.handle === product.creatorId;
   const owned = owns(product.id);
-  const buy = async () => {
+  const buy = () => {
+    const next = `/checkout?product=${product.id}`;
     if (!user) {
-      navigate(`/login?next=${encodeURIComponent(`/checkout?product=${product.id}`)}`);
+      navigate(`/login?next=${encodeURIComponent(next)}`);
       return;
     }
-    setBusy(true);
-    setError("");
-    const result = await checkoutProduct(product.id, lang);
-    if (result.error || !result.url) {
-      setBusy(false);
-      setError(result.error || t("err.pay.stripe"));
-      return;
-    }
-    window.location.assign(result.url);
+    navigate(next);
   };
   return (
     <article className="card product-card">
@@ -107,10 +97,9 @@ export function ProductCard({ product }: { product: Product }) {
       </Link>
       {!mine && !owned && (
         <div className="card-actions">
-          <button type="button" className="btn btn-dark btn-small" disabled={busy} onClick={buy}>
-            {busy ? t("common.wait") : t("card.buy")}
+          <button type="button" className="btn btn-dark btn-small" onClick={buy}>
+            {t("card.buy")}
           </button>
-          {error && <p className="error">{error}</p>}
         </div>
       )}
     </article>

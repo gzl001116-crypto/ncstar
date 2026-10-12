@@ -2,7 +2,7 @@ import { matchCode, type Limiter, type MailEnv } from "./codes.ts";
 import { sessionCookieHeaders } from "./hosts.ts";
 import { isPlayFormat, parsePlay } from "./play.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
-import { sessionFields, signatureMatches, stripeForm, stripeGet, stripeKey, stripeRequest, stripeSend, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
+import { CRYPTO_MAX_MINOR, CRYPTO_MIN_MINOR, quoteCnyPerUsd, sessionFields, signatureMatches, splitUsdMinors, stripeForm, stripeGet, stripeKey, stripeRequest, stripeSend, usdMinorUnits, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
 
 const COOKIE = "fanstar_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -177,6 +177,8 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE orders ADD COLUMN creator_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'cny'",
     "ALTER TABLE orders ADD COLUMN transfer_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE payments ADD COLUMN charged_currency TEXT NOT NULL DEFAULT 'cny'",
+    "ALTER TABLE payments ADD COLUMN charged_amount INTEGER NOT NULL DEFAULT 0",
   ]) {
     try {
       sql.exec(statement);
@@ -940,11 +942,18 @@ function fulfillPayment(sql: Sql, viewer: string, payment: Row) {
   return withState(sql, viewer, code, undefined, name);
 }
 
+function expectedCharge(payment: Row, payload: PayPayload) {
+  const currency = String(payment.charged_currency ?? "cny").toLowerCase();
+  if (currency === "usd") return { currency, amount: Number(payment.charged_amount) };
+  return { currency: "cny", amount: payAmount(payload) };
+}
+
 function sessionMatches(session: StripeSession, payment: Row, viewer: string) {
   const payload = JSON.parse(String(payment.payload)) as PayPayload;
+  const expected = expectedCharge(payment, payload);
   return (
-    session.amount_total === payAmount(payload) &&
-    (session.currency ?? "").toLowerCase() === "cny" &&
+    session.amount_total === expected.amount &&
+    (session.currency ?? "").toLowerCase() === expected.currency &&
     session.metadata.paymentId === String(payment.id) &&
     session.metadata.userId === viewer
   );
@@ -999,10 +1008,13 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
   }
   const serialized = JSON.stringify(payload);
   const amount = payload.kind === "membership" ? payload.price : payload.items.reduce((sum, item) => sum + item.price, 0);
+  const crypto = body.pay === "crypto";
+  const chargedCurrency = crypto ? "usd" : "cny";
   const existing = sql.get(
-    "SELECT * FROM payments WHERE user_id = ? AND status = 'pending' AND payload = ? AND session_id != '' ORDER BY created_at DESC LIMIT 1",
+    "SELECT * FROM payments WHERE user_id = ? AND status = 'pending' AND payload = ? AND charged_currency = ? AND session_id != '' ORDER BY created_at DESC LIMIT 1",
     viewer,
     serialized,
+    chargedCurrency,
   );
   if (existing) {
     const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(String(existing.session_id))}`, "GET", undefined, fetchImpl);
@@ -1013,17 +1025,32 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
       return json({ url: loaded.session.url, sessionId: loaded.session.id });
     }
   }
+  const items = payload.kind === "membership" ? [{ name: payload.title, amount: payload.price }] : payload.items.map((item) => ({ name: item.title, amount: item.price }));
+  let minors: number[] | undefined;
+  let chargedAmount = 0;
+  if (crypto) {
+    const quote = await quoteCnyPerUsd(fetchImpl);
+    if (!quote.ok) return fail("err.pay.crypto");
+    const minor = usdMinorUnits(amount, quote.cnyPerUsd);
+    if (minor < CRYPTO_MIN_MINOR) return fail("err.pay.small");
+    if (minor > CRYPTO_MAX_MINOR) return fail("err.pay.crypto");
+    const split = splitUsdMinors(items.map((item) => item.amount), minor);
+    if (!split) return fail("err.pay.crypto");
+    minors = split;
+    chargedAmount = minor;
+  }
   const paymentId = id();
   sql.run(
-    "INSERT INTO payments (id, user_id, kind, payload, amount, currency, session_id, status, created_at) VALUES (?, ?, ?, ?, ?, 'cny', '', 'pending', ?)",
+    "INSERT INTO payments (id, user_id, kind, payload, amount, currency, charged_currency, charged_amount, session_id, status, created_at) VALUES (?, ?, ?, ?, ?, 'cny', ?, ?, '', 'pending', ?)",
     paymentId,
     viewer,
     payload.kind,
     serialized,
     amount,
+    chargedCurrency,
+    chargedAmount,
     new Date().toISOString(),
   );
-  const items = payload.kind === "membership" ? [{ name: payload.title, amount: payload.price }] : payload.items.map((item) => ({ name: item.title, amount: item.price }));
   const created = await stripeRequest(
     env,
     "/v1/checkout/sessions",
@@ -1036,12 +1063,15 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
       locale: stripeLocale(body.locale),
       cancelPath,
       items,
+      currency: chargedCurrency,
+      minors,
     }),
     fetchImpl,
   );
   if (!created.ok || !created.session.url) {
     sql.run("DELETE FROM payments WHERE id = ?", paymentId);
-    return fail(created.ok ? "err.pay.stripe" : created.code);
+    if (!created.ok && (created.code === "err.pay.small" || created.code === "err.pay.unconfigured")) return fail(created.code);
+    return fail(crypto ? "err.pay.crypto" : created.ok ? "err.pay.stripe" : created.code);
   }
   sql.run("UPDATE payments SET session_id = ? WHERE id = ?", created.session.id, paymentId);
   return json({ url: created.session.url, sessionId: created.session.id });

@@ -10,7 +10,8 @@ const env: MailEnv & { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: strin
   STRIPE_SECRET_KEY: "sk_test_platform_check",
   STRIPE_WEBHOOK_SECRET: "whsec_platform_check",
 };
-const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string }>();
+const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string; currency: string }>();
+let rateDown = false;
 const stripeEvents = new Map<string, { id: string; type: string; data: { object: { id: string } } }>();
 const transfers: { id: string; amount: number; currency: string; destination: string; key: string }[] = [];
 let stripePaid = true;
@@ -33,6 +34,10 @@ function headerValue(headers: HeadersInit | undefined, name: string) {
 async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   const method = (init?.method ?? "GET").toUpperCase();
+  if (url.includes("open.er-api.com")) {
+    if (rateDown) return new Response("down", { status: 503 });
+    return Response.json({ result: "success", rates: { CNY: 7.2 } });
+  }
   if (url.includes("/v2/") && headerValue(init?.headers, "Stripe-Version") !== "2026-09-30.preview") {
     throw new Error("stripe version missing");
   }
@@ -79,20 +84,34 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
   }
   if (init?.method === "POST") {
     const params = new URLSearchParams(String(init.body ?? ""));
-    if (url.includes("/v1/checkout/sessions") && params.get("payment_method_options[wechat_pay][client]") !== "web") {
-      throw new Error("wechat client missing");
+    if (url.includes("/v1/checkout/sessions")) {
+      if (params.has("payment_method_types[0]")) throw new Error("payment_method_types set");
+      const currency = params.get("line_items[0][price_data][currency]") ?? "";
+      if (currency !== "cny" && currency !== "usd") throw new Error(`currency ${currency}`);
+      const pay = params.get("metadata[pay]");
+      if (currency === "cny" && (pay !== "card" || params.get("payment_method_options[wechat_pay][client]") !== "web")) {
+        throw new Error("card session shape");
+      }
+      if (currency === "usd" && (pay !== "crypto" || params.has("payment_method_options[wechat_pay][client]"))) {
+        throw new Error("crypto session shape");
+      }
+      for (const [key, value] of params) {
+        if (key.includes("[price_data][currency]") && value !== currency) throw new Error("mixed currency");
+      }
     }
     let amount = 0;
     for (const [key, value] of params) {
       if (key.endsWith("[price_data][unit_amount]")) amount += Number(value);
     }
+    const currency = params.get("line_items[0][price_data][currency]") ?? "cny";
     const id = `cs_test_${stripeSessions.size + 1}`;
     stripeSessions.set(id, {
       amount,
+      currency,
       paymentId: params.get("metadata[paymentId]") ?? "",
       userId: params.get("metadata[userId]") ?? "",
     });
-    return Response.json({ id, url: `https://checkout.stripe.test/${id}`, payment_status: "unpaid", status: "open", amount_total: amount, currency: "cny", metadata: {} });
+    return Response.json({ id, url: `https://checkout.stripe.test/${id}`, payment_status: "unpaid", status: "open", amount_total: amount, currency, metadata: {} });
   }
   if (url.includes("/v1/events/")) {
     const eventId = decodeURIComponent(url.split("/").pop() ?? "");
@@ -109,7 +128,7 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
     payment_status: stripePaid ? "paid" : "unpaid",
     status: stripePaid ? "complete" : "open",
     amount_total: stripeAmount ?? saved.amount,
-    currency: "cny",
+    currency: saved.currency,
     metadata: { paymentId: saved.paymentId, userId: saved.userId },
   });
 }
@@ -838,6 +857,59 @@ env.STRIPE_SECRET_KEY = savedKey;
 if (bareCart.status !== 200 || blockedPay.status !== 400 || blockedPay.data.code !== "err.pay.unconfigured") {
   throw new Error(`unconfigured pay ${blockedPay.status} ${blockedPay.raw}`);
 }
+
+const coinWork = await creator.send("/api/products", {
+  title: "虚拟币",
+  description: "稳定币支付",
+  price: 4,
+  kind: "文本",
+  includes: ["短文"],
+  fileBody: "稳定币确认后才能看到的正文。",
+});
+const coinId = coinWork.data.products?.find((item: { title: string }) => item.title === "虚拟币")?.id as string;
+stripePaid = false;
+const cardSession = await readerNow.send("/api/checkout", { productId: coinId });
+const coinSession = await readerNow.send("/api/checkout", { pay: "crypto", productId: coinId });
+if (cardSession.status !== 200 || coinSession.status !== 200 || cardSession.data.sessionId === coinSession.data.sessionId) {
+  throw new Error(`crypto start ${cardSession.status} ${coinSession.status} ${coinSession.raw}`);
+}
+const reusedCoin = await readerNow.send("/api/checkout", { pay: "crypto", productId: coinId });
+if (reusedCoin.data.sessionId !== coinSession.data.sessionId) throw new Error(`crypto session was not reused ${reusedCoin.raw}`);
+stripePaid = true;
+stripeAmount = 400;
+const coinAsCard = await readerNow.send("/api/checkout/complete", { sessionId: coinSession.data.sessionId });
+if (coinAsCard.status !== 400 || coinAsCard.data.code !== "err.pay.amount") throw new Error(`crypto amount ${coinAsCard.status} ${coinAsCard.raw}`);
+stripeAmount = 56;
+const coinPaid = await readerNow.send("/api/checkout/complete", { sessionId: coinSession.data.sessionId });
+stripeAmount = null;
+const coinOrder = sql.get("SELECT amount, fee, currency FROM orders WHERE target_id = ? AND user_id = (SELECT id FROM users WHERE email = 'fan@example.com')", coinId);
+if (
+  coinPaid.status !== 200 ||
+  !coinPaid.data.user?.library?.some((item: { productId: string }) => item.productId === coinId) ||
+  Number(coinOrder?.amount) !== 4 ||
+  Number(coinOrder?.fee) !== 0.32 ||
+  coinOrder?.currency !== "cny"
+) {
+  throw new Error(`crypto paid ${coinPaid.status} ${coinPaid.raw} ${JSON.stringify(coinOrder)}`);
+}
+const tinyWork = await creator.send("/api/products", {
+  title: "一分钱",
+  description: "太小",
+  price: 1,
+  kind: "文本",
+  includes: ["短文"],
+  fileBody: "金额换算后不足五十美分。",
+});
+const tinyId = tinyWork.data.products?.find((item: { title: string }) => item.title === "一分钱")?.id as string;
+const tinyPay = await readerNow.send("/api/checkout", { pay: "crypto", productId: tinyId });
+rateDown = true;
+const ratePay = await readerNow.send("/api/checkout", { pay: "crypto", productId: coinId });
+rateDown = false;
+if (!tinyId || tinyPay.status !== 400 || tinyPay.data.code !== "err.pay.small" || ratePay.status !== 400 || ratePay.data.code !== "err.pay.crypto") {
+  throw new Error(`crypto limits ${tinyPay.status} ${tinyPay.raw} ${ratePay.status} ${ratePay.raw}`);
+}
+const stillCard = await readerNow.send("/api/checkout/complete", { sessionId: cardSession.data.sessionId });
+if (stillCard.status !== 200) throw new Error(`card after crypto ${stillCard.status} ${stillCard.raw}`);
 
 const scratch = await creator.send("/api/products", {
   title: "可删除",

@@ -22,25 +22,6 @@ export function Checkout() {
   const existing = tier ? activeMembership(tier.creatorId) : undefined;
 
   useEffect(() => {
-    if (!directId || !user || sessionId) return;
-    let stopped = false;
-    setBusy(true);
-    setError("");
-    void checkoutProduct(directId, lang).then((result) => {
-      if (stopped) return;
-      if (result.url) {
-        window.location.assign(result.url);
-        return;
-      }
-      setBusy(false);
-      if (result.error) setError(result.error);
-    });
-    return () => {
-      stopped = true;
-    };
-  }, [directId, user]);
-
-  useEffect(() => {
     if (!sessionId || !user) return;
     let stopped = false;
     setBusy(true);
@@ -96,10 +77,10 @@ export function Checkout() {
 
   const total = tier ? tier.price : lines.reduce((sum, item) => sum + item.price, 0);
 
-  const pay = async () => {
+  const pay = async (method?: "crypto") => {
     setBusy(true);
     setError("");
-    const result = tier ? await checkoutTier(tier.id, lang) : direct ? await checkoutProduct(direct.id, lang) : await checkoutCart(lang);
+    const result = tier ? await checkoutTier(tier.id, lang, method) : direct ? await checkoutProduct(direct.id, lang, method) : await checkoutCart(lang, method);
     if (result.error) {
       setBusy(false);
       setError(result.error);
@@ -164,9 +145,13 @@ export function Checkout() {
         {canceled && !error && <p className="banner-note">{t("checkout.canceled")}</p>}
         {sessionId && busy && <p className="muted">{t("checkout.returning")}</p>}
         {error && <p className="error">{error}</p>}
-        <button type="button" className="btn btn-dark btn-block" disabled={busy || (!tier && lines.length === 0)} onClick={pay}>
+        <button type="button" className="btn btn-dark btn-block" disabled={busy || (!tier && lines.length === 0)} onClick={() => void pay()}>
           {busy ? t("common.wait") : t("checkout.confirm")}
         </button>
+        <button type="button" className="btn btn-line btn-block" disabled={busy || (!tier && lines.length === 0)} onClick={() => void pay("crypto")}>
+          {busy ? t("common.wait") : t("checkout.crypto")}
+        </button>
+        <p className="fineprint">{t("checkout.cryptoNote")}</p>
       </aside>
     </div>
   );

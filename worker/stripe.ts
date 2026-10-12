@@ -50,6 +50,52 @@ function encodeSuccess(origin: string) {
   return encodeURIComponent(`${origin}/checkout?session_id=`) + "{CHECKOUT_SESSION_ID}";
 }
 
+export const USD_QUOTE_URL = "https://open.er-api.com/v6/latest/USD";
+export const CRYPTO_MIN_MINOR = 50;
+export const CRYPTO_MAX_MINOR = 1_000_000;
+
+export async function quoteCnyPerUsd(fetchImpl: typeof fetch): Promise<{ ok: true; cnyPerUsd: number } | { ok: false }> {
+  let response: Response;
+  try {
+    response = await fetchImpl(USD_QUOTE_URL);
+  } catch {
+    return { ok: false };
+  }
+  if (!response.ok) return { ok: false };
+  const data = (await response.json().catch(() => null)) as { result?: string; rates?: { CNY?: number } } | null;
+  const rate = Number(data?.rates?.CNY);
+  if (data?.result !== "success" || !Number.isFinite(rate) || rate < 4 || rate > 12) return { ok: false };
+  return { ok: true, cnyPerUsd: rate };
+}
+
+export function usdMinorUnits(cnyYuan: number, cnyPerUsd: number) {
+  return Math.round((cnyYuan / cnyPerUsd) * 100);
+}
+
+export function splitUsdMinors(weights: number[], totalMinor: number) {
+  const count = weights.length;
+  if (count === 0 || totalMinor < count) return null;
+  const sum = weights.reduce((total, weight) => total + weight, 0);
+  if (!(sum > 0)) return null;
+  const minors = weights.map((weight) => Math.floor((weight / sum) * totalMinor));
+  let left = totalMinor - minors.reduce((total, minor) => total + minor, 0);
+  const order = weights.map((_, index) => index).sort((a, b) => weights[b] - weights[a] || a - b);
+  for (const index of order) {
+    if (left <= 0) break;
+    minors[index] += 1;
+    left -= 1;
+  }
+  for (const index of order) {
+    if (minors[index] >= 1) continue;
+    const donor = order.find((item) => minors[item] > 1);
+    if (donor == null) return null;
+    minors[donor] -= 1;
+    minors[index] += 1;
+  }
+  if (left !== 0 || minors.some((minor) => minor < 1) || minors.reduce((total, minor) => total + minor, 0) !== totalMinor) return null;
+  return minors;
+}
+
 export function sessionFields(input: {
   origin: string;
   paymentId: string;
@@ -58,7 +104,10 @@ export function sessionFields(input: {
   locale: string;
   cancelPath: string;
   items: { name: string; amount: number }[];
+  currency?: "cny" | "usd";
+  minors?: number[];
 }) {
+  const currency = input.currency ?? "cny";
   const fields: Record<string, string> = {
     mode: "payment",
     success_url: encodeSuccess(input.origin),
@@ -68,12 +117,14 @@ export function sessionFields(input: {
     client_reference_id: input.paymentId,
     "metadata[paymentId]": input.paymentId,
     "metadata[userId]": input.userId,
-    "payment_method_options[wechat_pay][client]": "web",
+    "metadata[pay]": currency === "usd" ? "crypto" : "card",
   };
+  if (currency === "cny") fields["payment_method_options[wechat_pay][client]"] = "web";
   input.items.forEach((item, index) => {
+    const minor = currency === "usd" ? input.minors?.[index] ?? 0 : Math.round(item.amount * 100);
     fields[`line_items[${index}][quantity]`] = "1";
-    fields[`line_items[${index}][price_data][currency]`] = "cny";
-    fields[`line_items[${index}][price_data][unit_amount]`] = String(Math.round(item.amount * 100));
+    fields[`line_items[${index}][price_data][currency]`] = currency;
+    fields[`line_items[${index}][price_data][unit_amount]`] = String(minor);
     fields[`line_items[${index}][price_data][product_data][name]`] = item.name.slice(0, 120) || "fanstar";
   });
   return fields;
