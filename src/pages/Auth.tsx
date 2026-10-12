@@ -3,11 +3,6 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTitle } from "../hooks";
 import { useStore } from "../store";
 
-const DEMOS = [
-  { email: "fan@xingye.app", password: "xingye123", label: "支持者 · 周予安" },
-  { email: "studio@xingye.app", password: "xingye123", label: "创作者 · 阿禾" },
-];
-
 export function Auth({ mode }: { mode: "login" | "register" }) {
   useTitle(mode === "login" ? "登录 · 星页" : "注册 · 星页");
   const { login, register } = useStore();
@@ -84,24 +79,15 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
     }
     setBusy(true);
     try {
-      if (mode === "register" && ticket) {
-        const response = await fetch("/api/verify-code", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: form.email.trim(),
-            code,
-            token: ticket.token,
-            expiresAt: ticket.expiresAt,
-          }),
-        });
-        const data = (await response.json().catch(() => ({}))) as { error?: string };
-        if (!response.ok) {
-          setError(data.error || "验证码不正确");
-          return;
-        }
-      }
-      const result = mode === "login" ? login(form.email, form.password) : register(form);
+      const result =
+        mode === "login"
+          ? await login(form.email, form.password)
+          : await register({
+              ...form,
+              code,
+              token: ticket?.token ?? "",
+              expiresAt: ticket?.expiresAt ?? 0,
+            });
       if (result) {
         setError(result);
         return;
@@ -114,8 +100,6 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
     }
   };
 
-  const fill = (email: string, password: string) => setForm((current) => ({ ...current, email, password }));
-
   return (
     <div className="page auth-wrap">
       <form className="auth-card" onSubmit={onSubmit}>
@@ -123,8 +107,8 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
         <h1>{mode === "login" ? "登录星页" : "创建账号"}</h1>
         <p className="muted">
           {mode === "register"
-            ? "注册前会向邮箱发送 6 位验证码。账号数据仍保存在这台浏览器里。"
-            : "账号只保存在这台浏览器里，用来演示关注、会员和购买。"}
+            ? "注册前会向邮箱发送 6 位验证码。账号会保存在星页，换一台设备也能登录。"
+            : "使用注册时的邮箱和密码登录。"}
         </p>
         {mode === "register" && (
           <>
@@ -210,14 +194,6 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
             已有账号？ <Link to={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}>登录</Link>
           </p>
         )}
-        <div className="demo-accounts">
-          <p className="muted">一键填入演示账号</p>
-          {DEMOS.map((demo) => (
-            <button key={demo.email} type="button" className="chip" onClick={() => fill(demo.email, demo.password)}>
-              {demo.label}
-            </button>
-          ))}
-        </div>
       </form>
     </div>
   );

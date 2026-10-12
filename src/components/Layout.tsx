@@ -16,7 +16,7 @@ function Mark() {
 }
 
 export function Layout() {
-  const { user, logout, toasts, reset } = useStore();
+  const { user, logout, toasts } = useStore();
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
   const [query, setQuery] = useState("");
@@ -126,13 +126,11 @@ export function Layout() {
             <Link to="/terms">使用条款</Link>
           </div>
           <div>
-            <strong>演示账号</strong>
-            <p>支持者 fan@xingye.app</p>
-            <p>创作者 studio@xingye.app</p>
-            <p>密码都是 xingye123</p>
-            <button type="button" className="text-btn" onClick={reset}>
-              重置演示数据
-            </button>
+            <strong>账号</strong>
+            <Link to="/register">注册</Link>
+            <Link to="/login">登录</Link>
+            <Link to="/library">我的库</Link>
+            <Link to="/studio">创作台</Link>
           </div>
         </div>
       </footer>

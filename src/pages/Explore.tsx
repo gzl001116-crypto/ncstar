@@ -15,7 +15,7 @@ const KINDS = [
 
 export function Explore() {
   useTitle("探索 · 星页");
-  const { creators, posts, products } = useStore();
+  const { ready, creators, posts, products } = useStore();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
   const cat = params.get("cat") ?? "全部";
@@ -73,7 +73,7 @@ export function Explore() {
           <input
             value={q}
             onChange={(event) => set("q", event.target.value)}
-            placeholder="试试薄荷、配乐、胶片、纹样"
+            placeholder="搜索名字、动态或作品"
             aria-label="筛选"
           />
         </label>
@@ -95,7 +95,11 @@ export function Explore() {
         </div>
       </div>
 
-      {empty && <div className="empty">没有匹配的页面。换一个词，或者把分类放回全部。</div>}
+      {!ready ? (
+        <div className="empty">正在载入</div>
+      ) : empty ? (
+        <div className="empty">{q ? "没有匹配的页面。换一个词，或者把分类放回全部。" : "还没有内容。注册并开通创作页后，动态和作品会出现在这里。"}</div>
+      ) : null}
 
       {showCreators && creatorHits.length > 0 && (
         <section className="section">

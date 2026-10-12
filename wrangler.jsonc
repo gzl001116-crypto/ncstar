@@ -8,6 +8,14 @@
   // RESEND_API_KEY is a Worker secret, not a committed value:
   // npx wrangler secret put RESEND_API_KEY
   // CODE_SECRET is optional. When it is absent, codes are signed with a key derived from RESEND_API_KEY.
+  "durable_objects": {
+    "bindings": [
+      { "name": "FANSTAR", "class_name": "FanstarStore" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["FanstarStore"] }
+  ],
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

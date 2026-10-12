@@ -3,6 +3,8 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { handleSend, handleVerify, memoryLimiter, type MailEnv } from "./worker/codes";
+import { openSql } from "./worker/node-db";
+import { handleApp } from "./worker/platform";
 
 function loadDevVars(): MailEnv {
   if (!existsSync(".dev.vars")) return {};
@@ -26,46 +28,42 @@ function readBody(req: IncomingMessage) {
   });
 }
 
-function verifyApi() {
+function api() {
   const env = loadDevVars();
   const limiter = memoryLimiter();
+  const sql = openSql();
   return {
-    name: "verify-api",
+    name: "fanstar-api",
     configureServer(server: { middlewares: { use: (fn: (req: IncomingMessage, res: ServerResponse, next: (err?: unknown) => void) => void) => void } }) {
       server.middlewares.use((req, res, next) => {
         void (async () => {
-          const url = req.url?.split("?")[0];
-          if (url !== "/api/send-code" && url !== "/api/verify-code") {
+          const path = req.url?.split("?")[0] ?? "";
+          if (!path.startsWith("/api/")) {
             next();
             return;
           }
-          if (req.method === "OPTIONS") {
-            res.statusCode = 204;
-            res.end();
-            return;
-          }
-          if (req.method !== "POST") {
-            res.statusCode = 405;
-            res.setHeader("content-type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ error: "请使用 POST" }));
-            return;
-          }
-          const raw = await readBody(req);
-          const request = new Request(`http://127.0.0.1${url}`, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-              "cf-connecting-ip": req.socket.remoteAddress ?? "local",
-            },
-            body: raw,
+          const raw = req.method === "GET" || req.method === "HEAD" ? "" : await readBody(req);
+          const headers = new Headers();
+          if (req.headers.cookie) headers.set("cookie", req.headers.cookie);
+          if (req.headers["content-type"]) headers.set("content-type", String(req.headers["content-type"]));
+          headers.set("cf-connecting-ip", req.socket.remoteAddress ?? "local");
+          const request = new Request(`http://127.0.0.1${req.url}`, {
+            method: req.method,
+            headers,
+            body: req.method === "GET" || req.method === "HEAD" ? undefined : raw,
           });
           const response =
-            url === "/api/send-code"
+            path === "/api/send-code"
               ? await handleSend(request, env, limiter)
-              : await handleVerify(request, env, limiter);
+              : path === "/api/verify-code"
+                ? await handleVerify(request, env, limiter)
+                : await handleApp(request, sql, env, limiter);
           res.statusCode = response.status;
-          res.setHeader("content-type", "application/json; charset=utf-8");
-          res.end(await response.text());
+          const type = response.headers.get("content-type");
+          if (type) res.setHeader("content-type", type);
+          const cookie = response.headers.get("set-cookie");
+          if (cookie) res.setHeader("set-cookie", cookie);
+          res.end(Buffer.from(await response.arrayBuffer()));
         })().catch(next);
       });
     },
@@ -73,7 +71,7 @@ function verifyApi() {
 }
 
 export default defineConfig({
-  plugins: [react(), verifyApi()],
+  plugins: [react(), api()],
   server: {
     host: "0.0.0.0",
     port: 5173,

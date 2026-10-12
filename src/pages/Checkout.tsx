@@ -10,8 +10,8 @@ export function Checkout() {
   const { user, productById, creatorById, tierById, removeFromCart, checkoutCart, checkoutTier, activeMembership } = useStore();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [method, setMethod] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const tier = tierById(params.get("tier") ?? "");
   const creator = tier ? creatorById(tier.creatorId) : undefined;
   const existing = tier ? activeMembership(tier.creatorId) : undefined;
@@ -22,7 +22,7 @@ export function Checkout() {
       <div className="page narrow">
         <div className="empty">
           <h1>先登录，再结账</h1>
-          <p>这是演示结账，不会产生真实扣款。</p>
+          <p>订单会记在你的账号上。</p>
           <Link to={`/login?next=${encodeURIComponent(next)}`} className="btn btn-dark">
             去登录
           </Link>
@@ -38,12 +38,11 @@ export function Checkout() {
 
   const total = tier ? tier.price : lines.reduce((sum, item) => sum + item.price, 0);
 
-  const pay = () => {
-    if (!method) {
-      setError("请选择一种演示支付方式");
-      return;
-    }
-    const result = tier ? checkoutTier(tier.id) : checkoutCart();
+  const pay = async () => {
+    setBusy(true);
+    setError("");
+    const result = tier ? await checkoutTier(tier.id) : await checkoutCart();
+    setBusy(false);
     if (result) {
       setError(result);
       return;
@@ -54,9 +53,9 @@ export function Checkout() {
   return (
     <div className="page checkout">
       <div>
-        <p className="kicker">演示结账</p>
+        <p className="kicker">订单</p>
         <h1>{tier ? "开通会员" : "购物袋"}</h1>
-        <p className="fineprint">不会产生真实扣款。选择任一方式都可以完成这笔演示订单。</p>
+        <p className="fineprint">确认后订单记在你的账号上，会员或作品立即生效。会员 30 天，不自动续费。</p>
         {tier && creator ? (
           <article className="line">
             <div>
@@ -91,21 +90,10 @@ export function Checkout() {
       </div>
       <aside className="pay-card">
         <h2>应付 {yuan(total)}</h2>
-        <p className="muted">创作者合计实收约 {yuan(creatorShare(total))}。</p>
-        <div className="methods">
-          {[
-            ["balance", "演示余额"],
-            ["card", "演示银行卡"],
-          ].map(([id, label]) => (
-            <label key={id} className={method === id ? "method on" : "method"}>
-              <input type="radio" name="method" checked={method === id} onChange={() => setMethod(id)} />
-              {label}
-            </label>
-          ))}
-        </div>
+        <p className="muted">创作者实收约 {yuan(creatorShare(total))}，平台服务费 8%。</p>
         {error && <p className="error">{error}</p>}
-        <button type="button" className="btn btn-dark btn-block" disabled={!tier && lines.length === 0} onClick={pay}>
-          确认支付
+        <button type="button" className="btn btn-dark btn-block" disabled={busy || (!tier && lines.length === 0)} onClick={pay}>
+          {busy ? "请稍候" : "确认订单"}
         </button>
       </aside>
     </div>

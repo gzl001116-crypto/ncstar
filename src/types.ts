@@ -78,7 +78,6 @@ export type User = {
   id: string;
   name: string;
   email: string;
-  password: string;
   handle: string;
   bio: string;
   isCreator: boolean;
@@ -89,14 +88,11 @@ export type User = {
   cart: string[];
 };
 
-export type Db = {
-  version: 1;
-  sessionEmail: string | null;
-  users: User[];
+export type Catalog = {
+  creators: Creator[];
   posts: Post[];
   products: Product[];
-  comments: Comment[];
-  creators: Creator[];
   tiers: Tier[];
-  creatorPatches: Record<string, Partial<Creator>>;
+  comments: Comment[];
+  user: User | null;
 };

@@ -9,12 +9,13 @@ import { NotFound } from "./NotFound";
 export function PostPage() {
   const { handle = "", postId = "" } = useParams();
   const navigate = useNavigate();
-  const { posts, comments, creatorById, tiers, canRead, liked, toggleLike, user, addComment, activeMembership, tierById } = useStore();
+  const { ready, posts, comments, creatorById, tiers, canRead, liked, toggleLike, user, addComment, activeMembership, tierById } = useStore();
   const post = posts.find((item) => item.id === postId && item.creatorId === handle);
   const creator = creatorById(handle);
   useTitle(post ? `${post.title} · 星页` : "未找到 · 星页");
   const [text, setText] = useState("");
   const [error, setError] = useState("");
+  if (!ready) return <div className="page"><p className="muted">正在载入</p></div>;
   if (!post || !creator) return <NotFound />;
 
   const open = canRead(post);
@@ -25,13 +26,13 @@ export function PostPage() {
     .filter((tier) => tier.creatorId === creator.id && tier.rank >= post.minRank)
     .sort((a, b) => a.price - b.price)[0];
 
-  const onComment = (event: FormEvent) => {
+  const onComment = async (event: FormEvent) => {
     event.preventDefault();
     if (!user) {
       navigate(`/login?next=/c/${handle}/posts/${post.id}`);
       return;
     }
-    const result = addComment(post.id, text);
+    const result = await addComment(post.id, text);
     if (result) {
       setError(result);
       return;
@@ -40,15 +41,13 @@ export function PostPage() {
     setError("");
   };
 
-  const saveFile = (name: string) => {
-    downloadText(name, [
-      "星页演示文件",
-      creator.name,
-      post.title,
-      "",
-      "这是解锁后的附件占位。真实平台里，这里会是创作者上传的原稿。",
-      post.body,
-    ]);
+  const saveFile = async (name: string) => {
+    const response = await fetch(`/api/download?postId=${encodeURIComponent(post.id)}`, { credentials: "same-origin" });
+    if (!response.ok) {
+      setError("现在还不能下载这份附件");
+      return;
+    }
+    downloadText(name, await response.text());
   };
 
   return (
@@ -76,7 +75,7 @@ export function PostPage() {
           aria-pressed={liked(post.id)}
           onClick={() => (user ? toggleLike(post.id) : navigate(`/login?next=/c/${handle}/posts/${post.id}`))}
         >
-          {liked(post.id) ? "已喜欢" : "喜欢"} · {post.likes + (liked(post.id) ? 1 : 0)}
+          {liked(post.id) ? "已喜欢" : "喜欢"} · {post.likes}
         </button>
       </div>
 

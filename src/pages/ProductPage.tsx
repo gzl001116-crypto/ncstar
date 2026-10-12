@@ -8,10 +8,11 @@ import { NotFound } from "./NotFound";
 export function ProductPage() {
   const { handle = "", productId = "" } = useParams();
   const navigate = useNavigate();
-  const { productById, creatorById, addToCart, owns, user } = useStore();
+  const { ready, productById, creatorById, addToCart, owns, user } = useStore();
   const product = productById(productId);
   const creator = creatorById(handle);
   useTitle(product ? `${product.title} · 星页` : "未找到 · 星页");
+  if (!ready) return <div className="page"><p className="muted">正在载入</p></div>;
   if (!product || !creator || product.creatorId !== creator.id) return <NotFound />;
   const owned = owns(product.id);
   const mine = user?.handle === creator.id;
@@ -60,12 +61,12 @@ export function ProductPage() {
             <button
               type="button"
               className="btn btn-line"
-              onClick={() => {
+              onClick={async () => {
                 if (!user) {
                   goLogin();
                   return;
                 }
-                addToCart(product.id);
+                await addToCart(product.id);
                 navigate("/checkout");
               }}
             >

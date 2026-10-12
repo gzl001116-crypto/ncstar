@@ -7,19 +7,28 @@ import { yuan } from "../utils";
 
 export function Studio() {
   useTitle("创作台 · 星页");
-  const { user, posts, products, tiers, creatorById, publishPost, publishProduct, updateProfile, openStudio, followerCount, supporterCount } =
+  const { ready, user, posts, products, tiers, creatorById, publishPost, publishProduct, updateProfile, openStudio, followerCount, supporterCount } =
     useStore();
   const navigate = useNavigate();
   const [profileError, setProfileError] = useState("");
   const [postError, setPostError] = useState("");
   const [shopError, setShopError] = useState("");
+  const [openError, setOpenError] = useState("");
+
+  if (!ready) {
+    return (
+      <div className="page narrow">
+        <p className="muted">正在载入</p>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
       <div className="page narrow">
         <div className="empty">
           <h1>登录后使用创作台</h1>
-          <p>创作者演示账号：studio@xingye.app / xingye123</p>
+          <p>用你的邮箱登录，然后发布动态和上架作品。</p>
           <Link to="/login?next=/studio" className="btn btn-dark">
             登录
           </Link>
@@ -33,22 +42,22 @@ export function Studio() {
   const mineProducts = products.filter((product) => product.creatorId === user.handle);
   const plans = tiers.filter((tier) => tier.creatorId === user.handle);
 
-  const onProfile = (event: FormEvent<HTMLFormElement>) => {
+  const onProfile = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    updateProfile({
+    const result = await updateProfile({
       name: String(data.get("name") ?? ""),
       bio: String(data.get("bio") ?? ""),
       location: String(data.get("location") ?? ""),
       category: String(data.get("category") ?? "") as Category,
     });
-    setProfileError("");
+    setProfileError(result ?? "");
   };
 
-  const onPost = (event: FormEvent<HTMLFormElement>) => {
+  const onPost = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const result = publishPost({
+    const result = await publishPost({
       title: String(data.get("title") ?? ""),
       excerpt: String(data.get("excerpt") ?? ""),
       body: String(data.get("body") ?? ""),
@@ -62,10 +71,10 @@ export function Studio() {
     setPostError("");
   };
 
-  const onProduct = (event: FormEvent<HTMLFormElement>) => {
+  const onProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const result = publishProduct({
+    const result = await publishProduct({
       title: String(data.get("title") ?? ""),
       description: String(data.get("description") ?? ""),
       price: Number(data.get("price") ?? 0),
@@ -74,6 +83,7 @@ export function Studio() {
         .split(/[,，]/)
         .map((item) => item.trim())
         .filter(Boolean),
+      fileBody: String(data.get("fileBody") ?? ""),
     });
     if (result) {
       setShopError(result);
@@ -92,12 +102,14 @@ export function Studio() {
       {!user.isCreator || !creator ? (
         <div className="empty">
           <p>开通之后会出现主页、两档 30 天会员，以及发布动态和上架作品的表单。</p>
+          {openError && <p className="error">{openError}</p>}
           <button
             type="button"
             className="btn btn-dark"
-            onClick={() => {
-              openStudio();
-              navigate("/studio");
+            onClick={async () => {
+              const result = await openStudio();
+              setOpenError(result ?? "");
+              if (!result) navigate("/studio");
             }}
           >
             开通创作页
@@ -208,6 +220,10 @@ export function Studio() {
               <label>
                 介绍
                 <textarea name="description" rows={4} />
+              </label>
+              <label>
+                购买后可下载的正文
+                <textarea name="fileBody" rows={5} required placeholder="买家下载到的就是这段文字" />
               </label>
               {shopError && <p className="error">{shopError}</p>}
               <button className="btn btn-dark" type="submit">

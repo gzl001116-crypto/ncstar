@@ -9,15 +9,13 @@ const WORDS = ["速写", "环境音", "作品集", "胶片配方", "一个人的
 
 export function Home() {
   useTitle("星页 — 把作品交给喜欢它的人");
-  const { creators, posts, products, tiers } = useStore();
-  const featured = creators.filter((creator) => ["linyu", "nanfeng", "slowgate", "zhiye"].includes(creator.id));
-  const lead = posts.find((post) => post.id === "linyu-post-1");
-  const side = posts.filter((post) => ["nanfeng-post-1", "midnight-post-1"].includes(post.id));
-  const shelf = products.filter((product) =>
-    ["linyu-shop-1", "nanfeng-shop-2", "paper-shop-1", "slow-shop-1", "ye-shop-1", "kit-shop-1"].includes(product.id),
-  );
-  const sample = tiers.find((tier) => tier.id === "linyu-1");
-  const linyu = creators.find((creator) => creator.id === "linyu");
+  const { ready, creators, posts, products, tiers } = useStore();
+  const featured = creators.slice(0, 4);
+  const lead = posts[0];
+  const side = posts.slice(1, 3);
+  const shelf = products.slice(0, 6);
+  const spotlight = lead ? creators.find((creator) => creator.id === lead.creatorId) : creators[0];
+  const sample = tiers.find((tier) => tier.creatorId === spotlight?.id) ?? tiers[0];
 
   return (
     <div className="page">
@@ -40,21 +38,21 @@ export function Home() {
               开通创作页
             </Link>
           </div>
-          <p className="fineprint">演示社区 · 支付不会产生真实扣款 · 平台服务费 8%，由创作者承担</p>
+          <p className="fineprint">平台服务费 8%，由创作者承担。会员 30 天，不自动续费。</p>
         </div>
-        {linyu && lead && (
-          <Link to={`/c/${linyu.handle}`} className="stage">
+        {spotlight && lead && (
+          <Link to={`/c/${spotlight.handle}`} className="stage">
             <article className="stage-back">
-              <Cover id="nanfeng-rain" ratio="16 / 11" />
+              <Cover id={`${spotlight.id}-banner`} ratio="16 / 11" />
             </article>
             <article className="stage-card">
               <Cover id={lead.coverKey} ratio="16 / 10" />
               <div className="stage-copy">
                 <div className="person-row">
-                  <Avatar name={linyu.name} id={linyu.id} size={36} />
+                  <Avatar name={spotlight.name} id={spotlight.id} size={36} />
                   <div>
-                    <strong>{linyu.name}</strong>
-                    <p className="muted">窗边席 {sample ? yuan(sample.price) : ""} / 30 天</p>
+                    <strong>{spotlight.name}</strong>
+                    <p className="muted">{sample ? `${sample.name} ${yuan(sample.price)} / 30 天` : "创作者"}</p>
                   </div>
                 </div>
                 <h2>{lead.title}</h2>
@@ -81,14 +79,20 @@ export function Home() {
           </div>
           <Link to="/explore?kind=posts">全部动态</Link>
         </div>
-        <div className="feature">
-          {lead && <PostCard post={lead} large />}
-          <div className="feature-side">
-            {side.map((post) => (
-              <PostCard key={post.id} post={post} ratio="16 / 11" />
-            ))}
+        {!ready ? (
+          <div className="empty">正在载入</div>
+        ) : posts.length === 0 ? (
+          <div className="empty">还没有动态。开通创作页后，可以从创作台发布。</div>
+        ) : (
+          <div className="feature">
+            {lead && <PostCard post={lead} large />}
+            <div className="feature-side">
+              {side.map((post) => (
+                <PostCard key={post.id} post={post} ratio="16 / 11" />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </section>
 
       <section className="section">
@@ -99,11 +103,15 @@ export function Home() {
           </div>
           <Link to="/explore?kind=creators">全部创作者</Link>
         </div>
-        <div className="cards four">
-          {featured.map((creator) => (
-            <CreatorCard key={creator.id} creator={creator} />
-          ))}
-        </div>
+        {!ready || featured.length === 0 ? (
+          <div className="empty">{ready ? "还没有创作者。" : "正在载入"}</div>
+        ) : (
+          <div className="cards four">
+            {featured.map((creator) => (
+              <CreatorCard key={creator.id} creator={creator} />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="section">
@@ -114,11 +122,15 @@ export function Home() {
           </div>
           <Link to="/explore?kind=products">全部作品</Link>
         </div>
-        <div className="cards">
-          {shelf.map((product) => (
-            <ProductCard key={product.id} product={product} />
-          ))}
-        </div>
+        {!ready || shelf.length === 0 ? (
+          <div className="empty">{ready ? "还没有上架的作品。" : "正在载入"}</div>
+        ) : (
+          <div className="cards">
+            {shelf.map((product) => (
+              <ProductCard key={product.id} product={product} />
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="section split">
@@ -144,14 +156,16 @@ export function Home() {
               <span>03</span>
               <div>
                 <strong>作品直接入库</strong>
-                <p>商店里的数字作品在演示结账后进入我的库，可以再次下载。</p>
+                <p>确认订单后，数字作品进入我的库，可以再次下载创作者写下的正文。</p>
               </div>
             </li>
           </ol>
         </div>
-        {sample && linyu && (
-          <Link to={`/c/${linyu.handle}?tab=member`} className="ticket ticket-link">
-            <p className="kicker">林予 · 窗边席</p>
+        {sample && spotlight && (
+          <Link to={`/c/${spotlight.handle}?tab=member`} className="ticket ticket-link">
+            <p className="kicker">
+              {spotlight.name} · {sample.name}
+            </p>
             <div className="ticket-price">
               <strong>{yuan(sample.price)}</strong>
               <span>/ 30 天</span>

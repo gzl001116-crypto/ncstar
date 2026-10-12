@@ -22,8 +22,10 @@ export function Library() {
     );
   }
 
-  const save = (title: string, creator: string, description: string) => {
-    downloadText(title, ["星页演示文件", creator, title, "", description, "", "感谢支持。这是可再次下载的入库副本。"]);
+  const save = async (productId: string, title: string) => {
+    const response = await fetch(`/api/download?productId=${encodeURIComponent(productId)}`, { credentials: "same-origin" });
+    if (!response.ok) return;
+    downloadText(title, await response.text());
   };
 
   return (
@@ -78,7 +80,7 @@ export function Library() {
                   <button
                     type="button"
                     className="btn btn-dark"
-                    onClick={() => save(product.title, creator?.name ?? "星页", product.description)}
+                    onClick={() => save(product.id, product.title)}
                   >
                     下载
                   </button>

@@ -1,7 +1,13 @@
-import { cacheLimiter, handleSend, handleVerify, json, type MailEnv } from "./codes";
+import { cacheLimiter, handleSend, handleVerify, json, type MailEnv } from "./codes.ts";
+
+export { FanstarStore } from "./do.ts";
 
 export interface Env extends MailEnv {
   ASSETS: Fetcher;
+  FANSTAR: {
+    idFromName(name: string): unknown;
+    get(id: unknown): { fetch(request: Request): Promise<Response> };
+  };
 }
 
 const limiter = cacheLimiter();
@@ -16,7 +22,10 @@ export default {
         ? handleSend(request, env, limiter)
         : handleVerify(request, env, limiter);
     }
-    if (url.pathname.startsWith("/api/")) return json({ error: "没有这个接口" }, 404);
+    if (url.pathname.startsWith("/api/")) {
+      if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+      return env.FANSTAR.get(env.FANSTAR.idFromName("fanstar")).fetch(request);
+    }
     return env.ASSETS.fetch(request);
   },
 };

@@ -9,11 +9,12 @@ export function CreatorPage() {
   const { handle = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "posts";
-  const { creators, posts, products, tiers, user, followed, toggleFollow, followerCount, supporterCount, canRead, activeMembership } =
+  const { ready, creators, posts, products, tiers, user, followed, toggleFollow, followerCount, supporterCount, canRead, activeMembership } =
     useStore();
   const navigate = useNavigate();
   const creator = creators.find((item) => item.handle === handle);
   useTitle(creator ? `${creator.name} · 星页` : "未找到 · 星页");
+  if (!ready) return <div className="page"><p className="muted">正在载入</p></div>;
   if (!creator) return <NotFound />;
 
   const own = user?.handle === creator.handle;

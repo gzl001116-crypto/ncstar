@@ -183,27 +183,31 @@ export async function handleSend(
   return json({ ok: true, expiresAt, token });
 }
 
+export async function matchCode(env: MailEnv, email: string, code: string, token: string, expiresAt: number) {
+  if (!email || !/^\d{6}$/.test(code) || !/^[0-9a-f]{64}$/.test(token) || !Number.isFinite(expiresAt)) {
+    return "请输入 6 位验证码";
+  }
+  if (Date.now() > expiresAt) return "验证码已过期，请重新获取";
+  const secret = await signingKey(env);
+  if (!secret) return "邮件服务还没有配置";
+  const expected = await sign(secret, payload(email, expiresAt, code));
+  if (!safeEqual(expected, token)) return "验证码不正确";
+  return null;
+}
+
 export async function handleVerify(request: Request, env: MailEnv, limiter: Limiter): Promise<Response> {
   const body = await readJson(request);
-  const email = normalizeEmail(body.email);
+  const email = normalizeEmail(body.email) ?? "";
   const code = typeof body.code === "string" ? body.code.trim() : "";
   const token = typeof body.token === "string" ? body.token : "";
   const expiresAt = typeof body.expiresAt === "number" ? body.expiresAt : Number(body.expiresAt);
-  if (!email || !/^\d{6}$/.test(code) || !/^[0-9a-f]{64}$/.test(token) || !Number.isFinite(expiresAt)) {
-    return json({ error: "请输入 6 位验证码" }, 400);
-  }
-
   const ip = request.headers.get("cf-connecting-ip") ?? "local";
   if (!(await limiter.allowed(`verify:ip:${ip}`, 20, 600)) || !(await limiter.allowed(`verify:${token}`, 5, 600))) {
     return json({ error: "验证次数过多，请重新获取验证码" }, 429);
   }
   await limiter.record(`verify:ip:${ip}`, 600);
   await limiter.record(`verify:${token}`, 600);
-
-  if (Date.now() > expiresAt) return json({ error: "验证码已过期，请重新获取" }, 400);
-  const secret = await signingKey(env);
-  if (!secret) return json({ error: "邮件服务还没有配置" }, 503);
-  const expected = await sign(secret, payload(email, expiresAt, code));
-  if (!safeEqual(expected, token)) return json({ error: "验证码不正确" }, 400);
+  const error = await matchCode(env, email, code, token, expiresAt);
+  if (error) return json({ error }, error === "邮件服务还没有配置" ? 503 : 400);
   return json({ ok: true });
 }
