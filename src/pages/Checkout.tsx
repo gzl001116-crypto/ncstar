@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
@@ -14,7 +14,6 @@ export function Checkout() {
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const finished = useRef("");
   const sessionId = params.get("session_id") ?? "";
   const canceled = params.get("pay") === "cancel";
   const tier = tierById(params.get("tier") ?? "");
@@ -22,23 +21,34 @@ export function Checkout() {
   const existing = tier ? activeMembership(tier.creatorId) : undefined;
 
   useEffect(() => {
-    if (!sessionId || !user || finished.current === sessionId) return;
-    finished.current = sessionId;
+    if (!sessionId || !user) return;
+    let stopped = false;
     setBusy(true);
     setError("");
-    void completeCheckout(sessionId).then((result) => {
-      setBusy(false);
-      if (result.error) {
-        finished.current = "";
-        setError(result.error);
-        return;
+    const confirm = async () => {
+      for (let attempt = 0; attempt < 20 && !stopped; attempt += 1) {
+        const result = await completeCheckout(sessionId);
+        if (stopped) return;
+        if (!result.error) {
+          const flash =
+            result.code === "toast.member" && result.name
+              ? t("checkout.flashMember", { name: phrase(result.name) })
+              : t("checkout.flashCart");
+          navigate("/library", { replace: true, state: { flash } });
+          return;
+        }
+        if (result.code !== "err.pay.pending" || attempt === 19) {
+          setBusy(false);
+          setError(result.error);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 3000));
       }
-      const flash =
-        result.code === "toast.member" && result.name
-          ? t("checkout.flashMember", { name: phrase(result.name) })
-          : t("checkout.flashCart");
-      navigate("/library", { replace: true, state: { flash } });
-    });
+    };
+    void confirm();
+    return () => {
+      stopped = true;
+    };
   }, [sessionId, user]);
 
   if (!user) {

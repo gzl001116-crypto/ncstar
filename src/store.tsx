@@ -284,7 +284,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     completeCheckout: async (sessionId) => {
       try {
         const { response, data } = await call("/api/checkout/complete", { sessionId });
-        if (!response.ok) return { error: say(data.code, data.name, data.error) };
+        if (!response.ok) return { error: say(data.code, data.name, data.error), code: data.code };
         apply(data);
         return { error: null, code: data.code, name: data.name };
       } catch {

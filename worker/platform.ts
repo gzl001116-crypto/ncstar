@@ -2,7 +2,7 @@ import { matchCode, type Limiter, type MailEnv } from "./codes.ts";
 import { sessionCookieHeaders } from "./hosts.ts";
 import { isPlayFormat, parsePlay } from "./play.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
-import { sessionFields, signatureMatches, stripeKey, stripeRequest, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
+import { sessionFields, signatureMatches, stripeGet, stripeKey, stripeRequest, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
 
 const COOKIE = "fanstar_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -1329,26 +1329,48 @@ function deleteProduct(sql: Sql, request: Request, body: Record<string, unknown>
   return withState(sql, viewer, "toast.workDeleted");
 }
 
-async function stripeWebhook(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
-  const secret = webhookSecret(env);
-  if (!secret || !stripeKey(env)) return fail("err.pay.unconfigured");
-  const payload = await request.text();
-  if (!(await signatureMatches(secret, payload, request.headers.get("stripe-signature") ?? ""))) return fail("err.pay.stripe");
-  let event: { type?: string; data?: { object?: { id?: string } } };
+type StripeEvent = { id?: string; type?: string; data?: { object?: { id?: string } } };
+
+async function confirmedEvent(env: PayEnv, payload: string, header: string, fetchImpl: typeof fetch) {
+  if (!stripeKey(env)) return { ok: false as const, code: "err.pay.unconfigured" };
+  let event: StripeEvent;
   try {
-    event = JSON.parse(payload) as { type?: string; data?: { object?: { id?: string } } };
+    event = JSON.parse(payload) as StripeEvent;
   } catch {
-    return fail("err.pay.stripe");
+    return { ok: false as const, code: "err.pay.stripe" };
   }
-  const type = event.type ?? "";
-  if (type !== "checkout.session.completed" && type !== "checkout.session.async_payment_succeeded") return json({ received: true });
-  const sessionId = textOf(event.data?.object?.id, 120);
+  const secret = webhookSecret(env);
+  if (secret) {
+    if (!(await signatureMatches(secret, payload, header))) return { ok: false as const, code: "err.pay.stripe" };
+    return { ok: true as const, event };
+  }
+  const eventId = textOf(event.id, 120);
+  if (!eventId.startsWith("evt_")) return { ok: false as const, code: "err.pay.stripe" };
+  const loaded = await stripeGet(env, `/v1/events/${encodeURIComponent(eventId)}`, fetchImpl);
+  if (!loaded.ok) return loaded;
+  const confirmed = loaded.data as StripeEvent;
+  if (confirmed.id !== eventId || confirmed.type !== event.type) return { ok: false as const, code: "err.pay.stripe" };
+  return { ok: true as const, event: confirmed };
+}
+
+async function stripeWebhook(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
+  const payload = await request.text();
+  const confirmed = await confirmedEvent(env, payload, request.headers.get("stripe-signature") ?? "", fetchImpl);
+  if (!confirmed.ok) return fail(confirmed.code);
+  const type = confirmed.event.type ?? "";
+  const sessionId = textOf(confirmed.event.data?.object?.id, 120);
   if (!sessionId.startsWith("cs_")) return json({ received: true });
   const payment = sql.get("SELECT * FROM payments WHERE session_id = ?", sessionId);
   if (!payment || String(payment.status) === "paid") return json({ received: true });
   const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
   if (!loaded.ok) return fail(loaded.code);
   const viewer = String(payment.user_id);
+  if (type === "checkout.session.async_payment_failed") {
+    if (loaded.session.payment_status !== "paid") sql.run("UPDATE payments SET status = 'failed' WHERE id = ?", String(payment.id));
+    else if (sessionMatches(loaded.session, payment, viewer)) fulfillPayment(sql, viewer, payment);
+    return json({ received: true });
+  }
+  if (type !== "checkout.session.completed" && type !== "checkout.session.async_payment_succeeded") return json({ received: true });
   if (loaded.session.payment_status !== "paid") return json({ received: true });
   if (!sessionMatches(loaded.session, payment, viewer)) return fail("err.pay.amount");
   fulfillPayment(sql, viewer, payment);

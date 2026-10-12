@@ -11,6 +11,7 @@ const env: MailEnv & { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: strin
   STRIPE_WEBHOOK_SECRET: "whsec_platform_check",
 };
 const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string }>();
+const stripeEvents = new Map<string, { id: string; type: string; data: { object: { id: string } } }>();
 let stripePaid = true;
 let stripeAmount: number | null = null;
 
@@ -32,6 +33,12 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
       userId: params.get("metadata[userId]") ?? "",
     });
     return Response.json({ id, url: `https://checkout.stripe.test/${id}`, payment_status: "unpaid", status: "open", amount_total: amount, currency: "cny", metadata: {} });
+  }
+  if (url.includes("/v1/events/")) {
+    const eventId = decodeURIComponent(url.split("/").pop() ?? "");
+    const event = stripeEvents.get(eventId);
+    if (!event) return Response.json({ error: { code: "resource_missing" } }, { status: 404 });
+    return Response.json(event);
   }
   const id = url.split("/").pop() ?? "";
   const saved = stripeSessions.get(decodeURIComponent(id));
@@ -879,6 +886,80 @@ if (
   !hookDesk.data.orders?.some((order: { targetId: string; amount: number }) => order.targetId === hookId && order.amount === 4)
 ) {
   throw new Error(`webhook pay ${hookBad.status} ${hookEarly.status} ${hookDone.status} ${hookDone.raw} ${hookDesk.raw}`);
+}
+
+const asyncWork = await creator.send("/api/products", {
+  title: "异步收款",
+  description: "微信确认后入账",
+  price: 5,
+  kind: "文本",
+  includes: ["短文"],
+  fileBody: "异步支付确认后才能看到。",
+});
+const asyncId = asyncWork.data.products?.find((item: { title: string }) => item.title === "异步收款")?.id as string;
+const asyncCart = await readerNow.send("/api/cart", { productId: asyncId, op: "add" });
+stripePaid = false;
+const asyncStart = await readerNow.send("/api/checkout", {});
+const savedSecret = env.STRIPE_WEBHOOK_SECRET;
+delete env.STRIPE_WEBHOOK_SECRET;
+const asyncEventId = "evt_async_paid";
+stripeEvents.set(asyncEventId, {
+  id: asyncEventId,
+  type: "checkout.session.async_payment_succeeded",
+  data: { object: { id: asyncStart.data.sessionId } },
+});
+const asyncEarly = await postHook(
+  JSON.stringify({ id: asyncEventId, type: "checkout.session.async_payment_succeeded", data: { object: { id: asyncStart.data.sessionId } } }),
+  "",
+);
+const asyncEarlyLibrary = await readerNow.send("/api/state", undefined, "GET");
+stripePaid = true;
+const asyncDone = await postHook(
+  JSON.stringify({ id: asyncEventId, type: "checkout.session.async_payment_succeeded", data: { object: { id: asyncStart.data.sessionId } } }),
+  "",
+);
+const forged = await postHook(JSON.stringify({ id: "evt_missing", type: "checkout.session.completed", data: { object: { id: asyncStart.data.sessionId } } }), "");
+const asyncLibrary = await readerNow.send("/api/state", undefined, "GET");
+env.STRIPE_WEBHOOK_SECRET = savedSecret;
+const failWork = await creator.send("/api/products", {
+  title: "失败收款",
+  description: "失败不入账",
+  price: 5,
+  kind: "文本",
+  includes: ["短文"],
+  fileBody: "失败的支付不能看到。",
+});
+const failId = failWork.data.products?.find((item: { title: string }) => item.title === "失败收款")?.id as string;
+const failCart = await readerNow.send("/api/cart", { productId: failId, op: "add" });
+stripePaid = false;
+const failStart = await readerNow.send("/api/checkout", {});
+const failPayload = JSON.stringify({
+  type: "checkout.session.async_payment_failed",
+  data: { object: { id: failStart.data.sessionId } },
+});
+const failHook = await postHook(failPayload, await signHook(failPayload));
+const failLibrary = await readerNow.send("/api/state", undefined, "GET");
+const failAgain = await readerNow.send("/api/checkout", {});
+if (
+  asyncWork.status !== 200 ||
+  !asyncId ||
+  asyncCart.status !== 200 ||
+  asyncStart.status !== 200 ||
+  asyncEarly.status !== 200 ||
+  asyncEarlyLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === asyncId) ||
+  asyncDone.status !== 200 ||
+  forged.status !== 400 ||
+  !asyncLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === asyncId) ||
+  failWork.status !== 200 ||
+  !failId ||
+  failCart.status !== 200 ||
+  failStart.status !== 200 ||
+  failHook.status !== 200 ||
+  failLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === failId) ||
+  failAgain.status !== 200 ||
+  failAgain.data.sessionId === failStart.data.sessionId
+) {
+  throw new Error(`async pay ${asyncEarly.status} ${asyncDone.status} ${forged.status} ${failHook.status} ${failAgain.raw}`);
 }
 
 console.log("platform checks passed");

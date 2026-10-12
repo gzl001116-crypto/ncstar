@@ -85,6 +85,26 @@ function bodyOf(fields: Record<string, string>) {
     .join("&");
 }
 
+export async function stripeGet(
+  env: PayEnv,
+  path: string,
+  fetchImpl: typeof fetch,
+): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; code: string }> {
+  if (!stripeKey(env)) return { ok: false, code: "err.pay.unconfigured" };
+  let response: Response;
+  try {
+    response = await fetchImpl(`https://api.stripe.com${path}`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${stripeKey(env)}` },
+    });
+  } catch {
+    return { ok: false, code: "err.pay.stripe" };
+  }
+  const data = (await response.json().catch(() => ({}))) as Record<string, unknown> & { error?: { code?: string } };
+  if (!response.ok) return { ok: false, code: data.error?.code === "amount_too_small" ? "err.pay.small" : "err.pay.stripe" };
+  return { ok: true, data };
+}
+
 export async function stripeRequest(
   env: PayEnv,
   path: string,
@@ -92,6 +112,14 @@ export async function stripeRequest(
   fields: Record<string, string> | undefined,
   fetchImpl: typeof fetch,
 ): Promise<{ ok: true; session: StripeSession } | { ok: false; code: string }> {
+  if (method === "GET") {
+    const loaded = await stripeGet(env, path, fetchImpl);
+    if (!loaded.ok) return loaded;
+    const session = loaded.data as StripeSession;
+    if (!session.id) return { ok: false, code: "err.pay.stripe" };
+    session.metadata = session.metadata ?? {};
+    return { ok: true, session };
+  }
   if (!stripeKey(env)) return { ok: false, code: "err.pay.unconfigured" };
   let response: Response;
   try {
@@ -99,7 +127,7 @@ export async function stripeRequest(
       method,
       headers: {
         Authorization: `Bearer ${stripeKey(env)}`,
-        ...(method === "POST" ? { "content-type": "application/x-www-form-urlencoded" } : {}),
+        "content-type": "application/x-www-form-urlencoded",
       },
       body: fields ? bodyOf(fields) : undefined,
     });
