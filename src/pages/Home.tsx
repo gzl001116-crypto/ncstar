@@ -67,8 +67,8 @@ export function Home() {
 
       <div className="marquee" aria-hidden="true">
         <div className="marquee-track">
-          {[...WORDS, ...WORDS].map((word, index) => (
-            <span key={`${word}-${index}`}>{word}</span>
+          {WORDS.map((word) => (
+            <span key={word}>{word}</span>
           ))}
         </div>
       </div>

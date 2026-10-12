@@ -9,7 +9,7 @@ function Mark() {
       <rect width="32" height="32" rx="9" fill="currentColor" />
       <path
         d="M16 5.2c.7 4.5 3.1 7.8 7.4 8.8-4.3.9-6.7 4.2-7.4 8.8-.7-4.6-3.1-7.9-7.4-8.8 4.3-1 6.7-4.3 7.4-8.8z"
-        fill="#f3eee6"
+        fill="#ffffff"
       />
     </svg>
   );

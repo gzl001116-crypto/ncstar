@@ -1,12 +1,12 @@
 import { hash } from "../utils";
 
 const PALETTES = [
-  ["#1e4d3c", "#e7c36a", "#f7f3ea", "#14352b"],
-  ["#e25b2a", "#1c1915", "#f6d7c8", "#9a3412"],
-  ["#243552", "#f2c14e", "#d9e4f5", "#162033"],
-  ["#5c3d2e", "#f3e6d8", "#c47b5a", "#3b261c"],
-  ["#0f3d3e", "#f2b56b", "#d7efea", "#0a2829"],
-  ["#3f2a4a", "#f3d5e6", "#e7c36a", "#26182e"],
+  ["#4f46e5", "#c7d2fe", "#eef2ff", "#312e81"],
+  ["#0ea5e9", "#bae6fd", "#f0f9ff", "#0c4a6e"],
+  ["#f43f5e", "#fecdd3", "#fff1f2", "#9f1239"],
+  ["#10b981", "#a7f3d0", "#ecfdf5", "#064e3b"],
+  ["#f59e0b", "#fde68a", "#fffbeb", "#92400e"],
+  ["#8b5cf6", "#ddd6fe", "#f5f3ff", "#4c1d95"],
 ];
 
 export function palette(id: string) {
@@ -17,7 +17,6 @@ export function Cover({ id, ratio = "4 / 5", className = "" }: { id: string; rat
   const [ink, paper, mist, deep] = palette(id);
   const n = hash(id);
   const pattern = n % 5;
-  const edition = (n % 80) + 11;
 
   return (
     <div className={`cover ${className}`} style={{ aspectRatio: ratio, background: deep }}>
@@ -74,7 +73,6 @@ export function Cover({ id, ratio = "4 / 5", className = "" }: { id: string; rat
           </>
         )}
       </svg>
-      <span className="edition">No.{edition}</span>
     </div>
   );
 }
