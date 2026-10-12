@@ -625,9 +625,10 @@ function AccessFields({
 
 function WorkEditor({ product, sold }: { product: Product; sold: number }) {
   const { t, phrase } = useI18n();
-  const { user, updateProduct } = useStore();
+  const { user, updateProduct, deleteProduct } = useStore();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [filename, setFilename] = useState("");
   const [usePlay, setUsePlay] = useState(product.allowPlay);
   const [allowDownload, setAllowDownload] = useState(product.allowDownload);
@@ -693,8 +694,25 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
     else setFilename("");
   };
 
+  const onDelete = async () => {
+    if (busy) return;
+    if (!confirmDelete) {
+      setConfirmDelete(true);
+      setError("");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    const result = await deleteProduct(product.id);
+    setBusy(false);
+    if (result) {
+      setConfirmDelete(false);
+      setError(result);
+    }
+  };
+
   return (
-    <div className="panel work-edit">
+    <div className="panel work-edit" id={`work-${product.id}`}>
       <div className="work-head">
         <Cover id={product.coverKey} src={coverSrc(product)} ratio="1 / 1" className="work-cover" />
         <div>
@@ -785,9 +803,15 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
           {t("studio.onShelf")}
         </label>
         <FormError message={error} />
-        <button className="btn btn-dark" type="submit" disabled={busy}>
-          {busy ? t("common.wait") : t("studio.saveWork")}
-        </button>
+        {confirmDelete && <p className="banner-note">{t("studio.deleteNote")}</p>}
+        <div className="hero-actions">
+          <button className="btn btn-dark" type="submit" disabled={busy}>
+            {busy ? t("common.wait") : t("studio.saveWork")}
+          </button>
+          <button className="btn btn-line" type="button" disabled={busy} onClick={onDelete}>
+            {confirmDelete ? t("studio.deleteConfirm") : t("studio.delete")}
+          </button>
+        </div>
       </form>
     </div>
   );

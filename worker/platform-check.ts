@@ -4,7 +4,12 @@ import { handleApp } from "./platform.ts";
 
 const sql = openSql(":memory:");
 const limiter = memoryLimiter();
-const env: MailEnv & { STRIPE_SECRET_KEY?: string } = { RESEND_API_KEY: "test-key", CODE_SECRET: "test-secret", STRIPE_SECRET_KEY: "sk_test_platform_check" };
+const env: MailEnv & { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: string } = {
+  RESEND_API_KEY: "test-key",
+  CODE_SECRET: "test-secret",
+  STRIPE_SECRET_KEY: "sk_test_platform_check",
+  STRIPE_WEBHOOK_SECRET: "whsec_platform_check",
+};
 const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string }>();
 let stripePaid = true;
 let stripeAmount: number | null = null;
@@ -756,6 +761,124 @@ const blockedPay = await readerNow.send("/api/checkout", {});
 env.STRIPE_SECRET_KEY = savedKey;
 if (bareCart.status !== 200 || blockedPay.status !== 400 || blockedPay.data.code !== "err.pay.unconfigured") {
   throw new Error(`unconfigured pay ${blockedPay.status} ${blockedPay.raw}`);
+}
+
+const scratch = await creator.send("/api/products", {
+  title: "可删除",
+  description: "还没有人买",
+  price: 4,
+  kind: "文本",
+  includes: ["短文"],
+  fileBody: "删除前就能读到的正文。",
+});
+const scratchId = scratch.data.products?.find((item: { title: string }) => item.title === "可删除")?.id as string;
+const deniedDelete = await readerNow.send("/api/product/delete", { productId: scratchId });
+const erased = await creator.send("/api/product/delete", { productId: scratchId });
+const afterErase = await creator.send("/api/state", undefined, "GET");
+if (
+  scratch.status !== 200 ||
+  !scratchId ||
+  deniedDelete.status !== 400 ||
+  deniedDelete.data.code !== "err.studio" ||
+  erased.status !== 200 ||
+  erased.data.code !== "toast.workDeleted" ||
+  afterErase.data.products?.some((item: { id: string }) => item.id === scratchId)
+) {
+  throw new Error(`delete unsold ${deniedDelete.status} ${erased.status} ${erased.raw}`);
+}
+const droppedSale = await creator.send("/api/product/delete", { productId: cardId });
+const buyerKeeps = await readerNow.send("/api/state", undefined, "GET");
+const keptWork = buyerKeeps.data.products?.find((item: { id: string }) => item.id === cardId);
+const creatorLost = await creator.send("/api/state", undefined, "GET");
+const guestLost = await client().send("/api/state", undefined, "GET");
+const editRemoved = new FormData();
+editRemoved.set("productId", cardId);
+editRemoved.set("title", "不能再改");
+editRemoved.set("description", "");
+editRemoved.set("price", "4");
+editRemoved.set("kind", "文本");
+editRemoved.set("play", "0");
+editRemoved.set("download", "1");
+editRemoved.set("listed", "1");
+const refusedEdit = await creator.sendForm("/api/product", editRemoved);
+if (
+  droppedSale.status !== 200 ||
+  !buyerKeeps.data.user?.library?.some((item: { productId: string }) => item.productId === cardId) ||
+  !keptWork ||
+  creatorLost.data.products?.some((item: { id: string }) => item.id === cardId) ||
+  guestLost.data.products?.some((item: { id: string }) => item.id === cardId) ||
+  refusedEdit.status !== 404
+) {
+  throw new Error(`delete sold ${droppedSale.status} ${refusedEdit.status} ${refusedEdit.raw}`);
+}
+const buyerFile = await readerNow.send(`/api/download?productId=${cardId}`, undefined, "GET");
+if (buyerFile.status !== 200 || !buyerFile.raw.includes("支付之后")) throw new Error(`buyer lost a deleted work ${buyerFile.status} ${buyerFile.raw}`);
+
+const hookWork = await creator.send("/api/products", {
+  title: "回调收款",
+  description: "支付回调",
+  price: 4,
+  kind: "文本",
+  includes: ["短文"],
+  fileBody: "回调确认后才能看到。",
+});
+const hookId = hookWork.data.products?.find((item: { title: string }) => item.title === "回调收款")?.id as string;
+const hookCart = await readerNow.send("/api/cart", { productId: hookId, op: "add" });
+stripePaid = false;
+const hookStart = await readerNow.send("/api/checkout", {});
+const hookPayload = JSON.stringify({
+  type: "checkout.session.completed",
+  data: { object: { id: hookStart.data.sessionId } },
+});
+async function signHook(payload: string) {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode("whsec_platform_check"),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${timestamp}.${payload}`));
+  const hex = [...new Uint8Array(mac)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  return `t=${timestamp},v1=${hex}`;
+}
+async function postHook(payload: string, signature: string) {
+  const response = await handleApp(
+    new Request("http://127.0.0.1/api/stripe/webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json", "stripe-signature": signature },
+      body: payload,
+    }),
+    sql,
+    env,
+    limiter,
+    stripeFetch,
+  );
+  const raw = await response.text();
+  return { status: response.status, data: JSON.parse(raw) as { code?: string; received?: boolean }, raw };
+}
+const hookBad = await postHook(hookPayload, "t=1,v1=dead");
+const hookEarly = await postHook(hookPayload, await signHook(hookPayload));
+const earlyLibrary = await readerNow.send("/api/state", undefined, "GET");
+stripePaid = true;
+const hookDone = await postHook(hookPayload, await signHook(hookPayload));
+const hookLibrary = await readerNow.send("/api/state", undefined, "GET");
+const hookDesk = await creator.send("/api/desk", undefined, "GET");
+if (
+  hookWork.status !== 200 ||
+  !hookId ||
+  hookCart.status !== 200 ||
+  hookStart.status !== 200 ||
+  hookBad.status !== 400 ||
+  hookEarly.status !== 200 ||
+  hookEarly.data.received !== true ||
+  earlyLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === hookId) ||
+  hookDone.status !== 200 ||
+  !hookLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === hookId) ||
+  !hookDesk.data.orders?.some((order: { targetId: string; amount: number }) => order.targetId === hookId && order.amount === 4)
+) {
+  throw new Error(`webhook pay ${hookBad.status} ${hookEarly.status} ${hookDone.status} ${hookDone.raw} ${hookDesk.raw}`);
 }
 
 console.log("platform checks passed");

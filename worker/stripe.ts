@@ -3,6 +3,7 @@ import type { MailEnv } from "./codes.ts";
 export type PayEnv = MailEnv & {
   STRIPE_SECRET_KEY?: string;
   STRIPE_PUBLISHABLE_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
   stripe?: string;
 };
 
@@ -18,6 +19,31 @@ export type StripeSession = {
 
 export function stripeKey(env: PayEnv) {
   return env.STRIPE_SECRET_KEY || env.stripe || "";
+}
+
+export function webhookSecret(env: PayEnv) {
+  return env.STRIPE_WEBHOOK_SECRET || "";
+}
+
+export async function stripeSignature(secret: string, payload: string, timestamp: number) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${timestamp}.${payload}`));
+  return [...new Uint8Array(mac)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export async function signatureMatches(secret: string, payload: string, header: string) {
+  const parts = new Map(header.split(",").map((part) => {
+    const index = part.indexOf("=");
+    return [part.slice(0, index).trim(), part.slice(index + 1).trim()] as const;
+  }));
+  const timestamp = Number(parts.get("t"));
+  const given = parts.get("v1") ?? "";
+  if (!secret || !Number.isFinite(timestamp) || Math.abs(Date.now() / 1000 - timestamp) > 300 || !given) return false;
+  const expected = await stripeSignature(secret, payload, timestamp);
+  if (expected.length !== given.length) return false;
+  let diff = 0;
+  for (let index = 0; index < expected.length; index += 1) diff |= expected.charCodeAt(index) ^ given.charCodeAt(index);
+  return diff === 0;
 }
 
 function encodeSuccess(origin: string) {

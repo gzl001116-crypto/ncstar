@@ -70,6 +70,7 @@ type StoreValue = {
   uploadAvatar: (file: File) => Promise<string | null>;
   deleteAccount: (password: string) => Promise<string | null>;
   updateProductTags: (productId: string, tags: string) => Promise<string | null>;
+  deleteProduct: (productId: string) => Promise<string | null>;
   updateProduct: (input: {
     productId: string;
     title: string;
@@ -362,6 +363,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     deleteAccount: (password) => mutate("/api/account", { password }),
     updateProductTags: (productId, tags) => mutate("/api/product-tags", { productId, tags }),
+    deleteProduct: (productId) => mutate("/api/product/delete", { productId }),
     updateProduct: async (input) => {
       const form = new FormData();
       form.set("productId", input.productId);

@@ -94,6 +94,9 @@ export function ProductPage() {
         ) : mine ? (
           <>
             <p className="muted">{t("product.mine")}</p>
+            <Link to={`/studio/works#work-${product.id}`} className="btn btn-line">
+              {t("studio.editWork")}
+            </Link>
             {product.playFormat && (
               <div className="hero-actions">
                 <PlayLink id={product.id} className="btn btn-dark">{t("play.open")}</PlayLink>

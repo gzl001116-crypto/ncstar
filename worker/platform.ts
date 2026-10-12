@@ -2,7 +2,7 @@ import { matchCode, type Limiter, type MailEnv } from "./codes.ts";
 import { sessionCookieHeaders } from "./hosts.ts";
 import { isPlayFormat, parsePlay } from "./play.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
-import { sessionFields, stripeKey, stripeRequest, type PayEnv, type StripeSession } from "./stripe.ts";
+import { sessionFields, signatureMatches, stripeKey, stripeRequest, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
 
 const COOKIE = "fanstar_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -167,6 +167,7 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE products ADD COLUMN cover_body TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN cover_type TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN cover_at TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN removed INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar_type TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar_at TEXT NOT NULL DEFAULT ''",
@@ -546,7 +547,17 @@ function snapshot(sql: Sql, viewer: string) {
   const ownedIds = new Set(
     viewer ? sql.all("SELECT product_id FROM purchases WHERE user_id = ?", viewer).map((row) => String(row.product_id)) : [],
   );
-  const products = sql.all("SELECT * FROM products ORDER BY rowid DESC").map((row) => ({
+  const products = sql
+    .all("SELECT * FROM products ORDER BY rowid DESC")
+    .filter((row) => {
+      const removed = Number(row.removed ?? 0) === 1;
+      const listed = Number(row.listed ?? 1) === 1;
+      const mine = String(row.creator_id) === viewerHandle;
+      const owned = ownedIds.has(String(row.id));
+      if (removed) return owned;
+      return listed || mine || owned;
+    })
+    .map((row) => ({
     id: String(row.id),
     creatorId: String(row.creator_id),
     title: String(row.title),
@@ -565,7 +576,7 @@ function snapshot(sql: Sql, viewer: string) {
     previewBody: viewerHandle === String(row.creator_id) ? String(row.preview_body ?? "") : "",
     listed: Number(row.listed ?? 1) === 1,
     coverAt: String(row.cover_at ?? ""),
-  })).filter((product) => product.listed || product.creatorId === viewerHandle || ownedIds.has(product.id));
+  }));
   const tiers = sql.all("SELECT * FROM tiers ORDER BY rank").map((row) => ({
     id: String(row.id),
     creatorId: String(row.creator_id),
@@ -1198,7 +1209,7 @@ async function updateProduct(sql: Sql, request: Request) {
     return fail("err.file");
   }
   const product = sql.get("SELECT * FROM products WHERE id = ?", textOf(form.get("productId"), 80));
-  if (!product || String(product.creator_id) !== String(mine.handle)) return fail("err.product.missing", 404);
+  if (!product || String(product.creator_id) !== String(mine.handle) || Number(product.removed ?? 0) === 1) return fail("err.product.missing", 404);
   const title = textOf(form.get("title"), 80);
   const description = textOf(form.get("description"), 2000);
   const price = Number(form.get("price"));
@@ -1295,6 +1306,53 @@ async function updateProduct(sql: Sql, request: Request) {
     String(product.id),
   );
   return withState(sql, viewer, "toast.work");
+}
+
+function deleteProduct(sql: Sql, request: Request, body: Record<string, unknown>) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
+  const product = sql.get("SELECT * FROM products WHERE id = ?", textOf(body.productId, 80));
+  if (!product || String(product.creator_id) !== String(mine.handle) || Number(product.removed ?? 0) === 1) return fail("err.product.missing", 404);
+  const productId = String(product.id);
+  sql.run("DELETE FROM cart_items WHERE product_id = ?", productId);
+  const sold = sql.get("SELECT product_id FROM purchases WHERE product_id = ? LIMIT 1", productId);
+  if (sold) {
+    sql.run("UPDATE products SET removed = 1, listed = 0 WHERE id = ?", productId);
+    return withState(sql, viewer, "toast.workDeleted");
+  }
+  sql.run("DELETE FROM play_saved WHERE product_id = ?", productId);
+  sql.run("DELETE FROM play_progress WHERE product_id = ?", productId);
+  sql.run("DELETE FROM playlist_items WHERE product_id = ?", productId);
+  sql.run("DELETE FROM products WHERE id = ?", productId);
+  return withState(sql, viewer, "toast.workDeleted");
+}
+
+async function stripeWebhook(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
+  const secret = webhookSecret(env);
+  if (!secret || !stripeKey(env)) return fail("err.pay.unconfigured");
+  const payload = await request.text();
+  if (!(await signatureMatches(secret, payload, request.headers.get("stripe-signature") ?? ""))) return fail("err.pay.stripe");
+  let event: { type?: string; data?: { object?: { id?: string } } };
+  try {
+    event = JSON.parse(payload) as { type?: string; data?: { object?: { id?: string } } };
+  } catch {
+    return fail("err.pay.stripe");
+  }
+  const type = event.type ?? "";
+  if (type !== "checkout.session.completed" && type !== "checkout.session.async_payment_succeeded") return json({ received: true });
+  const sessionId = textOf(event.data?.object?.id, 120);
+  if (!sessionId.startsWith("cs_")) return json({ received: true });
+  const payment = sql.get("SELECT * FROM payments WHERE session_id = ?", sessionId);
+  if (!payment || String(payment.status) === "paid") return json({ received: true });
+  const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
+  if (!loaded.ok) return fail(loaded.code);
+  const viewer = String(payment.user_id);
+  if (loaded.session.payment_status !== "paid") return json({ received: true });
+  if (!sessionMatches(loaded.session, payment, viewer)) return fail("err.pay.amount");
+  fulfillPayment(sql, viewer, payment);
+  return json({ received: true });
 }
 
 function readCover(sql: Sql, request: Request) {
@@ -1453,7 +1511,7 @@ function productTags(sql: Sql, request: Request, body: Record<string, unknown>) 
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
   if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
   const product = sql.get("SELECT * FROM products WHERE id = ?", textOf(body.productId, 80));
-  if (!product || String(product.creator_id) !== String(mine.handle)) return fail("err.product.missing", 404);
+  if (!product || String(product.creator_id) !== String(mine.handle) || Number(product.removed ?? 0) === 1) return fail("err.product.missing", 404);
   const workTags = parseWorkTags(body.tags);
   if (!workTags.ok) return fail(workTags.code);
   sql.run("UPDATE products SET tags = ? WHERE id = ?", JSON.stringify(workTags.tags), String(product.id));
@@ -1761,6 +1819,7 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/products" && multipart) return publishUpload(sql, request);
   if (url.pathname === "/api/product" && multipart) return updateProduct(sql, request);
   if (url.pathname === "/api/avatar" && multipart) return uploadAvatar(sql, request);
+  if (url.pathname === "/api/stripe/webhook") return stripeWebhook(sql, request, env, stripeFetch);
   const body = await readJson(request);
   if (url.pathname === "/api/register") return register(sql, request, body, env, limiter);
   if (url.pathname === "/api/login") return login(sql, request, body, limiter);
@@ -1772,6 +1831,7 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/cart") return cart(sql, request, body);
   if (url.pathname === "/api/checkout") return checkout(sql, request, body, env, stripeFetch);
   if (url.pathname === "/api/checkout/complete") return completeCheckout(sql, request, body, env, stripeFetch);
+  if (url.pathname === "/api/product/delete") return deleteProduct(sql, request, body);
   if (url.pathname === "/api/posts") return publishPost(sql, request, body);
   if (url.pathname === "/api/products") return publishProduct(sql, request, body);
   if (url.pathname === "/api/product-tags") return productTags(sql, request, body);
