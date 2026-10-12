@@ -129,6 +129,8 @@ export type Desk = {
   fee: number;
   net: number;
   payoutReady: boolean;
+  payoutStarted: boolean;
+  payoutMethod: string;
   pending: number;
   nextPayout: string;
 };

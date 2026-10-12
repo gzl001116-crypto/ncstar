@@ -16,6 +16,7 @@ const transfers: { id: string; amount: number; currency: string; destination: st
 let stripePaid = true;
 let stripeAmount: number | null = null;
 let connectReady = false;
+let payoutBank = false;
 
 function headerValue(headers: HeadersInit | undefined, name: string) {
   if (!headers) return "";
@@ -40,6 +41,13 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
   }
   if (method === "POST" && url.includes("/v2/core/account_links")) {
     return Response.json({ url: "https://connect.stripe.test/onboard" });
+  }
+  if (method === "GET" && url.includes("/external_accounts")) {
+    return Response.json({
+      data: payoutBank
+        ? [{ object: "bank_account", bank_name: "TEST BANK", last4: "2345", currency: "gbp", default_for_currency: true }]
+        : [],
+    });
   }
   if (method === "GET" && url.includes("/v2/core/accounts/")) {
     return Response.json({
@@ -1065,6 +1073,7 @@ const wednesday = await creator.send("/api/payout/run", { now: "2026-10-14T00:00
 const fridayEarly = await creator.send("/api/payout/run", { now: "2026-10-16T00:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
 const beforeReady = transfers.length;
 connectReady = true;
+payoutBank = true;
 const deskReady = await creator.send("/api/desk", undefined, "GET");
 const fridayHour = await creator.send("/api/payout/run", { now: "2026-10-16T01:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
 const openRun = await creator.send("/api/payout/run", { now: "2026-10-16T00:00:00.000Z" });
@@ -1080,11 +1089,14 @@ if (
   linked.status !== 200 ||
   linked.data.url !== "https://connect.stripe.test/onboard" ||
   deskPending.data.payoutReady !== false ||
+  deskPending.data.payoutMethod !== "" ||
+  deskPending.data.payoutStarted !== true ||
   !(deskPending.data.pending > 0) ||
   wednesday.data.transferred !== 0 ||
   fridayEarly.data.transferred !== 0 ||
   beforeReady !== 0 ||
   deskReady.data.payoutReady !== true ||
+  deskReady.data.payoutMethod !== "TEST BANK ····2345" ||
   fridayHour.data.transferred !== 0 ||
   openRun.status !== 404 ||
   friday.status !== 200 ||

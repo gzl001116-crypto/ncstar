@@ -173,6 +173,7 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE users ADD COLUMN avatar_at TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN stripe_account_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN payout_ready INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE users ADD COLUMN payout_method TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN creator_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'cny'",
     "ALTER TABLE orders ADD COLUMN transfer_id TEXT NOT NULL DEFAULT ''",
@@ -1506,14 +1507,41 @@ function payoutStatus(data: Record<string, unknown>) {
   return configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status ?? "";
 }
 
+function payoutMethodLabel(row: Record<string, unknown>) {
+  const last4 = String(row.last4 ?? "");
+  if (row.object === "bank_account") {
+    const name = String(row.bank_name ?? "").trim();
+    return last4 ? `${name || "Bank"} ····${last4}` : name;
+  }
+  if (row.object === "card") {
+    const brand = String(row.brand ?? "").trim();
+    return last4 ? `${brand || "Card"} ····${last4}` : brand;
+  }
+  return "";
+}
+
+async function loadPayoutMethod(env: PayEnv, accountId: string, fetchImpl: typeof fetch) {
+  const listed = await stripeGet(env, `/v1/accounts/${encodeURIComponent(accountId)}/external_accounts?limit=10`, fetchImpl);
+  if (!listed.ok) return null;
+  const rows = Array.isArray(listed.data.data) ? (listed.data.data as Record<string, unknown>[]) : [];
+  const chosen =
+    rows.find((row) => row.object === "bank_account" && row.default_for_currency === true) ??
+    rows.find((row) => row.object === "bank_account") ??
+    rows.find((row) => row.object === "card");
+  return chosen ? payoutMethodLabel(chosen) : "";
+}
+
 async function refreshPayout(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetch) {
   const accountId = String(mine.stripe_account_id ?? "");
-  if (!accountId || !stripeKey(env)) return Number(mine.payout_ready) === 1;
+  const storedReady = Number(mine.payout_ready) === 1;
+  const storedMethod = String(mine.payout_method ?? "");
+  if (!accountId || !stripeKey(env)) return { ready: storedReady, method: storedMethod };
   const loaded = await stripeSend(env, `/v2/core/accounts/${encodeURIComponent(accountId)}?include=configuration.recipient`, "GET", undefined, fetchImpl);
-  if (!loaded.ok) return Number(mine.payout_ready) === 1;
-  const ready = payoutStatus(loaded.data) === "active";
-  sql.run("UPDATE users SET payout_ready = ? WHERE id = ?", ready ? 1 : 0, String(mine.id));
-  return ready;
+  const ready = loaded.ok ? payoutStatus(loaded.data) === "active" : storedReady;
+  const method = await loadPayoutMethod(env, accountId, fetchImpl);
+  const nextMethod = method === null ? storedMethod : method;
+  sql.run("UPDATE users SET payout_ready = ?, payout_method = ? WHERE id = ?", ready ? 1 : 0, nextMethod, String(mine.id));
+  return { ready, method: nextMethod };
 }
 
 async function payoutLink(sql: Sql, request: Request, body: Record<string, unknown>, env: PayEnv, fetchImpl: typeof fetch) {
@@ -1649,7 +1677,7 @@ async function deskBody(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetc
   );
   const gross = orders.reduce((sum, row) => sum + Number(row.amount), 0);
   const fee = orders.reduce((sum, row) => sum + Number(row.fee), 0);
-  const payoutReady = await refreshPayout(sql, mine, env, fetchImpl);
+  const payout = await refreshPayout(sql, mine, env, fetchImpl);
   const pendingRows = sql.all("SELECT amount, fee FROM orders WHERE creator_id = ? AND transfer_id = ''", handle);
   const pending = pendingRows.reduce((sum, row) => sum + Number(row.amount) - Number(row.fee), 0);
   return json({
@@ -1673,7 +1701,9 @@ async function deskBody(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetc
     gross: Math.round(gross * 100) / 100,
     fee: Math.round(fee * 100) / 100,
     net: Math.round((gross - fee) * 100) / 100,
-    payoutReady,
+    payoutReady: payout.ready,
+    payoutStarted: Boolean(String(mine.stripe_account_id ?? "")),
+    payoutMethod: payout.method,
     pending: Math.round(pending * 100) / 100,
     nextPayout: nextFridayUtc().toISOString(),
   });

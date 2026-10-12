@@ -207,6 +207,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         fee: data.fee ?? 0,
         net: data.net ?? 0,
         payoutReady: data.payoutReady ?? false,
+        payoutStarted: data.payoutStarted ?? false,
+        payoutMethod: data.payoutMethod ?? "",
         pending: data.pending ?? 0,
         nextPayout: data.nextPayout ?? "",
       });

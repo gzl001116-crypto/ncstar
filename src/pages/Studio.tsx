@@ -1066,6 +1066,8 @@ function PayoutPanel() {
   const [busy, setBusy] = useState(false);
   const region = new Intl.DisplayNames([lang === "zh" ? "zh-CN" : lang === "zh-Hant" ? "zh-TW" : lang], { type: "region" });
   const next = desk?.nextPayout ? utcStamp(new Date(desk.nextPayout)) : "";
+  const method = desk?.payoutMethod ?? "";
+  const started = Boolean(desk?.payoutStarted);
   const start = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true);
@@ -1082,13 +1084,14 @@ function PayoutPanel() {
     <section className="panel payout-panel">
       <h2>{t("studio.payout")}</h2>
       <p className="muted">{t("studio.payoutLead")}</p>
-      {desk?.payoutReady && <p>{t("studio.payoutReady")}</p>}
+      {method ? <p>{t("studio.payoutSet", { method })}</p> : <p>{t("studio.payoutUnset")}</p>}
+      {desk?.payoutReady ? <p>{t("studio.payoutReady")}</p> : started ? <p className="muted">{t("studio.payoutWait")}</p> : null}
       <p>{t("studio.payoutPending", { amount: yuan(desk?.pending ?? 0) })}</p>
       {next && <p>{t("studio.payoutFriday", { time: next })}</p>}
       {params.get("payout") === "return" && <p className="muted">{t("studio.payoutReturn")}</p>}
       {params.get("payout") === "error" && <p className="error">{t("studio.payoutError")}</p>}
       <form onSubmit={start}>
-        {!desk?.payoutReady && (
+        {!started && (
           <label>
             {t("studio.payoutCountry")}
             <select value={country} required onChange={(event) => setCountry(event.target.value)}>
@@ -1104,7 +1107,7 @@ function PayoutPanel() {
           </label>
         )}
         <button className="btn btn-dark" type="submit" disabled={busy}>
-          {busy ? t("common.wait") : t(desk?.payoutReady ? "studio.payoutUpdate" : "studio.payoutStart")}
+          {busy ? t("common.wait") : t(method ? "studio.payoutUpdate" : started ? "studio.payoutContinue" : "studio.payoutStart")}
         </button>
       </form>
       {error && <p className="error">{error}</p>}
