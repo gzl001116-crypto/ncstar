@@ -10,17 +10,19 @@ export function Home() {
   const { t, phrase } = useI18n();
   useTitle(t("home.title"));
   const { ready, user, creators, posts, products, tiers } = useStore();
-  const words = t("home.words").split("|");
   const featured = creators.slice(0, 4);
   const lead = posts[0];
-  const side = posts.slice(1, 3);
+  const more = posts.slice(1, 4);
   const shelf = products.filter((product) => product.listed).slice(0, 6);
-  const spotlight = lead ? creators.find((creator) => creator.id === lead.creatorId) : creators[0];
+  const spotlight = lead ? creators.find((creator) => creator.id === lead.creatorId) : undefined;
   const sample = tiers.find((tier) => tier.creatorId === spotlight?.id) ?? tiers[0];
+  const sampleCreator = sample ? creators.find((creator) => creator.id === sample.creatorId) : undefined;
+  const openHref = !user ? "/register?as=creator" : user.isCreator ? "/studio" : "/page";
+  const openLabel = !user ? t("home.open") : user.isCreator ? t("home.studio") : t("home.apply");
 
   return (
     <div className="page">
-      <section className="hero">
+      <section className={spotlight && lead ? "hero" : "hero hero-solo"}>
         <div className="hero-copy">
           <p className="kicker">{t("home.kicker")}</p>
           <h1>
@@ -36,17 +38,14 @@ export function Home() {
             <Link to="/explore" className="btn btn-dark">
               {t("home.browse")}
             </Link>
-            <Link to={user ? "/page" : "/register?as=creator"} className="btn btn-line">
-              {t("home.open")}
+            <Link to={openHref} className="btn btn-line">
+              {openLabel}
             </Link>
           </div>
           <p className="fineprint">{t("common.feeNote")}</p>
         </div>
         {spotlight && lead && (
-          <Link to={`/c/${spotlight.handle}`} className="stage">
-            <article className="stage-back">
-              <Cover id={`${spotlight.id}-banner`} ratio="16 / 11" />
-            </article>
+          <Link to={`/c/${lead.creatorId}/posts/${lead.id}`} className="stage">
             <article className="stage-card">
               <Cover id={lead.coverKey} ratio="16 / 10" />
               <div className="stage-copy">
@@ -55,49 +54,57 @@ export function Home() {
                   <div>
                     <strong>{spotlight.name}</strong>
                     <p className="muted">
-                      {sample ? t("home.tierLine", { name: phrase(sample.name), price: yuan(sample.price) }) : t("common.creator")}
+                      {sample && sample.creatorId === spotlight.id
+                        ? t("home.tierLine", { name: phrase(sample.name), price: yuan(sample.price) })
+                        : t("common.creator")}
                     </p>
                   </div>
                 </div>
                 <h2>{lead.title}</h2>
-                <p>{lead.excerpt}</p>
+                <p className="clamp">{lead.excerpt}</p>
               </div>
             </article>
           </Link>
         )}
       </section>
 
-      <div className="marquee" aria-hidden="true">
-        <div className="marquee-track">
-          {words.map((word) => (
-            <span key={word}>{word}</span>
-          ))}
-        </div>
-      </div>
+      <section className="facts" aria-label={t("home.kicker")}>
+        <article className="fact">
+          <strong>{t("home.f1t")}</strong>
+          <p>{t("home.f1p")}</p>
+        </article>
+        <article className="fact">
+          <strong>{t("home.f2t")}</strong>
+          <p>{t("home.f2p")}</p>
+        </article>
+        <article className="fact">
+          <strong>{t("home.f3t")}</strong>
+          <p>{t("home.f3p")}</p>
+        </article>
+      </section>
 
-      <section className="section">
-        <div className="section-head">
-          <div>
-            <p className="kicker">{t("home.week")}</p>
-            <h2>{t("home.justWrote")}</h2>
+      {(posts.length === 0 || more.length > 0) && (
+        <section className="section">
+          <div className="section-head">
+            <div>
+              <p className="kicker">{t("home.week")}</p>
+              <h2>{t("home.justWrote")}</h2>
+            </div>
+            <Link to="/explore?kind=posts">{t("home.allPosts")}</Link>
           </div>
-          <Link to="/explore?kind=posts">{t("home.allPosts")}</Link>
-        </div>
-        {!ready ? (
-          <div className="empty">{t("common.loading")}</div>
-        ) : posts.length === 0 ? (
-          <div className="empty">{t("home.noPosts")}</div>
-        ) : (
-          <div className="feature">
-            {lead && <PostCard post={lead} large />}
-            <div className="feature-side">
-              {side.map((post) => (
-                <PostCard key={post.id} post={post} ratio="16 / 11" />
+          {!ready ? (
+            <div className="empty">{t("common.loading")}</div>
+          ) : posts.length === 0 ? (
+            <div className="empty">{t("home.noPosts")}</div>
+          ) : (
+            <div className={`home-posts count-${more.length}`}>
+              {more.map((post) => (
+                <PostCard key={post.id} post={post} ratio="16 / 10" />
               ))}
             </div>
-          </div>
-        )}
-      </section>
+          )}
+        </section>
+      )}
 
       <section className="section">
         <div className="section-head">
@@ -165,10 +172,10 @@ export function Home() {
             </li>
           </ol>
         </div>
-        {sample && spotlight && (
-          <Link to={`/c/${spotlight.handle}?tab=member`} className="ticket ticket-link">
+        {sample && sampleCreator && (
+          <Link to={`/c/${sampleCreator.handle}?tab=member`} className="ticket ticket-link">
             <p className="kicker">
-              {spotlight.name} · {phrase(sample.name)}
+              {sampleCreator.name} · {phrase(sample.name)}
             </p>
             <div className="ticket-price">
               <strong>{yuan(sample.price)}</strong>
