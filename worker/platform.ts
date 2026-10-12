@@ -420,7 +420,7 @@ async function register(sql: Sql, request: Request, body: Record<string, unknown
   const user = id();
   const passwordSalt = salt();
   const passwordHash = await hashPassword(password, passwordSalt);
-  const bio = "刚来到星页。";
+  const bio = "刚来到 fanstar。";
   sql.run(
     "INSERT INTO users (id, name, email, password_hash, password_salt, handle, bio, is_creator, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)",
     user,

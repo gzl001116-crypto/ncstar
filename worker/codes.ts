@@ -8,7 +8,7 @@ export type Limiter = {
   record(key: string, windowSec: number): Promise<void>;
 };
 
-const FROM = "星页 <noreply@fanstar.dev>";
+const FROM = "fanstar <noreply@fanstar.dev>";
 const TTL_MS = 10 * 60 * 1000;
 
 type MailLang = "zh" | "zh-Hant" | "ja" | "en";
@@ -31,24 +31,24 @@ function mailHtml(lead: string, code: string, note: string) {
 
 const MAIL: Record<MailLang, { subject: string; text: (code: string) => string; html: (code: string) => string }> = {
   zh: {
-    subject: "星页注册验证码",
-    text: (code) => `你的星页注册验证码是 ${code}，10 分钟内有效。如果不是你本人操作，忽略这封邮件即可。`,
-    html: (code) => mailHtml("你好，正在注册星页。", code, "验证码 10 分钟内有效。如果不是你本人操作，忽略这封邮件即可。"),
+    subject: "fanstar 注册验证码",
+    text: (code) => `你的 fanstar 注册验证码是 ${code}，10 分钟内有效。如果不是你本人操作，忽略这封邮件即可。`,
+    html: (code) => mailHtml("你好，正在注册 fanstar。", code, "验证码 10 分钟内有效。如果不是你本人操作，忽略这封邮件即可。"),
   },
   "zh-Hant": {
-    subject: "星頁註冊驗證碼",
-    text: (code) => `你的星頁註冊驗證碼是 ${code}，10 分鐘內有效。如果不是你本人操作，忽略這封郵件即可。`,
-    html: (code) => mailHtml("你好，正在註冊星頁。", code, "驗證碼 10 分鐘內有效。如果不是你本人操作，忽略這封郵件即可。"),
+    subject: "fanstar 註冊驗證碼",
+    text: (code) => `你的 fanstar 註冊驗證碼是 ${code}，10 分鐘內有效。如果不是你本人操作，忽略這封郵件即可。`,
+    html: (code) => mailHtml("你好，正在註冊 fanstar。", code, "驗證碼 10 分鐘內有效。如果不是你本人操作，忽略這封郵件即可。"),
   },
   ja: {
-    subject: "星页の登録確認コード",
-    text: (code) => `星页の登録確認コードは ${code} です。10分以内に入力してください。身に覚えがない場合は、このメールを無視してください。`,
-    html: (code) => mailHtml("星页の登録を進めています。", code, "コードは10分間有効です。身に覚えがない場合は、このメールを無視してください。"),
+    subject: "fanstarの登録確認コード",
+    text: (code) => `fanstarの登録確認コードは ${code} です。10分以内に入力してください。身に覚えがない場合は、このメールを無視してください。`,
+    html: (code) => mailHtml("fanstarの登録を進めています。", code, "コードは10分間有効です。身に覚えがない場合は、このメールを無視してください。"),
   },
   en: {
-    subject: "Your Fanstar verification code",
-    text: (code) => `Your Fanstar verification code is ${code}. It expires in 10 minutes. If you didn't try to register, you can ignore this email.`,
-    html: (code) => mailHtml("You're signing up for Fanstar.", code, "The code expires in 10 minutes. If you didn't try to register, you can ignore this email."),
+    subject: "Your fanstar verification code",
+    text: (code) => `Your fanstar verification code is ${code}. It expires in 10 minutes. If you didn't try to register, you can ignore this email.`,
+    html: (code) => mailHtml("You're signing up for fanstar.", code, "The code expires in 10 minutes. If you didn't try to register, you can ignore this email."),
   },
 };
 

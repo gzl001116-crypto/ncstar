@@ -70,9 +70,9 @@ function jaLabel(key: (typeof LABELS)[number]) {
 
 function jaValue(key: (typeof VALUES)[number]) {
   const map = {
-    "toku.v0": "星页（Fanstar）",
-    "toku.v1": "星页（fanstar.dev）の運営者",
-    "toku.v2": "星页 運営担当",
+    "toku.v0": "fanstar",
+    "toku.v1": "fanstar（fanstar.dev）の運営者",
+    "toku.v2": "fanstar 運営担当",
     "toku.v3": "販売業者の登記または開業届に記載された事業所。お問い合わせは下記メールアドレスで受け付けます。",
     "toku.v4": "下記メールアドレスにてご連絡ください。",
     "toku.v5": "support@fanstar.dev",
