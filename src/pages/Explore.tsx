@@ -39,7 +39,7 @@ export function Explore() {
           .map((post) => `${post.title} ${post.excerpt}`)
           .join(" ");
         const sold = products
-          .filter((product) => product.creatorId === creator.id)
+          .filter((product) => product.listed && product.creatorId === creator.id)
           .map((product) => `${product.title} ${product.description} ${product.tags.join(" ")}`)
           .join(" ");
         return includesQuery(
@@ -56,6 +56,7 @@ export function Explore() {
     return includesQuery(`${post.title} ${post.excerpt} ${creator?.name ?? ""}`, q);
   });
   const productHits = products.filter((product) => {
+    if (!product.listed) return false;
     const creator = creators.find((item) => item.id === product.creatorId);
     if (cat !== "全部" && creator?.category !== cat) return false;
     return includesQuery(`${product.title} ${product.description} ${product.kind} ${product.tags.join(" ")} ${creator?.name ?? ""}`, q);

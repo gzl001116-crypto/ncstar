@@ -485,4 +485,181 @@ if (fanOld.status !== 200 || fanOld.data.user) throw new Error("old fan session 
 const fanNew = await client().send("/api/login", { email: "fan@example.com", password: "secret34" });
 if (fanNew.status !== 200) throw new Error(`reset login ${fanNew.status} ${fanNew.raw}`);
 
+const readerNow = client();
+const readerLogin = await readerNow.send("/api/login", { email: "fan@example.com", password: "secret34" });
+if (readerLogin.status !== 200) throw new Error(`reader login ${readerLogin.status} ${readerLogin.raw}`);
+const tinyName = await creator.send("/api/products", {
+  title: "短",
+  description: "",
+  price: 3,
+  kind: "文本",
+  includes: ["短.txt"],
+  fileBody: "一二三四五六七八",
+});
+if (tinyName.status !== 400 || tinyName.data.code !== "err.product.title") throw new Error(`short title ${tinyName.status} ${tinyName.raw}`);
+const cheapForm = new FormData();
+cheapForm.set("title", "太便宜");
+cheapForm.set("description", "");
+cheapForm.set("price", "0.5");
+cheapForm.set("kind", "数字作品");
+cheapForm.set("play", "0");
+cheapForm.set("download", "1");
+cheapForm.set("file", new File([Uint8Array.from([1, 2, 3, 4])], "pack.zip", { type: "application/zip" }));
+const cheap = await creator.sendForm("/api/products", cheapForm);
+if (cheap.status !== 400 || cheap.data.code !== "err.price") throw new Error(`cheap price ${cheap.status} ${cheap.raw}`);
+const archive = new FormData();
+archive.set("title", "压缩包");
+archive.set("description", "");
+archive.set("price", "4");
+archive.set("kind", "数字作品");
+archive.set("play", "0");
+archive.set("download", "1");
+archive.set("file", new File([Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8])], "pack.zip", { type: "application/zip" }));
+const archived = await creator.sendForm("/api/products", archive);
+const archiveWork = archived.data.products?.find((item: { title: string }) => item.title === "压缩包");
+if (archived.status !== 200 || archiveWork?.playFormat || archiveWork?.description !== "") {
+  throw new Error(`download-only archive ${archived.status} ${archived.raw}`);
+}
+const zipPlay = new FormData();
+zipPlay.set("productId", archiveWork.id);
+zipPlay.set("title", "压缩包");
+zipPlay.set("description", "");
+zipPlay.set("price", "4");
+zipPlay.set("kind", "数字作品");
+zipPlay.set("play", "1");
+zipPlay.set("download", "1");
+zipPlay.set("listed", "1");
+const zipRejected = await creator.sendForm("/api/product", zipPlay);
+if (zipRejected.status !== 400 || zipRejected.data.code !== "err.play.file") {
+  throw new Error(`zip cannot switch to play ${zipRejected.status} ${zipRejected.raw}`);
+}
+const openDownload = new FormData();
+openDownload.set("productId", downloadWork.id);
+openDownload.set("title", "只能下载");
+openDownload.set("description", "不进入 play");
+openDownload.set("price", "4");
+openDownload.set("kind", "小说");
+openDownload.set("play", "1");
+openDownload.set("download", "1");
+openDownload.set("listed", "1");
+const switchedPlay = await creator.sendForm("/api/product", openDownload);
+const switchedWork = switchedPlay.data.products?.find((item: { id: string }) => item.id === downloadWork.id);
+if (switchedPlay.status !== 200 || switchedWork?.playFormat !== "novel") {
+  throw new Error(`switch download to play ${switchedPlay.status} ${switchedPlay.raw}`);
+}
+const blankForm = new FormData();
+blankForm.set("title", "空白介绍");
+blankForm.set("description", "");
+blankForm.set("price", "12.5");
+blankForm.set("kind", "小说");
+blankForm.set("play", "1");
+blankForm.set("download", "1");
+blankForm.set("file", new File(["空白介绍的完整正文在这里。"], "blank.txt", { type: "text/plain" }));
+const blanked = await creator.sendForm("/api/products", blankForm);
+const blankWork = blanked.data.products?.find((item: { title: string }) => item.title === "空白介绍");
+if (blanked.status !== 200 || !blankWork || blankWork.description !== "" || blankWork.price !== 12.5) {
+  throw new Error(`blank description ${blanked.status} ${blanked.raw}`);
+}
+const queued = await readerNow.send("/api/cart", { productId: blankWork.id, op: "add" });
+if (queued.status !== 200) throw new Error(`queue work ${queued.status} ${queued.raw}`);
+const editForm = new FormData();
+editForm.set("productId", blankWork.id);
+editForm.set("title", "改过的名字");
+editForm.set("description", "");
+editForm.set("price", "18.5");
+editForm.set("kind", "小说");
+editForm.set("tags", "短篇");
+editForm.set("play", "1");
+editForm.set("download", "1");
+editForm.set("preview", "0");
+editForm.set("listed", "0");
+editForm.set("cover", new File([png], "cover.png", { type: "image/png" }));
+const edited = await creator.sendForm("/api/product", editForm);
+const editedWork = edited.data.products?.find((item: { id: string }) => item.id === blankWork.id);
+if (
+  edited.status !== 200 ||
+  edited.data.code !== "toast.work" ||
+  editedWork?.title !== "改过的名字" ||
+  editedWork?.price !== 18.5 ||
+  editedWork?.listed !== false ||
+  editedWork?.description !== "" ||
+  !editedWork?.coverAt ||
+  !editedWork?.tags?.includes("短篇")
+) {
+  throw new Error(`edit work ${edited.status} ${edited.raw}`);
+}
+const hiddenShelf = await readerNow.send("/api/state", undefined, "GET");
+if (hiddenShelf.data.products?.some((item: { id: string }) => item.id === blankWork.id)) {
+  throw new Error("unlisted work is still in the reader catalog");
+}
+const hiddenCart = await readerNow.send("/api/cart", { productId: blankWork.id, op: "add" });
+if (hiddenCart.status !== 404 || hiddenCart.data.code !== "err.product.missing") {
+  throw new Error(`unlisted cart ${hiddenCart.status} ${hiddenCart.raw}`);
+}
+const hiddenPlay = await readerNow.send(`/api/play?productId=${blankWork.id}`, undefined, "GET");
+if (hiddenPlay.status !== 403) throw new Error(`unlisted preview ${hiddenPlay.status} ${hiddenPlay.raw}`);
+const droppedCart = await readerNow.send("/api/checkout", {});
+if (droppedCart.status !== 400 || droppedCart.data.code !== "err.cart.empty") {
+  throw new Error(`dropped cart ${droppedCart.status} ${droppedCart.raw}`);
+}
+const afterDrop = await readerNow.send("/api/state", undefined, "GET");
+if (afterDrop.data.user?.cart?.includes(blankWork.id)) throw new Error("unlisted item stayed in the cart");
+const coverRead = await client().send(`/api/cover?id=${blankWork.id}`, undefined, "GET");
+if (coverRead.status !== 200 || !coverRead.type.includes("image/png")) throw new Error(`cover read ${coverRead.status} ${coverRead.type}`);
+const svgCover = new FormData();
+svgCover.set("productId", blankWork.id);
+svgCover.set("title", "改过的名字");
+svgCover.set("description", "");
+svgCover.set("price", "18.5");
+svgCover.set("kind", "小说");
+svgCover.set("play", "1");
+svgCover.set("download", "1");
+svgCover.set("listed", "0");
+svgCover.set("cover", new File(["<svg xmlns='http://www.w3.org/2000/svg'></svg>"], "cover.svg", { type: "image/svg+xml" }));
+const rejectedCover = await creator.sendForm("/api/product", svgCover);
+if (rejectedCover.status !== 400 || rejectedCover.data.code !== "err.cover.type") {
+  throw new Error(`svg cover ${rejectedCover.status} ${rejectedCover.raw}`);
+}
+const relistForm = new FormData();
+relistForm.set("productId", blankWork.id);
+relistForm.set("title", "改过的名字");
+relistForm.set("description", "");
+relistForm.set("price", "18.5");
+relistForm.set("kind", "小说");
+relistForm.set("tags", "短篇");
+relistForm.set("play", "1");
+relistForm.set("download", "1");
+relistForm.set("listed", "1");
+const relisted = await creator.sendForm("/api/product", relistForm);
+const shown = relisted.data.products?.find((item: { id: string }) => item.id === blankWork.id);
+if (relisted.status !== 200 || shown?.listed !== true) throw new Error(`relist ${relisted.status} ${relisted.raw}`);
+const visible = await readerNow.send("/api/state", undefined, "GET");
+if (!visible.data.products?.some((item: { id: string }) => item.id === blankWork.id)) throw new Error("relisted work is missing");
+const buying = await readerNow.send("/api/cart", { productId: blankWork.id, op: "add" });
+const paidWork = await readerNow.send("/api/checkout", {});
+const ownsEdited = paidWork.data.user?.library?.some((item: { productId: string }) => item.productId === blankWork.id);
+if (buying.status !== 200 || paidWork.status !== 200 || !ownsEdited) throw new Error(`buy edited work ${buying.status} ${paidWork.status} ${paidWork.raw}`);
+const hideOwned = new FormData();
+hideOwned.set("productId", blankWork.id);
+hideOwned.set("title", "改过的名字");
+hideOwned.set("description", "");
+hideOwned.set("price", "18.5");
+hideOwned.set("kind", "小说");
+hideOwned.set("play", "1");
+hideOwned.set("download", "1");
+hideOwned.set("listed", "0");
+const hiddenAgain = await creator.sendForm("/api/product", hideOwned);
+if (hiddenAgain.status !== 200) throw new Error(`unlist owned ${hiddenAgain.status} ${hiddenAgain.raw}`);
+const ownerStill = await readerNow.send("/api/state", undefined, "GET");
+const kept = ownerStill.data.products?.find((item: { id: string }) => item.id === blankWork.id);
+if (!kept || kept.listed !== false) throw new Error(`buyer lost an unlisted work ${ownerStill.raw}`);
+const ownerPlay = await readerNow.send(`/api/play?productId=${blankWork.id}`, undefined, "GET");
+if (ownerPlay.status !== 200 || ownerPlay.data.preview !== false || !String(ownerPlay.data.novel).includes("完整正文")) {
+  throw new Error(`buyer play after unlist ${ownerPlay.status} ${ownerPlay.raw}`);
+}
+const outsider = await client().send("/api/state", undefined, "GET");
+if (outsider.data.products?.some((item: { id: string }) => item.id === blankWork.id)) {
+  throw new Error("guest can see an unlisted work");
+}
+
 console.log("platform checks passed");

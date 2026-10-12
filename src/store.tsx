@@ -51,6 +51,7 @@ type StoreValue = {
     previewLimit?: number;
     previewBody?: string;
     file?: File;
+    cover?: File;
     fileBody?: string;
     playFormat?: string;
     playBody?: string;
@@ -68,6 +69,24 @@ type StoreValue = {
   uploadAvatar: (file: File) => Promise<string | null>;
   deleteAccount: (password: string) => Promise<string | null>;
   updateProductTags: (productId: string, tags: string) => Promise<string | null>;
+  updateProduct: (input: {
+    productId: string;
+    title: string;
+    description: string;
+    price: number;
+    kind: string;
+    includes: string[];
+    tags: string;
+    play: boolean;
+    download: boolean;
+    preview: boolean;
+    previewMode: string;
+    previewLimit: number;
+    previewBody: string;
+    listed: boolean;
+    file?: File;
+    cover?: File;
+  }) => Promise<string | null>;
   desk: Desk | null;
   loadDesk: () => Promise<string | null>;
   creatorById: (id: string) => Creator | undefined;
@@ -131,6 +150,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         allowPreview: product.allowPreview ?? false,
         previewMode: product.previewMode === "content" || product.previewMode === "progress" ? product.previewMode : "",
         previewLimit: product.previewLimit ?? 0,
+        previewBody: product.previewBody ?? "",
+        listed: product.listed ?? true,
+        coverAt: product.coverAt ?? "",
       })),
       tiers: data.tiers ?? [],
       comments: data.comments ?? [],
@@ -261,6 +283,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         form.set("previewLimit", String(input.previewLimit ?? ""));
         form.set("previewBody", input.previewBody ?? "");
       }
+      if (input.cover) form.set("cover", input.cover);
       form.set("file", input.file);
       try {
         const response = await fetch("/api/products", { method: "POST", credentials: "same-origin", body: form });
@@ -314,6 +337,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     deleteAccount: (password) => mutate("/api/account", { password }),
     updateProductTags: (productId, tags) => mutate("/api/product-tags", { productId, tags }),
+    updateProduct: async (input) => {
+      const form = new FormData();
+      form.set("productId", input.productId);
+      form.set("title", input.title);
+      form.set("description", input.description);
+      form.set("price", String(input.price));
+      form.set("kind", input.kind);
+      form.set("includes", input.includes.join(","));
+      form.set("tags", input.tags);
+      form.set("play", input.play ? "1" : "0");
+      form.set("download", input.download ? "1" : "0");
+      form.set("preview", input.preview ? "1" : "0");
+      form.set("previewMode", input.previewMode);
+      form.set("previewLimit", String(input.previewLimit));
+      form.set("previewBody", input.previewBody);
+      form.set("listed", input.listed ? "1" : "0");
+      if (input.file) form.set("file", input.file);
+      if (input.cover) form.set("cover", input.cover);
+      try {
+        const response = await fetch("/api/product", { method: "POST", credentials: "same-origin", body: form });
+        const data = (await response.json().catch(() => ({}))) as Catalog & { code?: string; name?: string; toast?: string; error?: string };
+        if (!response.ok) return say(data.code, data.name, data.error);
+        apply(data);
+        return null;
+      } catch {
+        return t("err.network");
+      }
+    },
     desk,
     loadDesk,
     creatorById,

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Cover } from "../components/Cover";
+import { Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
@@ -84,7 +84,7 @@ export function Checkout() {
         ) : (
           lines.map((product) => (
             <article key={product.id} className="line">
-              <Cover id={product.coverKey} ratio="1 / 1" className="line-cover" />
+              <Cover id={product.coverKey} src={coverSrc(product)} ratio="1 / 1" className="line-cover" />
               <div>
                 <strong>{product.title}</strong>
                 <p className="muted">{creatorById(product.creatorId)?.name}</p>

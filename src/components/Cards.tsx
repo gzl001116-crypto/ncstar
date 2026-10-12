@@ -3,7 +3,7 @@ import { useI18n } from "../i18n";
 import type { Creator, Post, Product } from "../types";
 import { useStore } from "../store";
 import { yuan } from "../utils";
-import { Avatar, Cover } from "./Cover";
+import { Avatar, Cover, coverSrc } from "./Cover";
 
 export function CreatorCard({ creator }: { creator: Creator }) {
   const { t, phrase, locale } = useI18n();
@@ -63,14 +63,14 @@ export function ProductCard({ product }: { product: Product }) {
   const creator = creatorById(product.creatorId);
   return (
     <Link to={`/c/${product.creatorId}/shop/${product.id}`} className="card">
-      <Cover id={product.coverKey} ratio="1 / 1" />
+      <Cover id={product.coverKey} src={coverSrc(product)} ratio="1 / 1" />
       <div className="card-body">
         <div className="meta">
           <span className="pill">{phrase(product.kind)}</span>
           <span className="price">{yuan(product.price)}</span>
         </div>
         <h3>{product.title}</h3>
-        <p className="clamp">{phrase(product.description)}</p>
+        {product.description && <p className="clamp">{phrase(product.description)}</p>}
         {product.tags.length > 0 && (
           <div className="tag-row">
             {product.tags.map((tag) => (

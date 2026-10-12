@@ -14,7 +14,7 @@ export function Home() {
   const featured = creators.slice(0, 4);
   const lead = posts[0];
   const side = posts.slice(1, 3);
-  const shelf = products.slice(0, 6);
+  const shelf = products.filter((product) => product.listed).slice(0, 6);
   const spotlight = lead ? creators.find((creator) => creator.id === lead.creatorId) : creators[0];
   const sample = tiers.find((tier) => tier.creatorId === spotlight?.id) ?? tiers[0];
 

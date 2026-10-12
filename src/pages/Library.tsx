@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Cover } from "../components/Cover";
+import { Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { isAbsolute, playHref } from "../site";
@@ -78,7 +78,7 @@ export function Library() {
             const creator = creatorById(product.creatorId);
             return (
               <article key={item.productId} className="card">
-                <Cover id={product.coverKey} ratio="16 / 10" />
+                <Cover id={product.coverKey} src={coverSrc(product)} ratio="16 / 10" />
                 <div className="card-body">
                   <h3>{product.title}</h3>
                   <p className="muted">

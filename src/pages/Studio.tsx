@@ -1,14 +1,71 @@
-import { FormEvent, useEffect, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
-import { Avatar } from "../components/Cover";
+import { Avatar, Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { PasswordForm } from "./Password";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
-import { CATEGORIES, type Category } from "../types";
+import { CATEGORIES, type Category, type Product } from "../types";
 import { formatDate, yuan } from "../utils";
 
 const KINDS = ["数字作品", "插画", "音乐", "设计", "摄影", "写作", "图案"] as const;
+const MAX_FILE = 8 * 1024 * 1024;
+const MAX_COVER = 1024 * 1024;
+const PREVIEW_DEFAULTS = new Set(["", "1", "30", "400", "800"]);
+
+function fileCanPlay(file: File) {
+  const type = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+  if (type === "image/svg+xml" || name.endsWith(".svg")) return false;
+  if (type.startsWith("text/") || type.startsWith("audio/") || type.startsWith("video/") || type.startsWith("image/")) return true;
+  return /\.(html|htm|txt|md|markdown|text|mp3|m4a|wav|ogg|flac|mp4|webm|png|jpg|jpeg|gif|webp)$/.test(name);
+}
+
+function coverOk(file: File) {
+  const type = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+  if (type === "image/svg+xml" || name.endsWith(".svg")) return false;
+  if (type === "image/png" || type === "image/jpeg" || type === "image/gif" || type === "image/webp") return true;
+  return /\.(png|jpe?g|gif|webp)$/.test(name);
+}
+
+function previewDefault(file: File) {
+  const type = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+  if (type.startsWith("text/html") || /\.html?$/.test(name)) return "800";
+  if (type.startsWith("text/") || /\.(txt|md|markdown|text)$/.test(name)) return "400";
+  if (type.startsWith("audio/") || type.startsWith("video/") || /\.(mp3|m4a|wav|ogg|flac|mp4|webm)$/.test(name)) return "30";
+  return "1";
+}
+
+function tagProblem(raw: string) {
+  const unique: string[] = [];
+  for (const item of raw.split(/[,，]/)) {
+    const tag = item.trim();
+    if (!tag) continue;
+    if (Array.from(tag).length > 5) return "err.tag.length";
+    if (!unique.includes(tag)) unique.push(tag);
+  }
+  if (unique.length > 10) return "err.tag.count";
+  return "";
+}
+
+function pickedFile(value: FormDataEntryValue | null) {
+  return value instanceof File && value.size > 0 ? value : undefined;
+}
+
+function FormError({ message }: { message: string }) {
+  const ref = useRef<HTMLParagraphElement>(null);
+  useEffect(() => {
+    ref.current?.scrollIntoView({ block: "nearest" });
+  }, [message]);
+  if (!message) return null;
+  return (
+    <p ref={ref} className="error">
+      {message}
+    </p>
+  );
+}
 
 function StudioGate({ children }: { children: ReactNode }) {
   const { t } = useI18n();
@@ -175,14 +232,15 @@ function AccountAvatar() {
       className="panel avatar-panel"
       onSubmit={async (event) => {
         event.preventDefault();
-        const file = new FormData(event.currentTarget).get("file");
+        const form = event.currentTarget;
+        const file = new FormData(form).get("file");
         if (!(file instanceof File) || file.size < 1) {
           setError(t("err.avatar"));
           return;
         }
         const result = await uploadAvatar(file);
         setError(result ?? "");
-        if (!result) event.currentTarget.reset();
+        if (!result) form.reset();
       }}
     >
       <Avatar name={user.name} id={user.handle} size={72} stamp={user.avatarAt} />
@@ -394,7 +452,8 @@ export function StudioPosts() {
   const plans = tiers.filter((tier) => tier.creatorId === user.handle);
   const onPost = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     const result = await publishPost({
       title: String(data.get("title") ?? ""),
       excerpt: String(data.get("excerpt") ?? ""),
@@ -405,7 +464,7 @@ export function StudioPosts() {
       setError(result);
       return;
     }
-    event.currentTarget.reset();
+    form.reset();
     setError("");
   };
   return (
@@ -460,13 +519,286 @@ export function StudioPosts() {
   );
 }
 
+function AccessFields({
+  usePlay,
+  setUsePlay,
+  allowDownload,
+  setAllowDownload,
+  allowPreview,
+  setAllowPreview,
+  previewMode,
+  setPreviewMode,
+  previewLimit,
+  setPreviewLimit,
+  previewBody,
+  setPreviewBody,
+}: {
+  usePlay: boolean;
+  setUsePlay: (value: boolean) => void;
+  allowDownload: boolean;
+  setAllowDownload: (value: boolean) => void;
+  allowPreview: boolean;
+  setAllowPreview: (value: boolean) => void;
+  previewMode: "content" | "progress";
+  setPreviewMode: (value: "content" | "progress") => void;
+  previewLimit: string;
+  setPreviewLimit: (value: string) => void;
+  previewBody: string;
+  setPreviewBody: (value: string) => void;
+}) {
+  const { t } = useI18n();
+  return (
+    <>
+      <div className="choice-list">
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={usePlay}
+            onChange={(event) => {
+              setUsePlay(event.target.checked);
+              if (!event.target.checked) setAllowPreview(false);
+            }}
+          />
+          {t("studio.play")}
+        </label>
+        <p className="fineprint">{t("studio.playHint")}</p>
+        <label className="check">
+          <input type="checkbox" checked={allowDownload} onChange={(event) => setAllowDownload(event.target.checked)} />
+          {t("studio.download")}
+        </label>
+        <p className="fineprint">{t("studio.accessHint")}</p>
+        <label className="check">
+          <input
+            type="checkbox"
+            checked={allowPreview}
+            disabled={!usePlay}
+            onChange={(event) => setAllowPreview(event.target.checked)}
+          />
+          {t("studio.preview")}
+        </label>
+        <p className="fineprint">{t("studio.previewHint")}</p>
+      </div>
+      {usePlay && allowPreview && (
+        <>
+          <label>
+            {t("studio.previewMode")}
+            <select
+              name="previewMode"
+              value={previewMode}
+              onChange={(event) => setPreviewMode(event.target.value === "content" ? "content" : "progress")}
+            >
+              <option value="progress">{t("studio.previewProgress")}</option>
+              <option value="content">{t("studio.previewContent")}</option>
+            </select>
+          </label>
+          {previewMode === "progress" ? (
+            <label>
+              {t("studio.previewLimit")}
+              <input
+                name="previewLimit"
+                type="number"
+                min="1"
+                max="20000"
+                step="1"
+                value={previewLimit}
+                onChange={(event) => setPreviewLimit(event.target.value)}
+              />
+              <span className="fineprint">{t("studio.previewLimitPh")}</span>
+            </label>
+          ) : (
+            <label>
+              {t("studio.previewBody")}
+              <textarea
+                name="previewBody"
+                rows={4}
+                value={previewBody}
+                placeholder={t("studio.previewBodyPh")}
+                onChange={(event) => setPreviewBody(event.target.value)}
+              />
+            </label>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
+function WorkEditor({ product, sold }: { product: Product; sold: number }) {
+  const { t, phrase } = useI18n();
+  const { user, updateProduct } = useStore();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [filename, setFilename] = useState("");
+  const [usePlay, setUsePlay] = useState(product.allowPlay);
+  const [allowDownload, setAllowDownload] = useState(product.allowDownload);
+  const [allowPreview, setAllowPreview] = useState(product.allowPreview && product.allowPlay);
+  const [previewMode, setPreviewMode] = useState<"content" | "progress">(product.previewMode === "content" ? "content" : "progress");
+  const [previewLimit, setPreviewLimit] = useState(String(product.previewLimit || 1));
+  const [previewBody, setPreviewBody] = useState(product.previewBody);
+  const [listed, setListed] = useState(product.listed);
+  if (!user) return null;
+
+  const onSave = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (busy) return;
+    const data = new FormData(event.currentTarget);
+    const title = String(data.get("title") ?? "");
+    const price = Number(data.get("price") ?? 0);
+    const tags = String(data.get("tags") ?? "");
+    const file = pickedFile(data.get("file"));
+    const cover = pickedFile(data.get("cover"));
+    const problem =
+      (Array.from(title.trim()).length < 2 ? "err.product.title" : "") ||
+      (!Number.isFinite(price) || price < 1 || price > 9999 ? "err.price" : "") ||
+      tagProblem(tags) ||
+      (!usePlay && !allowDownload ? "err.open" : "") ||
+      (allowPreview && !usePlay ? "err.preview.play" : "") ||
+      (allowPreview && previewMode === "content" && Array.from(previewBody.trim()).length < 1 ? "err.preview.body" : "") ||
+      (allowPreview && previewMode === "progress" && (!Number.isInteger(Number(previewLimit)) || Number(previewLimit) < 1 || Number(previewLimit) > 20000)
+        ? "err.preview.limit"
+        : "") ||
+      (file && file.size > MAX_FILE ? "err.file.size" : "") ||
+      (cover && cover.size > MAX_COVER ? "err.cover.size" : "") ||
+      (cover && !coverOk(cover) ? "err.cover.type" : "") ||
+      (usePlay && file && !fileCanPlay(file) ? "err.play.file" : "");
+    if (problem) {
+      setError(t(problem));
+      return;
+    }
+    setBusy(true);
+    setError("");
+    const result = await updateProduct({
+      productId: product.id,
+      title,
+      description: String(data.get("description") ?? ""),
+      price,
+      kind: String(data.get("kind") ?? product.kind),
+      includes: String(data.get("includes") ?? "")
+        .split(/[,，]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+      tags,
+      play: usePlay,
+      download: allowDownload,
+      preview: allowPreview,
+      previewMode,
+      previewLimit: Number(previewLimit),
+      previewBody,
+      listed,
+      file,
+      cover,
+    });
+    setBusy(false);
+    if (result) setError(result);
+    else setFilename("");
+  };
+
+  return (
+    <div className="panel work-edit">
+      <div className="work-head">
+        <Cover id={product.coverKey} src={coverSrc(product)} ratio="1 / 1" className="work-cover" />
+        <div>
+          {listed ? (
+            <Link to={`/c/${user.handle}/shop/${product.id}`}>
+              <strong>{product.title}</strong>
+            </Link>
+          ) : (
+            <strong>{product.title}</strong>
+          )}
+          <p className="muted">
+            {phrase(product.kind)} · {yuan(product.price)} · {t("studio.sold", { n: sold })}
+            {product.playFormat ? ` · ${t("product.viaPlay")}` : ""}
+            {product.allowDownload ? ` · ${t("product.canDownload")}` : product.playFormat ? ` · ${t("product.playOnly")}` : ""}
+            {product.allowPreview ? ` · ${t("product.preview")}` : ""}
+          </p>
+          {!product.listed && <span className="pill">{t("studio.offShelf")}</span>}
+        </div>
+      </div>
+      <form className="studio-form" onSubmit={onSave}>
+        <label>
+          {t("studio.productName")}
+          <input name="title" defaultValue={product.title} required />
+        </label>
+        <label>
+          {t("studio.kind")}
+          <select name="kind" defaultValue={product.kind}>
+            {KINDS.map((item) => (
+              <option key={item} value={item}>
+                {phrase(item)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t("studio.price")}
+          <input name="price" type="number" min="1" max="9999" step="0.01" defaultValue={product.price} required />
+        </label>
+        <label>
+          {t("studio.includes")}
+          <input name="includes" defaultValue={product.includes.join("，")} placeholder={t("studio.includesPh")} />
+        </label>
+        <label>
+          {t("studio.workTags")}
+          <input name="tags" defaultValue={product.tags.join("，")} placeholder={t("studio.workTagsPh")} />
+        </label>
+        <label>
+          {t("studio.desc")}
+          <textarea name="description" rows={4} defaultValue={product.description} />
+        </label>
+        <label>
+          {t("studio.cover")}
+          <input name="cover" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+          <span className="fineprint">{t("studio.coverHint")}</span>
+        </label>
+        <label>
+          {t("studio.replaceFile")}
+          <input
+            name="file"
+            type="file"
+            onChange={(event) => {
+              const next = event.currentTarget.files?.[0];
+              setFilename(next?.name ?? "");
+              if (next && PREVIEW_DEFAULTS.has(previewLimit)) setPreviewLimit(previewDefault(next));
+            }}
+          />
+          <span className="fineprint">
+            {t("studio.fileHint")}
+            {filename ? ` · ${filename}` : ""}
+          </span>
+        </label>
+        <AccessFields
+          usePlay={usePlay}
+          setUsePlay={setUsePlay}
+          allowDownload={allowDownload}
+          setAllowDownload={setAllowDownload}
+          allowPreview={allowPreview}
+          setAllowPreview={setAllowPreview}
+          previewMode={previewMode}
+          setPreviewMode={setPreviewMode}
+          previewLimit={previewLimit}
+          setPreviewLimit={setPreviewLimit}
+          previewBody={previewBody}
+          setPreviewBody={setPreviewBody}
+        />
+        <label className="check">
+          <input type="checkbox" checked={listed} onChange={(event) => setListed(event.target.checked)} />
+          {t("studio.onShelf")}
+        </label>
+        <FormError message={error} />
+        <button className="btn btn-dark" type="submit" disabled={busy}>
+          {busy ? t("common.wait") : t("studio.saveWork")}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export function StudioWorks() {
   const { t, phrase } = useI18n();
-  const { user, products, publishProduct, updateProductTags, desk } = useStore();
+  const { user, products, publishProduct, desk } = useStore();
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const [filename, setFilename] = useState("");
-  const [tagError, setTagError] = useState("");
-  const [tagFor, setTagFor] = useState("");
   const [usePlay, setUsePlay] = useState(true);
   const [allowDownload, setAllowDownload] = useState(true);
   const [allowPreview, setAllowPreview] = useState(false);
@@ -477,39 +809,44 @@ export function StudioWorks() {
   const mineProducts = products.filter((product) => product.creatorId === user.handle);
   const onProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const file = data.get("file");
-    if (!(file instanceof File) || file.size < 1) {
-      setError(t("err.file"));
-      return;
-    }
-    if (!usePlay && !allowDownload) {
-      setError(t("err.open"));
-      return;
-    }
-    if (allowPreview && !usePlay) {
-      setError(t("err.preview.play"));
-      return;
-    }
-    if (allowPreview && previewMode === "content" && Array.from(previewBody.trim()).length < 1) {
-      setError(t("err.preview.body"));
-      return;
-    }
+    if (busy) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const title = String(data.get("title") ?? "");
+    const price = Number(data.get("price") ?? 0);
+    const tags = String(data.get("tags") ?? "");
+    const file = pickedFile(data.get("file"));
+    const cover = pickedFile(data.get("cover"));
     const limit = Number(previewLimit);
-    if (allowPreview && previewMode === "progress" && (!Number.isInteger(limit) || limit < 1 || limit > 20000)) {
-      setError(t("err.preview.limit"));
+    const problem =
+      (Array.from(title.trim()).length < 2 ? "err.product.title" : "") ||
+      (!Number.isFinite(price) || price < 1 || price > 9999 ? "err.price" : "") ||
+      tagProblem(tags) ||
+      (!file ? "err.file" : "") ||
+      (!usePlay && !allowDownload ? "err.open" : "") ||
+      (allowPreview && !usePlay ? "err.preview.play" : "") ||
+      (allowPreview && previewMode === "content" && Array.from(previewBody.trim()).length < 1 ? "err.preview.body" : "") ||
+      (allowPreview && previewMode === "progress" && (!Number.isInteger(limit) || limit < 1 || limit > 20000) ? "err.preview.limit" : "") ||
+      (file && file.size > MAX_FILE ? "err.file.size" : "") ||
+      (cover && cover.size > MAX_COVER ? "err.cover.size" : "") ||
+      (cover && !coverOk(cover) ? "err.cover.type" : "") ||
+      (usePlay && file && !fileCanPlay(file) ? "err.play.file" : "");
+    if (problem) {
+      setError(t(problem));
       return;
     }
+    setBusy(true);
+    setError("");
     const result = await publishProduct({
-      title: String(data.get("title") ?? ""),
+      title,
       description: String(data.get("description") ?? ""),
-      price: Number(data.get("price") ?? 0),
+      price,
       kind: String(data.get("kind") ?? ""),
       includes: String(data.get("includes") ?? "")
         .split(/[,，]/)
         .map((item) => item.trim())
         .filter(Boolean),
-      tags: String(data.get("tags") ?? ""),
+      tags,
       play: usePlay,
       download: allowDownload,
       preview: allowPreview,
@@ -517,12 +854,14 @@ export function StudioWorks() {
       previewLimit: limit,
       previewBody,
       file,
+      cover,
     });
+    setBusy(false);
     if (result) {
       setError(result);
       return;
     }
-    event.currentTarget.reset();
+    form.reset();
     setFilename("");
     setUsePlay(true);
     setAllowDownload(true);
@@ -552,7 +891,7 @@ export function StudioWorks() {
         </label>
         <label>
           {t("studio.price")}
-          <input name="price" type="number" min="1" max="9999" step="1" required />
+          <input name="price" type="number" min="1" max="9999" step="0.01" required />
         </label>
         <label>
           {t("studio.includes")}
@@ -567,84 +906,44 @@ export function StudioWorks() {
           <textarea name="description" rows={4} />
         </label>
         <label>
+          {t("studio.cover")}
+          <input name="cover" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+          <span className="fineprint">{t("studio.coverHint")}</span>
+        </label>
+        <label>
           {t("studio.file")}
           <input
             name="file"
             type="file"
             required
-            onChange={(event) => setFilename(event.currentTarget.files?.[0]?.name ?? "")}
+            onChange={(event) => {
+              const next = event.currentTarget.files?.[0];
+              setFilename(next?.name ?? "");
+              if (next && PREVIEW_DEFAULTS.has(previewLimit)) setPreviewLimit(previewDefault(next));
+            }}
           />
-          <span className="fineprint">{filename || t("studio.fileHint")}</span>
+          <span className="fineprint">
+            {t("studio.fileHint")}
+            {filename ? ` · ${filename}` : ""}
+          </span>
         </label>
-        <div className="choice-list">
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={usePlay}
-              onChange={(event) => {
-                setUsePlay(event.target.checked);
-                if (!event.target.checked) setAllowPreview(false);
-              }}
-            />
-            {t("studio.play")}
-          </label>
-          <p className="fineprint">{t("studio.playHint")}</p>
-          <label className="check">
-            <input type="checkbox" checked={allowDownload} onChange={(event) => setAllowDownload(event.target.checked)} />
-            {t("studio.download")}
-          </label>
-          <p className="fineprint">{t("studio.accessHint")}</p>
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={allowPreview}
-              disabled={!usePlay}
-              onChange={(event) => setAllowPreview(event.target.checked)}
-            />
-            {t("studio.preview")}
-          </label>
-          <p className="fineprint">{t("studio.previewHint")}</p>
-        </div>
-        {usePlay && allowPreview && (
-          <>
-            <label>
-              {t("studio.previewMode")}
-              <select name="previewMode" value={previewMode} onChange={(event) => setPreviewMode(event.target.value === "content" ? "content" : "progress")}>
-                <option value="progress">{t("studio.previewProgress")}</option>
-                <option value="content">{t("studio.previewContent")}</option>
-              </select>
-            </label>
-            {previewMode === "progress" ? (
-              <label>
-                {t("studio.previewLimit")}
-                <input
-                  name="previewLimit"
-                  type="number"
-                  min="1"
-                  max="20000"
-                  step="1"
-                  value={previewLimit}
-                  onChange={(event) => setPreviewLimit(event.target.value)}
-                />
-                <span className="fineprint">{t("studio.previewLimitPh")}</span>
-              </label>
-            ) : (
-              <label>
-                {t("studio.previewBody")}
-                <textarea
-                  name="previewBody"
-                  rows={4}
-                  value={previewBody}
-                  placeholder={t("studio.previewBodyPh")}
-                  onChange={(event) => setPreviewBody(event.target.value)}
-                />
-              </label>
-            )}
-          </>
-        )}
-        {error && <p className="error">{error}</p>}
-        <button className="btn btn-dark" type="submit">
-          {t("studio.newProduct")}
+        <AccessFields
+          usePlay={usePlay}
+          setUsePlay={setUsePlay}
+          allowDownload={allowDownload}
+          setAllowDownload={setAllowDownload}
+          allowPreview={allowPreview}
+          setAllowPreview={setAllowPreview}
+          previewMode={previewMode}
+          setPreviewMode={setPreviewMode}
+          previewLimit={previewLimit}
+          setPreviewLimit={setPreviewLimit}
+          previewBody={previewBody}
+          setPreviewBody={setPreviewBody}
+        />
+        <FormError message={error} />
+        <button className="btn btn-dark" type="submit" disabled={busy}>
+          {busy ? t("common.wait") : t("studio.newProduct")}
         </button>
       </form>
       <section className="section">
@@ -654,40 +953,11 @@ export function StudioWorks() {
           {mineProducts.map((product) => {
             const sold = desk?.orders.filter((order) => order.kind === "product" && order.targetId === product.id).length ?? 0;
             return (
-              <div key={product.id} className="panel work-edit">
-                <Link to={`/c/${user.handle}/shop/${product.id}`}>
-                  <strong>{product.title}</strong>
-                  <p className="muted">
-                    {phrase(product.kind)} · {yuan(product.price)} · {t("studio.sold", { n: sold })}
-                    {product.playFormat ? ` · ${t("product.viaPlay")}` : ""}
-                    {product.allowDownload ? ` · ${t("product.canDownload")}` : product.playFormat ? ` · ${t("product.playOnly")}` : ""}
-                    {product.allowPreview ? ` · ${t("product.preview")}` : ""}
-                  </p>
-                </Link>
-                {product.tags.length > 0 && (
-                  <div className="tag-row">
-                    {product.tags.map((tag) => (
-                      <span key={tag} className="pill">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                <form
-                  onSubmit={async (event) => {
-                    event.preventDefault();
-                    const result = await updateProductTags(product.id, String(new FormData(event.currentTarget).get("tags") ?? ""));
-                    setTagFor(product.id);
-                    setTagError(result ?? "");
-                  }}
-                >
-                  <input key={product.tags.join("，")} name="tags" defaultValue={product.tags.join("，")} placeholder={t("studio.workTagsPh")} />
-                  <button className="btn btn-line" type="submit">
-                    {t("studio.saveTags")}
-                  </button>
-                </form>
-                {tagFor === product.id && tagError && <p className="error">{tagError}</p>}
-              </div>
+              <WorkEditor
+                key={`${product.id}:${product.title}:${product.price}:${product.description}:${product.kind}:${product.listed}:${product.coverAt}:${product.tags.join(",")}:${product.playFormat}:${product.allowPlay}:${product.allowDownload}:${product.allowPreview}:${product.previewMode}:${product.previewLimit}:${product.previewBody}:${product.includes.join(",")}`}
+                product={product}
+                sold={sold}
+              />
             );
           })}
         </div>

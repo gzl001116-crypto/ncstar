@@ -151,6 +151,10 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE products ADD COLUMN preview_mode TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN preview_limit INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE products ADD COLUMN preview_body TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN listed INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE products ADD COLUMN cover_body TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN cover_type TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN cover_at TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar_type TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar_at TEXT NOT NULL DEFAULT ''",
@@ -161,6 +165,7 @@ function ensureSchema(sql: Sql) {
       /* The column is already there after the first request. */
     }
   }
+  sql.run("UPDATE products SET description = '' WHERE description = ?", "创作者刚刚上架的数字作品。");
 }
 
 function json(body: unknown, status = 200, cookies?: string | string[]) {
@@ -259,7 +264,7 @@ function inferPlay(productId: string, filename: string, mime: string, bytes: Uin
   if (type.startsWith("text/html") || name.endsWith(".html") || name.endsWith(".htm")) {
     return { format: "game", body: JSON.stringify({ html: decode() }) };
   }
-  if (type.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".md")) {
+  if (type.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".md") || name.endsWith(".markdown") || name.endsWith(".text")) {
     return { format: "novel", body: JSON.stringify({ novel: decode() }) };
   }
   if (type.startsWith("audio/") || /\.(mp3|m4a|wav|ogg|flac)$/.test(name)) {
@@ -269,7 +274,8 @@ function inferPlay(productId: string, filename: string, mime: string, bytes: Uin
   if (type.startsWith("video/") || /\.(mp4|webm)$/.test(name)) {
     return { format: "video", body: JSON.stringify({ video: media }) };
   }
-  if (type.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/.test(name)) {
+  if (type.startsWith("image/svg") || name.endsWith(".svg")) return { format: "", body: "" };
+  if ((type.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/.test(name)) && !name.endsWith(".svg")) {
     return { format: "comic", body: JSON.stringify({ pages: [{ text: "", image: media }] }) };
   }
   return { format: "", body: "" };
@@ -525,6 +531,9 @@ function snapshot(sql: Sql, viewer: string) {
         coverKey: String(row.cover_key),
       };
     });
+  const ownedIds = new Set(
+    viewer ? sql.all("SELECT product_id FROM purchases WHERE user_id = ?", viewer).map((row) => String(row.product_id)) : [],
+  );
   const products = sql.all("SELECT * FROM products ORDER BY rowid DESC").map((row) => ({
     id: String(row.id),
     creatorId: String(row.creator_id),
@@ -541,7 +550,10 @@ function snapshot(sql: Sql, viewer: string) {
     allowPreview: Number(row.allow_preview ?? 0) === 1,
     previewMode: String(row.preview_mode ?? ""),
     previewLimit: Number(row.preview_limit ?? 0),
-  }));
+    previewBody: viewerHandle === String(row.creator_id) ? String(row.preview_body ?? "") : "",
+    listed: Number(row.listed ?? 1) === 1,
+    coverAt: String(row.cover_at ?? ""),
+  })).filter((product) => product.listed || product.creatorId === viewerHandle || ownedIds.has(product.id));
   const tiers = sql.all("SELECT * FROM tiers ORDER BY rank").map((row) => ({
     id: String(row.id),
     creatorId: String(row.creator_id),
@@ -800,7 +812,7 @@ function cart(sql: Sql, request: Request, body: Record<string, unknown>) {
   if (response) return response;
   const productId = textOf(body.productId, 80);
   const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
-  if (!product) return fail("err.product.missing");
+  if (!product || Number(product.listed ?? 1) !== 1) return fail("err.product.missing", 404);
   const mine = sql.get("SELECT handle FROM users WHERE id = ?", viewer);
   if (body.op === "remove") {
     sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, productId);
@@ -854,7 +866,10 @@ function checkout(sql: Sql, request: Request, body: Record<string, unknown>) {
      WHERE cart_items.user_id = ?`,
     viewer,
   );
-  const payable = items.filter((item) => String(item.creator_id) !== String(mine.handle));
+  for (const item of items) {
+    if (Number(item.listed ?? 1) !== 1) sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, String(item.id));
+  }
+  const payable = items.filter((item) => String(item.creator_id) !== String(mine.handle) && Number(item.listed ?? 1) === 1);
   if (payable.length === 0) return fail("err.cart.empty");
   const now = new Date().toISOString();
   for (const item of payable) {
@@ -903,7 +918,7 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
   if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
   const title = textOf(body.title, 80);
-  const description = textOf(body.description, 2000) || "创作者刚刚上架的数字作品。";
+  const description = textOf(body.description, 2000);
   const fileBody = textOf(body.fileBody, 20000);
   const price = Number(body.price);
   const kind = textOf(body.kind, 40) || "数字作品";
@@ -912,9 +927,9 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   const includes = Array.isArray(body.includes)
     ? body.includes.map((item) => textOf(item, 40)).filter(Boolean).slice(0, 8)
     : [];
-  if (title.length < 2) return fail("err.product.title");
+  if (Array.from(title).length < 2) return fail("err.product.title");
   if (fileBody.length < 8) return fail("err.file");
-  if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
+  if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
   if (playFormat && !isPlayFormat(playFormat)) return fail("err.play.format");
   const parsed = parsePlay(playFormat, playSource);
   if (!parsed.ok) return fail(parsed.code);
@@ -968,7 +983,7 @@ async function publishUpload(sql: Sql, request: Request) {
     return fail("err.file");
   }
   const title = textOf(form.get("title"), 80);
-  const description = textOf(form.get("description"), 2000) || "创作者刚刚上架的数字作品。";
+  const description = textOf(form.get("description"), 2000);
   const price = Number(form.get("price"));
   const kind = textOf(form.get("kind"), 40) || "数字作品";
   const includes = textOf(form.get("includes"), 400)
@@ -980,8 +995,8 @@ async function publishUpload(sql: Sql, request: Request) {
   if (!(uploaded instanceof File)) return fail("err.file");
   if (uploaded.size < 1) return fail("err.file");
   if (uploaded.size > MAX_UPLOAD) return fail("err.file.size");
-  if (title.length < 2) return fail("err.product.title");
-  if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
+  if (Array.from(title).length < 2) return fail("err.product.title");
+  if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
   const workTags = parseWorkTags(form.get("tags"));
   if (!workTags.ok) return fail(workTags.code);
   const chosen = chosenAccess(form);
@@ -995,6 +1010,15 @@ async function publishUpload(sql: Sql, request: Request) {
   if (chosen) {
     if (access.allowPlay === 1 && !play.format) return fail("err.play.file");
     if (access.allowPlay !== 1) play = { format: "", body: "" };
+  }
+  const coverFile = form.get("cover");
+  let coverBytes: Uint8Array | null = null;
+  let coverType = "";
+  if (coverFile instanceof File && coverFile.size > 0) {
+    if (coverFile.size > MAX_AVATAR) return fail("err.cover.size");
+    coverBytes = new Uint8Array(await coverFile.arrayBuffer());
+    coverType = imageType(coverBytes) ?? "";
+    if (!coverType) return fail("err.cover.type");
   }
   sql.run(
     "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1019,7 +1043,144 @@ async function publishUpload(sql: Sql, request: Request) {
     access.previewLimit,
     access.previewBody,
   );
+  if (coverBytes) {
+    sql.run(
+      "UPDATE products SET cover_body = ?, cover_type = ?, cover_at = ? WHERE id = ?",
+      bytesToBase64(coverBytes),
+      coverType,
+      new Date().toISOString(),
+      productId,
+    );
+  }
   return withState(sql, viewer, "toast.product");
+}
+
+async function updateProduct(sql: Sql, request: Request) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return fail("err.file");
+  }
+  const product = sql.get("SELECT * FROM products WHERE id = ?", textOf(form.get("productId"), 80));
+  if (!product || String(product.creator_id) !== String(mine.handle)) return fail("err.product.missing", 404);
+  const title = textOf(form.get("title"), 80);
+  const description = textOf(form.get("description"), 2000);
+  const price = Number(form.get("price"));
+  const kind = textOf(form.get("kind"), 40) || String(product.kind);
+  const includes = textOf(form.get("includes"), 400)
+    .split(/[,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  if (Array.from(title).length < 2) return fail("err.product.title");
+  if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
+  const workTags = parseWorkTags(form.get("tags"));
+  if (!workTags.ok) return fail(workTags.code);
+  const chosen = chosenAccess(form);
+  if (!chosen || "code" in chosen) return fail(chosen && "code" in chosen ? chosen.code : "err.open");
+  const uploaded = form.get("file");
+  let format = String(product.play_format ?? "");
+  let storedBody = String(product.play_body ?? "");
+  let fileNameStored = String(product.file_name ?? "");
+  let fileType = String(product.file_type ?? "");
+  let fileBody = String(product.file_body ?? "");
+  if (uploaded instanceof File && uploaded.size > 0) {
+    if (uploaded.size > MAX_UPLOAD) return fail("err.file.size");
+    const bytes = new Uint8Array(await uploaded.arrayBuffer());
+    const filename = uploaded.name.replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120) || "file";
+    const mime = (uploaded.type || "application/octet-stream").slice(0, 120);
+    const play = inferPlay(String(product.id), filename, mime, bytes);
+    fileBody = bytesToBase64(bytes);
+    fileNameStored = filename;
+    fileType = mime;
+    if (chosen.allowPlay === 1) {
+      if (!play.format) return fail("err.play.file");
+      format = play.format;
+      storedBody = play.body;
+    } else {
+      format = "";
+      storedBody = "";
+    }
+  } else if (chosen.allowPlay === 1) {
+    if (!format) {
+      let stored = new Uint8Array();
+      if (fileBody && fileNameStored) {
+        try {
+          stored = base64ToBytes(fileBody);
+        } catch {
+          return fail("err.play.file");
+        }
+      }
+      const play = inferPlay(String(product.id), fileNameStored || "file", fileType, stored);
+      if (!play.format) return fail("err.play.file");
+      format = play.format;
+      storedBody = play.body;
+    }
+  } else {
+    format = "";
+    storedBody = "";
+  }
+  let coverBody = String(product.cover_body ?? "");
+  let coverTypeStored = String(product.cover_type ?? "");
+  let coverAt = String(product.cover_at ?? "");
+  const coverUpload = form.get("cover");
+  if (coverUpload instanceof File && coverUpload.size > 0) {
+    if (coverUpload.size > MAX_AVATAR) return fail("err.cover.size");
+    const nextBytes = new Uint8Array(await coverUpload.arrayBuffer());
+    const nextType = imageType(nextBytes);
+    if (!nextType) return fail("err.cover.type");
+    coverBody = bytesToBase64(nextBytes);
+    coverTypeStored = nextType;
+    coverAt = new Date().toISOString();
+  }
+  sql.run(
+    `UPDATE products SET title = ?, description = ?, price = ?, kind = ?, includes = ?, tags = ?, file_body = ?, file_name = ?, file_type = ?, play_format = ?, play_body = ?, allow_play = ?, allow_download = ?, allow_preview = ?, preview_mode = ?, preview_limit = ?, preview_body = ?, listed = ?, cover_body = ?, cover_type = ?, cover_at = ? WHERE id = ?`,
+    title,
+    description,
+    Math.round(price * 100) / 100,
+    kind,
+    JSON.stringify(includes.length ? includes : [fileNameStored || fileName(title)]),
+    JSON.stringify(workTags.tags),
+    fileBody,
+    fileNameStored,
+    fileType,
+    format,
+    storedBody,
+    chosen.allowPlay,
+    chosen.allowDownload,
+    chosen.allowPreview,
+    chosen.previewMode,
+    chosen.previewLimit,
+    chosen.previewBody,
+    flagOn(form.get("listed")) ? 1 : 0,
+    coverBody,
+    coverTypeStored,
+    coverAt,
+    String(product.id),
+  );
+  return withState(sql, viewer, "toast.work");
+}
+
+function readCover(sql: Sql, request: Request) {
+  const productId = textOf(new URL(request.url).searchParams.get("id") ?? "", 80);
+  const row = productId ? sql.get("SELECT cover_body, cover_type FROM products WHERE id = ?", productId) : undefined;
+  const type = row ? String(row.cover_type ?? "") : "";
+  if (!row || !String(row.cover_body ?? "") || !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type)) {
+    return fail("err.cover", 404);
+  }
+  return new Response(base64ToBytes(String(row.cover_body)), {
+    status: 200,
+    headers: {
+      "content-type": type,
+      "cache-control": "public, max-age=86400",
+      "x-content-type-options": "nosniff",
+    },
+  });
 }
 
 function profile(sql: Sql, request: Request, body: Record<string, unknown>) {
@@ -1323,6 +1484,7 @@ function accessLevel(sql: Sql, viewer: string, product: Row) {
   const mine = sql.get("SELECT handle FROM users WHERE id = ?", viewer);
   if (mine && String(mine.handle) === String(product.creator_id)) return "full";
   if (sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, String(product.id))) return "full";
+  if (Number(product.listed ?? 1) !== 1) return "none";
   if (Number(product.allow_preview ?? 0) === 1) return "preview";
   return "none";
 }
@@ -1460,10 +1622,12 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (request.method === "GET" && url.pathname === "/api/play") return playRead(sql, request);
   if (request.method === "GET" && url.pathname === "/api/desk") return desk(sql, request);
   if (request.method === "GET" && url.pathname === "/api/avatar") return readAvatar(sql, request);
+  if (request.method === "GET" && url.pathname === "/api/cover") return readCover(sql, request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (request.method !== "POST") return fail("err.method", 405);
   const multipart = (request.headers.get("content-type") ?? "").includes("multipart/form-data");
   if (url.pathname === "/api/products" && multipart) return publishUpload(sql, request);
+  if (url.pathname === "/api/product" && multipart) return updateProduct(sql, request);
   if (url.pathname === "/api/avatar" && multipart) return uploadAvatar(sql, request);
   const body = await readJson(request);
   if (url.pathname === "/api/register") return register(sql, request, body, env, limiter);

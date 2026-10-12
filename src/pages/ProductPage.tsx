@@ -1,5 +1,5 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Avatar, Cover } from "../components/Cover";
+import { Avatar, Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { isAbsolute, playHref, playPath } from "../site";
@@ -25,12 +25,13 @@ export function ProductPage() {
   if (!product || !creator || product.creatorId !== creator.id) return <NotFound />;
   const owned = owns(product.id);
   const mine = user?.handle === creator.id;
+  if (!product.listed && !owned && !mine) return <NotFound />;
 
   const goLogin = () => navigate(`/login?next=/c/${handle}/shop/${product.id}`);
 
   return (
     <div className="page product">
-      <Cover id={product.coverKey} ratio="1 / 1" />
+      <Cover id={product.coverKey} src={coverSrc(product)} ratio="1 / 1" />
       <div className="buybox">
         <Link to={`/c/${creator.handle}`} className="person-row">
           <Avatar name={creator.name} id={creator.id} size={36} stamp={creator.avatarAt} />
@@ -41,7 +42,8 @@ export function ProductPage() {
           {product.playFormat && <span className="pill">{t("product.viaPlay")}</span>}
           {product.allowDownload && <span className="pill">{t("product.canDownload")}</span>}
           {!product.allowDownload && product.playFormat && <span className="pill">{t("product.playOnly")}</span>}
-          {product.allowPreview && <span className="pill">{t("product.preview")}</span>}
+          {product.allowPreview && product.listed && <span className="pill">{t("product.preview")}</span>}
+          {!product.listed && <span className="pill">{t("studio.offShelf")}</span>}
         </div>
         {product.tags.length > 0 && (
           <div className="tag-row">
@@ -54,14 +56,14 @@ export function ProductPage() {
         )}
         <h1>{product.title}</h1>
         <p className="price price-lg">{yuan(product.price)}</p>
-        <p>{phrase(product.description)}</p>
+        {product.description && <p>{phrase(product.description)}</p>}
         <ul className="includes">
           {product.includes.map((item) => (
             <li key={item}>{phrase(item)}</li>
           ))}
         </ul>
         <p className="fineprint">{t("product.share", { amount: yuan(creatorShare(product.price)) })}</p>
-        {product.allowPreview && product.playFormat && !owned && !mine && (
+        {product.listed && product.allowPreview && product.playFormat && !owned && !mine && (
           user ? (
             <PlayLink id={product.id} className="btn btn-line">{t("product.preview")}</PlayLink>
           ) : (

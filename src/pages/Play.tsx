@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Cover } from "../components/Cover";
+import { Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { isMessage, useI18n } from "../i18n";
 import { isAbsolute, loginHref, playPath, playSection, shopHref } from "../site";
@@ -346,7 +346,7 @@ function PlayRow({ title, items }: { title: string; items: Product[] }) {
       <div className="cards">
         {items.map((product) => (
           <Link key={`${title}-${product.id}`} to={playPath(product.id)} className="card">
-            <Cover id={product.coverKey} ratio="16 / 10" />
+            <Cover id={product.coverKey} src={coverSrc(product)} ratio="16 / 10" />
             <div className="card-body">
               <div className="meta">
                 <span className="pill">{t(formatKey(product.playFormat))}</span>

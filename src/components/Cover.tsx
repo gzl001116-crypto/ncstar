@@ -14,7 +14,20 @@ export function palette(id: string) {
   return PALETTES[hash(id) % PALETTES.length];
 }
 
-export function Cover({ id, ratio = "4 / 5", className = "" }: { id: string; ratio?: string; className?: string }) {
+export function coverSrc(product: { id: string; coverAt?: string }) {
+  if (!product.coverAt) return "";
+  return `/api/cover?id=${encodeURIComponent(product.id)}&v=${encodeURIComponent(product.coverAt)}`;
+}
+
+export function Cover({ id, ratio = "4 / 5", className = "", src = "" }: { id: string; ratio?: string; className?: string; src?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (src && !failed) {
+    return (
+      <div className={`cover ${className}`} style={{ aspectRatio: ratio }}>
+        <img src={src} alt="" onError={() => setFailed(true)} />
+      </div>
+    );
+  }
   const [ink, paper, mist, deep] = palette(id);
   const n = hash(id);
   const pattern = n % 5;

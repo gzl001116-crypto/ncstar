@@ -51,6 +51,9 @@ export type Product = {
   allowPreview: boolean;
   previewMode: "" | "content" | "progress";
   previewLimit: number;
+  previewBody: string;
+  listed: boolean;
+  coverAt: string;
 };
 
 export type Tier = {
