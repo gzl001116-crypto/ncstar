@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
@@ -7,19 +7,42 @@ import { useStore } from "../store";
 import { creatorShare, yuan } from "../utils";
 
 export function Checkout() {
-  const { t, phrase } = useI18n();
+  const { t, phrase, lang } = useI18n();
   useTitle(t("checkout.title"));
-  const { user, productById, creatorById, tierById, removeFromCart, checkoutCart, checkoutTier, activeMembership } = useStore();
+  const { user, productById, creatorById, tierById, removeFromCart, checkoutCart, checkoutTier, completeCheckout, activeMembership } = useStore();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const finished = useRef("");
+  const sessionId = params.get("session_id") ?? "";
+  const canceled = params.get("pay") === "cancel";
   const tier = tierById(params.get("tier") ?? "");
   const creator = tier ? creatorById(tier.creatorId) : undefined;
   const existing = tier ? activeMembership(tier.creatorId) : undefined;
 
+  useEffect(() => {
+    if (!sessionId || !user || finished.current === sessionId) return;
+    finished.current = sessionId;
+    setBusy(true);
+    setError("");
+    void completeCheckout(sessionId).then((result) => {
+      setBusy(false);
+      if (result.error) {
+        finished.current = "";
+        setError(result.error);
+        return;
+      }
+      const flash =
+        result.code === "toast.member" && result.name
+          ? t("checkout.flashMember", { name: phrase(result.name) })
+          : t("checkout.flashCart");
+      navigate("/library", { replace: true, state: { flash } });
+    });
+  }, [sessionId, user]);
+
   if (!user) {
-    const next = `/checkout${params.get("tier") ? `?tier=${params.get("tier")}` : ""}`;
+    const next = `/checkout${params.toString() ? `?${params.toString()}` : ""}`;
     return (
       <div className="page narrow">
         <div className="empty">
@@ -43,12 +66,17 @@ export function Checkout() {
   const pay = async () => {
     setBusy(true);
     setError("");
-    const result = tier ? await checkoutTier(tier.id) : await checkoutCart();
-    setBusy(false);
-    if (result) {
-      setError(result);
+    const result = tier ? await checkoutTier(tier.id, lang) : await checkoutCart(lang);
+    if (result.error) {
+      setBusy(false);
+      setError(result.error);
       return;
     }
+    if (result.url) {
+      window.location.assign(result.url);
+      return;
+    }
+    setBusy(false);
     navigate("/library", {
       state: { flash: tier ? t("checkout.flashMember", { name: phrase(tier.name) }) : t("checkout.flashCart") },
     });
@@ -100,6 +128,8 @@ export function Checkout() {
       <aside className="pay-card">
         <h2>{t("checkout.due", { amount: yuan(total) })}</h2>
         <p className="muted">{t("checkout.share", { amount: yuan(creatorShare(total)) })}</p>
+        {canceled && !error && <p className="banner-note">{t("checkout.canceled")}</p>}
+        {sessionId && busy && <p className="muted">{t("checkout.returning")}</p>}
         {error && <p className="error">{error}</p>}
         <button type="button" className="btn btn-dark btn-block" disabled={busy || (!tier && lines.length === 0)} onClick={pay}>
           {busy ? t("common.wait") : t("checkout.confirm")}

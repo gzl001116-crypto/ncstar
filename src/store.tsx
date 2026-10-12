@@ -34,8 +34,9 @@ type StoreValue = {
   addComment: (postId: string, text: string) => Promise<string | null>;
   addToCart: (productId: string) => Promise<void>;
   removeFromCart: (productId: string) => Promise<void>;
-  checkoutCart: () => Promise<string | null>;
-  checkoutTier: (tierId: string) => Promise<string | null>;
+  checkoutCart: (locale: string) => Promise<{ error: string | null; url?: string }>;
+  checkoutTier: (tierId: string, locale: string) => Promise<{ error: string | null; url?: string }>;
+  completeCheckout: (sessionId: string) => Promise<{ error: string | null; code?: string; name?: string }>;
   publishPost: (input: { title: string; excerpt: string; body: string; minRank: number }) => Promise<string | null>;
   publishProduct: (input: {
     title: string;
@@ -117,6 +118,8 @@ async function call(path: string, body?: unknown) {
     toast?: string;
     error?: string;
     playlistId?: string;
+    url?: string;
+    sessionId?: string;
   };
   return { response, data };
 }
@@ -232,6 +235,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return Boolean(tier && tier.rank >= post.minRank);
   };
 
+  const startCheckout = async (body: { tierId?: string; locale: string }) => {
+    try {
+      const { response, data } = await call("/api/checkout", body);
+      if (!response.ok) return { error: say(data.code, data.name, data.error) };
+      if (data.url) return { error: null, url: data.url };
+      apply(data);
+      return { error: null };
+    } catch {
+      return { error: t("err.network") };
+    }
+  };
+
   const value: StoreValue = {
     ready,
     creators,
@@ -263,8 +278,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     removeFromCart: async (productId) => {
       await mutate("/api/cart", { productId, op: "remove" });
     },
-    checkoutCart: () => mutate("/api/checkout", {}),
-    checkoutTier: (tierId) => mutate("/api/checkout", { tierId }),
+    checkoutCart: (locale) => startCheckout({ locale }),
+    checkoutTier: (tierId, locale) => startCheckout({ tierId, locale }),
+    completeCheckout: async (sessionId) => {
+      try {
+        const { response, data } = await call("/api/checkout/complete", { sessionId });
+        if (!response.ok) return { error: say(data.code, data.name, data.error) };
+        apply(data);
+        return { error: null, code: data.code, name: data.name };
+      } catch {
+        return { error: t("err.network") };
+      }
+    },
     publishPost: (input) => mutate("/api/posts", input),
     publishProduct: async (input) => {
       if (!input.file) return mutate("/api/products", input);

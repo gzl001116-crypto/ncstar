@@ -2,6 +2,7 @@ import { matchCode, type Limiter, type MailEnv } from "./codes.ts";
 import { sessionCookieHeaders } from "./hosts.ts";
 import { isPlayFormat, parsePlay } from "./play.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
+import { sessionFields, stripeKey, stripeRequest, type PayEnv, type StripeSession } from "./stripe.ts";
 
 const COOKIE = "fanstar_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -134,6 +135,17 @@ const STATEMENTS = [
     track_index INTEGER NOT NULL,
     position INTEGER NOT NULL,
     PRIMARY KEY (playlist_id, product_id, track_index)
+  )`,
+  `CREATE TABLE IF NOT EXISTS payments (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    amount REAL NOT NULL,
+    currency TEXT NOT NULL,
+    session_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL
   )`,
 ];
 
@@ -838,52 +850,171 @@ function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, am
   );
 }
 
-function checkout(sql: Sql, request: Request, body: Record<string, unknown>) {
+type PayItem = { id: string; price: number; title: string };
+type PayPayload =
+  | { kind: "membership"; tierId: string; creatorId: string; price: number; title: string }
+  | { kind: "product"; items: PayItem[] };
+
+function minorUnits(amount: number) {
+  return Math.round(amount * 100);
+}
+
+function stripeLocale(value: unknown) {
+  if (value === "ja" || value === "en") return value;
+  if (value === "zh-Hant") return "zh-TW";
+  return "zh";
+}
+
+function payAmount(payload: PayPayload) {
+  return payload.kind === "membership" ? minorUnits(payload.price) : payload.items.reduce((sum, item) => sum + minorUnits(item.price), 0);
+}
+
+function fulfillPayment(sql: Sql, viewer: string, payment: Row) {
+  const payload = JSON.parse(String(payment.payload)) as PayPayload;
+  const code = payload.kind === "membership" ? "toast.member" : "toast.library";
+  const name = payload.kind === "membership" ? payload.title : undefined;
+  if (String(payment.status) === "paid") return withState(sql, viewer, code, undefined, name);
+  if (payload.kind === "membership") {
+    const expiresAt = addDays(30);
+    sql.run("DELETE FROM memberships WHERE user_id = ? AND creator_id = ?", viewer, payload.creatorId);
+    sql.run(
+      "INSERT INTO memberships (user_id, creator_id, tier_id, expires_at, price) VALUES (?, ?, ?, ?, ?)",
+      viewer,
+      payload.creatorId,
+      payload.tierId,
+      expiresAt,
+      payload.price,
+    );
+    placeOrder(sql, viewer, "membership", payload.tierId, payload.price);
+  } else {
+    const now = new Date().toISOString();
+    for (const item of payload.items) {
+      if (!sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, item.id)) {
+        sql.run(
+          "INSERT OR REPLACE INTO purchases (user_id, product_id, purchased_at, price) VALUES (?, ?, ?, ?)",
+          viewer,
+          item.id,
+          now,
+          item.price,
+        );
+        placeOrder(sql, viewer, "product", item.id, item.price);
+      }
+      sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, item.id);
+    }
+  }
+  sql.run("UPDATE payments SET status = 'paid' WHERE id = ?", String(payment.id));
+  return withState(sql, viewer, code, undefined, name);
+}
+
+function sessionMatches(session: StripeSession, payment: Row, viewer: string) {
+  const payload = JSON.parse(String(payment.payload)) as PayPayload;
+  return (
+    session.amount_total === payAmount(payload) &&
+    (session.currency ?? "").toLowerCase() === "cny" &&
+    session.metadata.paymentId === String(payment.id) &&
+    session.metadata.userId === viewer
+  );
+}
+
+async function checkout(sql: Sql, request: Request, body: Record<string, unknown>, env: PayEnv, fetchImpl: typeof fetch) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
   if (!mine) return fail("err.loginRequired", 401);
+  if (!stripeKey(env)) return fail("err.pay.unconfigured");
   const tierId = textOf(body.tierId, 80);
+  let payload: PayPayload;
+  let cancelPath = "/checkout?pay=cancel";
   if (tierId) {
     const tier = sql.get("SELECT * FROM tiers WHERE id = ?", tierId);
     if (!tier) return fail("err.tier.missing");
     if (String(tier.creator_id) === String(mine.handle)) return fail("err.tier.self");
-    const expiresAt = addDays(30);
-    sql.run("DELETE FROM memberships WHERE user_id = ? AND creator_id = ?", viewer, String(tier.creator_id));
-    sql.run(
-      "INSERT INTO memberships (user_id, creator_id, tier_id, expires_at, price) VALUES (?, ?, ?, ?, ?)",
+    payload = {
+      kind: "membership",
+      tierId: String(tier.id),
+      creatorId: String(tier.creator_id),
+      price: Number(tier.price),
+      title: String(tier.name),
+    };
+    cancelPath = `/checkout?tier=${encodeURIComponent(String(tier.id))}&pay=cancel`;
+  } else {
+    const items = sql.all(
+      `SELECT products.* FROM cart_items JOIN products ON products.id = cart_items.product_id
+       WHERE cart_items.user_id = ?`,
       viewer,
-      String(tier.creator_id),
-      String(tier.id),
-      expiresAt,
-      Number(tier.price),
     );
-    placeOrder(sql, viewer, "membership", String(tier.id), Number(tier.price));
-    return withState(sql, viewer, "toast.member");
+    for (const item of items) {
+      if (Number(item.listed ?? 1) !== 1) sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, String(item.id));
+    }
+    const payable = items.filter((item) => String(item.creator_id) !== String(mine.handle) && Number(item.listed ?? 1) === 1);
+    if (payable.length === 0) return fail("err.cart.empty");
+    payload = {
+      kind: "product",
+      items: payable.map((item) => ({ id: String(item.id), price: Number(item.price), title: String(item.title) })),
+    };
   }
-  const items = sql.all(
-    `SELECT products.* FROM cart_items JOIN products ON products.id = cart_items.product_id
-     WHERE cart_items.user_id = ?`,
+  const serialized = JSON.stringify(payload);
+  const amount = payload.kind === "membership" ? payload.price : payload.items.reduce((sum, item) => sum + item.price, 0);
+  const existing = sql.get(
+    "SELECT * FROM payments WHERE user_id = ? AND status = 'pending' AND payload = ? AND session_id != '' ORDER BY created_at DESC LIMIT 1",
     viewer,
+    serialized,
   );
-  for (const item of items) {
-    if (Number(item.listed ?? 1) !== 1) sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, String(item.id));
+  if (existing) {
+    const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(String(existing.session_id))}`, "GET", undefined, fetchImpl);
+    if (loaded.ok && loaded.session.payment_status === "paid" && sessionMatches(loaded.session, existing, viewer)) {
+      return fulfillPayment(sql, viewer, existing);
+    }
+    if (loaded.ok && loaded.session.status === "open" && loaded.session.url) {
+      return json({ url: loaded.session.url, sessionId: loaded.session.id });
+    }
   }
-  const payable = items.filter((item) => String(item.creator_id) !== String(mine.handle) && Number(item.listed ?? 1) === 1);
-  if (payable.length === 0) return fail("err.cart.empty");
-  const now = new Date().toISOString();
-  for (const item of payable) {
-    sql.run(
-      "INSERT OR REPLACE INTO purchases (user_id, product_id, purchased_at, price) VALUES (?, ?, ?, ?)",
-      viewer,
-      String(item.id),
-      now,
-      Number(item.price),
-    );
-    placeOrder(sql, viewer, "product", String(item.id), Number(item.price));
+  const paymentId = id();
+  sql.run(
+    "INSERT INTO payments (id, user_id, kind, payload, amount, currency, session_id, status, created_at) VALUES (?, ?, ?, ?, ?, 'cny', '', 'pending', ?)",
+    paymentId,
+    viewer,
+    payload.kind,
+    serialized,
+    amount,
+    new Date().toISOString(),
+  );
+  const items = payload.kind === "membership" ? [{ name: payload.title, amount: payload.price }] : payload.items.map((item) => ({ name: item.title, amount: item.price }));
+  const created = await stripeRequest(
+    env,
+    "/v1/checkout/sessions",
+    "POST",
+    sessionFields({
+      origin: new URL(request.url).origin,
+      paymentId,
+      userId: viewer,
+      email: String(mine.email),
+      locale: stripeLocale(body.locale),
+      cancelPath,
+      items,
+    }),
+    fetchImpl,
+  );
+  if (!created.ok || !created.session.url) {
+    sql.run("DELETE FROM payments WHERE id = ?", paymentId);
+    return fail(created.ok ? "err.pay.stripe" : created.code);
   }
-  sql.run("DELETE FROM cart_items WHERE user_id = ?", viewer);
-  return withState(sql, viewer, "toast.library");
+  sql.run("UPDATE payments SET session_id = ? WHERE id = ?", created.session.id, paymentId);
+  return json({ url: created.session.url, sessionId: created.session.id });
+}
+
+async function completeCheckout(sql: Sql, request: Request, body: Record<string, unknown>, env: PayEnv, fetchImpl: typeof fetch) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const sessionId = textOf(body.sessionId, 120);
+  const payment = sessionId ? sql.get("SELECT * FROM payments WHERE session_id = ? AND user_id = ?", sessionId, viewer) : undefined;
+  if (!payment) return fail("err.pay.missing", 404);
+  if (String(payment.status) === "paid") return fulfillPayment(sql, viewer, payment);
+  const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
+  if (!loaded.ok) return fail(loaded.code);
+  if (loaded.session.payment_status !== "paid") return fail("err.pay.pending");
+  if (!sessionMatches(loaded.session, payment, viewer)) return fail("err.pay.amount");
+  return fulfillPayment(sql, viewer, payment);
 }
 
 function publishPost(sql: Sql, request: Request, body: Record<string, unknown>) {
@@ -1411,6 +1542,7 @@ async function deleteAccount(sql: Sql, request: Request, body: Record<string, un
   sql.run("DELETE FROM purchases WHERE user_id = ?", viewer);
   sql.run("DELETE FROM cart_items WHERE user_id = ?", viewer);
   sql.run("DELETE FROM orders WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM payments WHERE user_id = ?", viewer);
   sql.run("DELETE FROM comments WHERE user_id = ?", viewer);
   sql.run("DELETE FROM likes WHERE user_id = ?", viewer);
   sql.run("DELETE FROM follows WHERE user_id = ? OR creator_id = ?", viewer, handle);
@@ -1613,7 +1745,7 @@ function playWrite(sql: Sql, request: Request, body: Record<string, unknown>) {
   return withState(sql, viewer, existing ? "toast.play.unsave" : "toast.play.save");
 }
 
-export async function handleApp(request: Request, sql: Sql, env: MailEnv, limiter: Limiter): Promise<Response> {
+export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter: Limiter, stripeFetch: typeof fetch = fetch): Promise<Response> {
   ensureSchema(sql);
   const url = new URL(request.url);
   if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request)));
@@ -1638,7 +1770,8 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (url.pathname === "/api/like") return like(sql, request, body);
   if (url.pathname === "/api/comments") return comment(sql, request, body);
   if (url.pathname === "/api/cart") return cart(sql, request, body);
-  if (url.pathname === "/api/checkout") return checkout(sql, request, body);
+  if (url.pathname === "/api/checkout") return checkout(sql, request, body, env, stripeFetch);
+  if (url.pathname === "/api/checkout/complete") return completeCheckout(sql, request, body, env, stripeFetch);
   if (url.pathname === "/api/posts") return publishPost(sql, request, body);
   if (url.pathname === "/api/products") return publishProduct(sql, request, body);
   if (url.pathname === "/api/product-tags") return productTags(sql, request, body);

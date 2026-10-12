@@ -4,7 +4,40 @@ import { handleApp } from "./platform.ts";
 
 const sql = openSql(":memory:");
 const limiter = memoryLimiter();
-const env: MailEnv = { RESEND_API_KEY: "test-key", CODE_SECRET: "test-secret" };
+const env: MailEnv & { STRIPE_SECRET_KEY?: string } = { RESEND_API_KEY: "test-key", CODE_SECRET: "test-secret", STRIPE_SECRET_KEY: "sk_test_platform_check" };
+const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string }>();
+let stripePaid = true;
+let stripeAmount: number | null = null;
+
+async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const url = String(input);
+  if (init?.method === "POST") {
+    const params = new URLSearchParams(String(init.body ?? ""));
+    let amount = 0;
+    for (const [key, value] of params) {
+      if (key.endsWith("[price_data][unit_amount]")) amount += Number(value);
+    }
+    const id = `cs_test_${stripeSessions.size + 1}`;
+    stripeSessions.set(id, {
+      amount,
+      paymentId: params.get("metadata[paymentId]") ?? "",
+      userId: params.get("metadata[userId]") ?? "",
+    });
+    return Response.json({ id, url: `https://checkout.stripe.test/${id}`, payment_status: "unpaid", status: "open", amount_total: amount, currency: "cny", metadata: {} });
+  }
+  const id = url.split("/").pop() ?? "";
+  const saved = stripeSessions.get(decodeURIComponent(id));
+  if (!saved) return Response.json({ error: { code: "resource_missing" } }, { status: 404 });
+  return Response.json({
+    id: decodeURIComponent(id),
+    url: `https://checkout.stripe.test/${id}`,
+    payment_status: stripePaid ? "paid" : "unpaid",
+    status: stripePaid ? "complete" : "open",
+    amount_total: stripeAmount ?? saved.amount,
+    currency: "cny",
+    metadata: { paymentId: saved.paymentId, userId: saved.userId },
+  });
+}
 const codes = new Map<string, string>();
 
 async function ticket(email: string, fresh = false) {
@@ -45,6 +78,7 @@ function client() {
         sql,
         env,
         limiter,
+        stripeFetch,
       );
       const setCookie = response.headers.get("set-cookie");
       if (setCookie) cookie = setCookie.split(";")[0] ?? "";
@@ -62,6 +96,7 @@ function client() {
         sql,
         env,
         limiter,
+        stripeFetch,
       );
       const setCookie = response.headers.get("set-cookie");
       if (setCookie) cookie = setCookie.split(";")[0] ?? "";
@@ -126,7 +161,12 @@ if (locked.body) throw new Error("member post leaked before purchase");
 
 const added = await fan.send("/api/cart", { productId, op: "add" });
 if (added.status !== 200 || !added.data.user.cart.includes(productId)) throw new Error("cart failed");
-const bought = await fan.send("/api/checkout", {});
+async function settle(sender: { send: (path: string, body?: unknown) => Promise<{ status: number; data: any; raw: string }> }, body?: unknown) {
+  const started = await sender.send("/api/checkout", body ?? {});
+  if (started.status !== 200 || started.data.user) return started;
+  return sender.send("/api/checkout/complete", { sessionId: started.data.sessionId });
+}
+const bought = await settle(fan);
 if (bought.status !== 200 || !bought.data.user.library.some((item: { productId: string }) => item.productId === productId)) {
   throw new Error(`checkout failed ${bought.raw}`);
 }
@@ -157,7 +197,7 @@ const lockedPlay = await fan.send(`/api/play?productId=${comicId}`, undefined, "
 if (lockedPlay.status !== 403) throw new Error(`play should stay locked ${lockedPlay.status} ${lockedPlay.raw}`);
 const carted = await fan.send("/api/cart", { productId: comicId, op: "add" });
 if (carted.status !== 200) throw new Error(`second cart ${carted.raw}`);
-const boughtPlay = await fan.send("/api/checkout", {});
+const boughtPlay = await settle(fan);
 if (boughtPlay.status !== 200) throw new Error(`play checkout ${boughtPlay.raw}`);
 const openedPlay = await fan.send(`/api/play?productId=${comicId}`, undefined, "GET");
 if (openedPlay.status !== 200 || openedPlay.data.pages?.[1]?.text !== "第二页的对白，翻到这里。") {
@@ -181,7 +221,7 @@ const badVideo = await creator.send("/api/products", {
 if (badVideo.status !== 400) throw new Error(`bad video should fail ${badVideo.status}`);
 
 const tierId = bought.data.tiers.find((item: { creatorId: string }) => item.creatorId === "ashi").id as string;
-const member = await fan.send("/api/checkout", { tierId });
+const member = await settle(fan, { tierId });
 if (member.status !== 200) throw new Error(`membership failed ${member.raw}`);
 const opened = member.data.posts.find((item: { id: string }) => item.id === postId);
 if (!opened.body.includes("创作者自己写下")) throw new Error("membership did not unlock the post");
@@ -636,7 +676,7 @@ if (relisted.status !== 200 || shown?.listed !== true) throw new Error(`relist $
 const visible = await readerNow.send("/api/state", undefined, "GET");
 if (!visible.data.products?.some((item: { id: string }) => item.id === blankWork.id)) throw new Error("relisted work is missing");
 const buying = await readerNow.send("/api/cart", { productId: blankWork.id, op: "add" });
-const paidWork = await readerNow.send("/api/checkout", {});
+const paidWork = await settle(readerNow);
 const ownsEdited = paidWork.data.user?.library?.some((item: { productId: string }) => item.productId === blankWork.id);
 if (buying.status !== 200 || paidWork.status !== 200 || !ownsEdited) throw new Error(`buy edited work ${buying.status} ${paidWork.status} ${paidWork.raw}`);
 const hideOwned = new FormData();
@@ -660,6 +700,59 @@ if (ownerPlay.status !== 200 || ownerPlay.data.preview !== false || !String(owne
 const outsider = await client().send("/api/state", undefined, "GET");
 if (outsider.data.products?.some((item: { id: string }) => item.id === blankWork.id)) {
   throw new Error("guest can see an unlisted work");
+}
+
+const cardWork = await creator.send("/api/products", {
+  title: "银行卡",
+  description: "支付测试",
+  price: 4,
+  kind: "文本",
+  includes: ["短文"],
+  fileBody: "支付之后才能看到的正文。",
+});
+const cardId = cardWork.data.products?.find((item: { title: string }) => item.title === "银行卡")?.id as string;
+if (cardWork.status !== 200 || !cardId) throw new Error(`card work ${cardWork.status} ${cardWork.raw}`);
+const queuedCard = await readerNow.send("/api/cart", { productId: cardId, op: "add" });
+stripePaid = false;
+const startedPay = await readerNow.send("/api/checkout", {});
+if (queuedCard.status !== 200 || startedPay.status !== 200 || !startedPay.data.url || startedPay.data.user) {
+  throw new Error(`stripe start ${startedPay.status} ${startedPay.raw}`);
+}
+const beforePay = await readerNow.send("/api/state", undefined, "GET");
+if (beforePay.data.user?.library?.some((item: { productId: string }) => item.productId === cardId)) {
+  throw new Error("library opened before payment");
+}
+const reusedPay = await readerNow.send("/api/checkout", {});
+if (reusedPay.data.sessionId !== startedPay.data.sessionId) throw new Error(`session was not reused ${reusedPay.raw}`);
+const pendingPay = await readerNow.send("/api/checkout/complete", { sessionId: startedPay.data.sessionId });
+if (pendingPay.status !== 400 || pendingPay.data.code !== "err.pay.pending") throw new Error(`unpaid ${pendingPay.status} ${pendingPay.raw}`);
+stripePaid = true;
+stripeAmount = 1;
+const wrongAmount = await readerNow.send("/api/checkout/complete", { sessionId: startedPay.data.sessionId });
+if (wrongAmount.status !== 400 || wrongAmount.data.code !== "err.pay.amount") throw new Error(`amount ${wrongAmount.status} ${wrongAmount.raw}`);
+stripeAmount = null;
+const finishedPay = await readerNow.send("/api/checkout/complete", { sessionId: startedPay.data.sessionId });
+if (finishedPay.status !== 200 || !finishedPay.data.user?.library?.some((item: { productId: string }) => item.productId === cardId)) {
+  throw new Error(`paid ${finishedPay.status} ${finishedPay.raw}`);
+}
+const againPay = await readerNow.send("/api/checkout/complete", { sessionId: startedPay.data.sessionId });
+if (againPay.status !== 200 || againPay.data.code !== "toast.library") throw new Error(`repeat pay ${againPay.status} ${againPay.raw}`);
+const bareWork = await creator.send("/api/products", {
+  title: "未配置",
+  description: "没有支付",
+  price: 4,
+  kind: "文本",
+  includes: ["短文"],
+  fileBody: "没有配置支付时不会入库。",
+});
+const bareId = bareWork.data.products?.find((item: { title: string }) => item.title === "未配置")?.id as string;
+const bareCart = await readerNow.send("/api/cart", { productId: bareId, op: "add" });
+const savedKey = env.STRIPE_SECRET_KEY;
+delete env.STRIPE_SECRET_KEY;
+const blockedPay = await readerNow.send("/api/checkout", {});
+env.STRIPE_SECRET_KEY = savedKey;
+if (bareCart.status !== 200 || blockedPay.status !== 400 || blockedPay.data.code !== "err.pay.unconfigured") {
+  throw new Error(`unconfigured pay ${blockedPay.status} ${blockedPay.raw}`);
 }
 
 console.log("platform checks passed");
