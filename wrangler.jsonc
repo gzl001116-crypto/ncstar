@@ -1,11 +1,17 @@
 {
   "name": "ncstar",
+  "main": "worker/index.ts",
   "compatibility_date": "2026-10-12",
   "observability": {
     "enabled": true
   },
+  // RESEND_API_KEY is a Worker secret, not a committed value:
+  // npx wrangler secret put RESEND_API_KEY
+  // CODE_SECRET is optional. When it is absent, codes are signed with a key derived from RESEND_API_KEY.
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
   }
 }

@@ -4,3 +4,6 @@ dist
 *.local
 .vite
 .wrangler
+.dev.vars
+.env
+.env.*
