@@ -11,6 +11,10 @@ npm run dev
 
 浏览器打开 http://localhost:5173
 
+## Cloudflare Pages
+
+构建命令用 `npm run build`，输出目录用 `dist`。仓库里的 `.npmrc` 会在 Cloudflare 的生产环境安装里带上 Vite 和 TypeScript，否则构建会因为找不到 `vite` 或 `tsc` 失败。`public/_redirects` 让刷新子页面时仍回到站点。
+
 ## 演示账号
 
 | 身份 | 邮箱 | 密码 |
