@@ -1,7 +1,30 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useI18n } from "../i18n";
+import { isAbsolute, playPath, shopHref } from "../site";
 import { useStore } from "../store";
+
+function Jump({ to, className, children, end, nav }: { to: string; className?: string; children: ReactNode; end?: boolean; nav?: boolean }) {
+  if (isAbsolute(to)) {
+    return (
+      <a href={to} className={className}>
+        {children}
+      </a>
+    );
+  }
+  if (nav) {
+    return (
+      <NavLink to={to} end={end} className={className}>
+        {children}
+      </NavLink>
+    );
+  }
+  return (
+    <Link to={to} className={className}>
+      {children}
+    </Link>
+  );
+}
 
 export function PlayLayout() {
   const { t } = useI18n();
@@ -17,20 +40,22 @@ export function PlayLayout() {
     <div className="shell play-shell">
       <header className="topbar">
         <div className="topbar-inner">
-          <Link to="/play" className="brand">
+          <Jump to={playPath()} className="brand">
             <span className="play-mark">▶</span>
             <span>play.fanstar</span>
-          </Link>
+          </Jump>
           <nav className="nav-links">
-            <NavLink to="/play" end>
+            <Jump to={playPath()} end nav>
               {t("play.library")}
-            </NavLink>
-            <NavLink to="/explore">{t("play.shopLink")}</NavLink>
+            </Jump>
+            <Jump to={shopHref("/explore")} nav>
+              {t("play.shopLink")}
+            </Jump>
           </nav>
           <div className="nav-actions">
-            <Link to="/" className="btn btn-line btn-small">
+            <Jump to={shopHref("/")} className="btn btn-line btn-small">
               {t("play.back")}
-            </Link>
+            </Jump>
             <button
               className="menu-btn"
               type="button"
@@ -45,10 +70,12 @@ export function PlayLayout() {
         </div>
         {open && (
           <div className="mobile-panel">
-            <NavLink to="/play" end>
+            <Jump to={playPath()} end nav>
               {t("play.library")}
-            </NavLink>
-            <NavLink to="/explore">{t("play.shopLink")}</NavLink>
+            </Jump>
+            <Jump to={shopHref("/explore")} nav>
+              {t("play.shopLink")}
+            </Jump>
           </div>
         )}
       </header>
@@ -56,9 +83,9 @@ export function PlayLayout() {
         <Outlet />
       </main>
       <footer className="play-legal">
-        <Link to="/terms">{t("footer.terms")}</Link>
-        <Link to="/privacy">{t("footer.privacy")}</Link>
-        <Link to="/tokushoho">{t("footer.tokushoho")}</Link>
+        <Jump to={shopHref("/terms")}>{t("footer.terms")}</Jump>
+        <Jump to={shopHref("/privacy")}>{t("footer.privacy")}</Jump>
+        <Jump to={shopHref("/tokushoho")}>{t("footer.tokushoho")}</Jump>
       </footer>
       <div className="toasts" aria-live="polite">
         {toasts.map((item) => (

@@ -1,5 +1,6 @@
 import { Route, Routes, useLocation } from "react-router-dom";
-import { useEffect } from "react";
+import { useEffect, useLayoutEffect, type ReactNode } from "react";
+import { clientRedirect, isPlayHost, isShopHost } from "./site";
 import { Layout } from "./components/Layout";
 import { About } from "./pages/About";
 import { Auth } from "./pages/Auth";
@@ -26,16 +27,36 @@ function ScrollToTop() {
   return null;
 }
 
+function HostGate({ children }: { children: ReactNode }) {
+  const location = useLocation();
+  const away = clientRedirect(`${window.location.origin}${location.pathname}${location.search}${location.hash}`);
+  useLayoutEffect(() => {
+    if (away) window.location.replace(away);
+  }, [away]);
+  if (away) return null;
+  return children;
+}
+
 export function App() {
+  const play = isPlayHost();
+  const shop = isShopHost();
   return (
-    <>
+    <HostGate>
       <ScrollToTop />
       <Routes>
-        <Route path="play" element={<PlayLayout />}>
-          <Route index element={<PlayHome />} />
-          <Route path=":productId" element={<PlayViewer />} />
-        </Route>
-        <Route element={<Layout />}>
+        {play && (
+          <Route element={<PlayLayout />}>
+            <Route index element={<PlayHome />} />
+            <Route path=":productId" element={<PlayViewer />} />
+          </Route>
+        )}
+        {!play && !shop && (
+          <Route path="play" element={<PlayLayout />}>
+            <Route index element={<PlayHome />} />
+            <Route path=":productId" element={<PlayViewer />} />
+          </Route>
+        )}
+        {!play && <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="explore" element={<Explore />} />
           <Route path="c/:handle" element={<CreatorPage />} />
@@ -56,8 +77,8 @@ export function App() {
           <Route path="privacy" element={<Privacy />} />
           <Route path="tokushoho" element={<Tokushoho />} />
           <Route path="*" element={<NotFound />} />
-        </Route>
+        </Route>}
       </Routes>
-    </>
+    </HostGate>
   );
 }

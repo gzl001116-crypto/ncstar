@@ -1,4 +1,5 @@
 import { matchCode, type Limiter, type MailEnv } from "./codes.ts";
+import { sessionCookieHeaders } from "./hosts.ts";
 import { isPlayFormat, parsePlay } from "./play.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
 
@@ -139,12 +140,13 @@ function ensureSchema(sql: Sql) {
   }
 }
 
-function json(body: unknown, status = 200, cookie?: string) {
+function json(body: unknown, status = 200, cookies?: string | string[]) {
   const response = new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
-  if (cookie) response.headers.set("set-cookie", cookie);
+  const list = !cookies ? [] : Array.isArray(cookies) ? cookies : [cookies];
+  for (const cookie of list) response.headers.append("set-cookie", cookie);
   return response;
 }
 
@@ -225,8 +227,7 @@ function cookieToken(request: Request) {
 }
 
 function sessionCookie(request: Request, token: string, maxAge: number) {
-  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
-  return `${COOKIE}=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+  return sessionCookieHeaders(new URL(request.url), token, maxAge);
 }
 
 function id() {
@@ -421,7 +422,7 @@ function snapshot(sql: Sql, viewer: string) {
   return { creators, posts, products, tiers, comments, user };
 }
 
-function withState(sql: Sql, viewer: string, code: string, cookie?: string, name?: string) {
+function withState(sql: Sql, viewer: string, code: string, cookie?: string | string[], name?: string) {
   return json({ ...snapshot(sql, viewer), code, ...(name ? { name } : {}) }, 200, cookie);
 }
 

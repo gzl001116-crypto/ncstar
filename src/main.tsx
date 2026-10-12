@@ -6,10 +6,6 @@ import { I18nProvider } from "./i18n";
 import { StoreProvider } from "./store";
 import "./styles.css";
 
-if (location.hostname.startsWith("play.") && (location.pathname === "/" || location.pathname === "")) {
-  history.replaceState(null, "", `/play${location.search}`);
-}
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <BrowserRouter>

@@ -1,4 +1,5 @@
 import { cacheLimiter, handleSend, handleVerify, json, type MailEnv } from "./codes.ts";
+import { playRedirect } from "./hosts.ts";
 
 export { FanstarStore } from "./do.ts";
 
@@ -15,6 +16,8 @@ const limiter = cacheLimiter();
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    const target = playRedirect(url);
+    if (target) return Response.redirect(target, 302);
     if (url.pathname === "/api/send-code" || url.pathname === "/api/verify-code") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204 });
       if (request.method !== "POST") return json({ code: "err.method" }, 405);

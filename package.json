@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "check": "node --experimental-strip-types worker/self-check.ts && node --experimental-strip-types worker/platform-check.ts"
+    "check": "node --experimental-strip-types worker/self-check.ts && node --experimental-strip-types worker/platform-check.ts && node --experimental-strip-types worker/hosts-check.ts"
   },
   "dependencies": {
     "react": "^18.3.1",

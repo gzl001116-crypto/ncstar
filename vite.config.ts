@@ -47,7 +47,9 @@ function api() {
           if (req.headers.cookie) headers.set("cookie", req.headers.cookie);
           if (req.headers["content-type"]) headers.set("content-type", String(req.headers["content-type"]));
           headers.set("cf-connecting-ip", req.socket.remoteAddress ?? "local");
-          const request = new Request(`http://127.0.0.1${req.url}`, {
+          const authority = String(req.headers[":authority"] || req.headers.host || "127.0.0.1");
+          const encrypted = Boolean((req.socket as { encrypted?: boolean } | undefined)?.encrypted);
+          const request = new Request(`${encrypted ? "https" : "http"}://${authority}${req.url}`, {
             method: req.method,
             headers,
             body: req.method === "GET" || req.method === "HEAD" ? undefined : raw,
@@ -61,8 +63,12 @@ function api() {
           res.statusCode = response.status;
           const type = response.headers.get("content-type");
           if (type) res.setHeader("content-type", type);
-          const cookie = response.headers.get("set-cookie");
-          if (cookie) res.setHeader("set-cookie", cookie);
+          const cookies = response.headers.getSetCookie?.() ?? [];
+          if (cookies.length > 0) res.setHeader("set-cookie", cookies);
+          else {
+            const cookie = response.headers.get("set-cookie");
+            if (cookie) res.setHeader("set-cookie", cookie);
+          }
           res.end(Buffer.from(await response.arrayBuffer()));
         })().catch(next);
       });
@@ -75,5 +81,6 @@ export default defineConfig({
   server: {
     host: "0.0.0.0",
     port: 5173,
+    allowedHosts: [".fanstar.dev", "localhost"],
   },
 });

@@ -20,6 +20,7 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*"]
+    // Every request hits the worker first so /play can redirect to play.fanstar.dev.
+    "run_worker_first": true
   }
 }

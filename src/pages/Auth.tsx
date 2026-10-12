@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTitle } from "../hooks";
 import { isMessage, useI18n } from "../i18n";
+import { safeNext } from "../site";
 import { useStore } from "../store";
 
 export function Auth({ mode }: { mode: "login" | "register" }) {
@@ -33,8 +34,13 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
   }, [cooldown]);
 
   const go = () => {
-    if (next && next.startsWith("/") && !next.startsWith("//")) navigate(next);
-    else navigate(mode === "register" && form.isCreator ? "/studio" : "/");
+    const dest = safeNext(next);
+    if (!dest) {
+      navigate(mode === "register" && form.isCreator ? "/studio" : "/");
+      return;
+    }
+    if (dest.startsWith("/")) navigate(dest);
+    else window.location.assign(dest);
   };
 
   const sendCode = async () => {

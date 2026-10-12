@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { isMessage, useI18n } from "../i18n";
+import { isAbsolute, loginHref, playPath, shopHref } from "../site";
 import { useStore } from "../store";
 import type { Product } from "../types";
 import { saveDownload } from "../utils";
@@ -69,9 +70,15 @@ export function PlayHome() {
           <p className="kicker">play.fanstar</p>
           <h1>{t("play.loginH")}</h1>
           <p>{t("play.loginP")}</p>
-          <Link to="/login?next=/play" className="btn btn-dark">
-            {t("login")}
-          </Link>
+          {isAbsolute(loginHref()) ? (
+            <a href={loginHref()} className="btn btn-dark">
+              {t("login")}
+            </a>
+          ) : (
+            <Link to={loginHref()} className="btn btn-dark">
+              {t("login")}
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -110,7 +117,15 @@ export function PlayHome() {
       {owned.length === 0 ? (
         <div className="empty">
           <p>{t("play.empty")}</p>
-          <button type="button" className="btn btn-dark" onClick={() => navigate("/explore?kind=products")}>
+          <button
+            type="button"
+            className="btn btn-dark"
+            onClick={() => {
+              const href = shopHref("/explore?kind=products");
+              if (isAbsolute(href)) window.location.assign(href);
+              else navigate(href);
+            }}
+          >
             {t("play.shopLink")}
           </button>
         </div>
@@ -137,7 +152,7 @@ function PlayRow({ title, items }: { title: string; items: Product[] }) {
       </div>
       <div className="cards">
         {items.map((product) => (
-          <Link key={`${title}-${product.id}`} to={`/play/${product.id}`} className="card">
+          <Link key={`${title}-${product.id}`} to={playPath(product.id)} className="card">
             <Cover id={product.coverKey} ratio="16 / 10" />
             <div className="card-body">
               <div className="meta">
@@ -167,7 +182,9 @@ export function PlayViewer() {
   useEffect(() => {
     if (!ready) return;
     if (!userRef.current) {
-      navigate(`/login?next=/play/${productId}`, { replace: true });
+      const href = loginHref();
+      if (isAbsolute(href)) window.location.replace(href);
+      else navigate(href, { replace: true });
       return;
     }
     let live = true;
@@ -201,7 +218,7 @@ export function PlayViewer() {
       <div className="page narrow">
         <div className="empty">
           <p>{error || t("err.play.missing")}</p>
-          <Link to="/play" className="btn btn-dark">
+          <Link to={playPath()} className="btn btn-dark">
             {t("play.library")}
           </Link>
         </div>
@@ -223,7 +240,7 @@ export function PlayViewer() {
   return (
     <div className="page play-view">
       <div className="play-bar">
-        <Link to="/play" className="back">
+        <Link to={playPath()} className="back">
           ← play.fanstar
         </Link>
         <div>
