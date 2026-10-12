@@ -17,6 +17,11 @@ export function creatorShare(amount: number) {
   return Math.round(amount * (1 - PLATFORM_FEE) * 100) / 100;
 }
 
+export function utcStamp(date: Date) {
+  const part = (value: number) => String(value).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${part(date.getUTCMonth() + 1)}-${part(date.getUTCDate())} ${part(date.getUTCHours())}:${part(date.getUTCMinutes())}:${part(date.getUTCSeconds())}`;
+}
+
 export function formatDate(iso: string) {
   const date = new Date(iso);
   const month = `${date.getMonth() + 1}`.padStart(2, "0");

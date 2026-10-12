@@ -66,7 +66,9 @@ type StoreValue = {
   changePassword: (input: { email?: string; code: string; token: string; expiresAt: number; password: string }) => Promise<string | null>;
   updateProfile: (input: { name: string; bio: string; location?: string; category?: Category; tags?: string }) => Promise<string | null>;
   updateTier: (input: { id: string; name: string; price: number; blurb: string; perks: string[] }) => Promise<string | null>;
-  openStudio: (input?: { category: string; location: string; bio: string }) => Promise<string | null>;
+  openStudio: (input: { handle: string; category: string; location: string; bio: string }) => Promise<string | null>;
+  checkoutProduct: (productId: string, locale: string) => Promise<{ error: string | null; url?: string }>;
+  payoutLink: (country: string) => Promise<{ error: string | null; url?: string }>;
   uploadAvatar: (file: File) => Promise<string | null>;
   deleteAccount: (password: string) => Promise<string | null>;
   updateProductTags: (productId: string, tags: string) => Promise<string | null>;
@@ -204,6 +206,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         gross: data.gross ?? 0,
         fee: data.fee ?? 0,
         net: data.net ?? 0,
+        payoutReady: data.payoutReady ?? false,
+        pending: data.pending ?? 0,
+        nextPayout: data.nextPayout ?? "",
       });
       return null;
     } catch {
@@ -236,7 +241,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return Boolean(tier && tier.rank >= post.minRank);
   };
 
-  const startCheckout = async (body: { tierId?: string; locale: string }) => {
+  const startCheckout = async (body: { tierId?: string; productId?: string; locale: string }) => {
     try {
       const { response, data } = await call("/api/checkout", body);
       if (!response.ok) return { error: say(data.code, data.name, data.error) };
@@ -281,6 +286,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     checkoutCart: (locale) => startCheckout({ locale }),
     checkoutTier: (tierId, locale) => startCheckout({ tierId, locale }),
+    checkoutProduct: (productId, locale) => startCheckout({ productId, locale }),
+    payoutLink: async (country) => {
+      try {
+        const { response, data } = await call("/api/payout/link", { country });
+        if (!response.ok) return { error: say(data.code, data.name, data.error) };
+        return { error: null, url: data.url };
+      } catch {
+        return { error: t("err.network") };
+      }
+    },
     completeCheckout: async (sessionId) => {
       try {
         const { response, data } = await call("/api/checkout/complete", { sessionId });

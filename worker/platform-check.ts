@@ -12,11 +12,55 @@ const env: MailEnv & { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: strin
 };
 const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string }>();
 const stripeEvents = new Map<string, { id: string; type: string; data: { object: { id: string } } }>();
+const transfers: { id: string; amount: number; currency: string; destination: string; key: string }[] = [];
 let stripePaid = true;
 let stripeAmount: number | null = null;
+let connectReady = false;
+
+function headerValue(headers: HeadersInit | undefined, name: string) {
+  if (!headers) return "";
+  if (headers instanceof Headers) return headers.get(name) ?? "";
+  if (Array.isArray(headers)) {
+    const found = headers.find(([key]) => key.toLowerCase() === name.toLowerCase());
+    return found ? String(found[1]) : "";
+  }
+  const record = headers as Record<string, string>;
+  const key = Object.keys(record).find((item) => item.toLowerCase() === name.toLowerCase());
+  return key ? String(record[key]) : "";
+}
 
 async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
+  const method = (init?.method ?? "GET").toUpperCase();
+  if (url.includes("/v2/") && headerValue(init?.headers, "Stripe-Version") !== "2026-09-30.preview") {
+    throw new Error("stripe version missing");
+  }
+  if (method === "POST" && url.includes("/v2/core/accounts") && !url.includes("/v2/core/account_links")) {
+    return Response.json({ id: "acct_creator_test" });
+  }
+  if (method === "POST" && url.includes("/v2/core/account_links")) {
+    return Response.json({ url: "https://connect.stripe.test/onboard" });
+  }
+  if (method === "GET" && url.includes("/v2/core/accounts/")) {
+    return Response.json({
+      id: "acct_creator_test",
+      configuration: {
+        recipient: { capabilities: { stripe_balance: { stripe_transfers: { status: connectReady ? "active" : "pending" } } } },
+      },
+    });
+  }
+  if (method === "POST" && url.includes("/v1/transfers")) {
+    const body = JSON.parse(String(init?.body ?? "{}")) as { amount?: number; currency?: string; destination?: string };
+    const id = `tr_${transfers.length + 1}`;
+    transfers.push({
+      id,
+      amount: Number(body.amount),
+      currency: String(body.currency),
+      destination: String(body.destination),
+      key: headerValue(init?.headers, "Idempotency-Key"),
+    });
+    return Response.json({ id });
+  }
   if (init?.method === "POST") {
     const params = new URLSearchParams(String(init.body ?? ""));
     if (url.includes("/v1/checkout/sessions") && params.get("payment_method_options[wechat_pay][client]") !== "web") {
@@ -79,7 +123,7 @@ async function ticket(email: string, fresh = false) {
 function client() {
   let cookie = "";
   return {
-    async send(path: string, body?: unknown, method = "POST") {
+    async send(path: string, body?: unknown, method = "POST", extra: Record<string, string> = {}) {
       const response = await handleApp(
         new Request(`http://127.0.0.1${path}`, {
           method,
@@ -87,6 +131,7 @@ function client() {
             "content-type": "application/json",
             cookie,
             "cf-connecting-ip": "198.51.100.10",
+            ...extra,
           },
           body: method === "GET" ? undefined : JSON.stringify(body ?? {}),
         }),
@@ -170,7 +215,13 @@ const fanUser = await fan.send("/api/register", {
   isCreator: false,
   ...fanCode,
 });
-if (fanUser.status !== 200) throw new Error(`fan register failed ${fanUser.raw}`);
+const fanHandle = String(fanUser.data.user?.handle ?? "");
+if (fanUser.status !== 200 || fanHandle === "reader" || !/^u[a-f0-9]{12}$/.test(fanHandle)) {
+  throw new Error(`fan register failed ${fanUser.raw}`);
+}
+if (fanUser.data.creators?.some((item: { handle: string }) => item.handle === "reader")) {
+  throw new Error("reader handle became a creator page");
+}
 const locked = fanUser.data.posts.find((item: { id: string }) => item.id === postId);
 if (locked.body) throw new Error("member post leaked before purchase");
 
@@ -354,7 +405,9 @@ const shortApply = await gone.send("/api/studio", { category: "写作", location
 if (shortApply.status !== 400 || shortApply.data.code !== "err.apply") throw new Error(`short apply ${shortApply.status} ${shortApply.raw}`);
 const badCategory = await gone.send("/api/studio", { category: "其他", location: "京都", bio: "我想发布摄影作品和短文。" });
 if (badCategory.status !== 400 || badCategory.data.code !== "err.category") throw new Error(`bad category ${badCategory.status} ${badCategory.raw}`);
-const applied = await gone.send("/api/studio", { category: "摄影", location: "京都", bio: "我想发布摄影作品和短文。" });
+const missingHandle = await gone.send("/api/studio", { category: "摄影", location: "京都", bio: "我想发布摄影作品和短文。" });
+if (missingHandle.status !== 400 || missingHandle.data.code !== "err.handle") throw new Error(`missing handle ${missingHandle.status} ${missingHandle.raw}`);
+const applied = await gone.send("/api/studio", { handle: "goneuser", category: "摄影", location: "京都", bio: "我想发布摄影作品和短文。" });
 const appliedPage = applied.data.creators?.find((item: { handle: string }) => item.handle === "goneuser");
 if (applied.status !== 200 || !applied.data.user?.isCreator || appliedPage?.category !== "摄影" || appliedPage?.location !== "京都") {
   throw new Error(`apply ${applied.status} ${applied.raw}`);
@@ -534,7 +587,7 @@ const missing = await client().send("/api/password", { email: "nobody@example.co
 if (missing.status !== 401 || missing.data.code !== "err.login") throw new Error(`unknown email reset ${missing.status} ${missing.raw}`);
 const fanTicket = await ticket("fan@example.com", true);
 const reset = await client().send("/api/password", { email: "fan@example.com", ...fanTicket, password: "secret34" });
-if (reset.status !== 200 || reset.data.user?.handle !== "reader") throw new Error(`reset password ${reset.status} ${reset.raw}`);
+if (reset.status !== 200 || reset.data.user?.handle !== fanHandle) throw new Error(`reset password ${reset.status} ${reset.raw}`);
 const fanOld = await fan.send("/api/state", undefined, "GET");
 if (fanOld.status !== 200 || fanOld.data.user) throw new Error("old fan session should be gone");
 const fanNew = await client().send("/api/login", { email: "fan@example.com", password: "secret34" });
@@ -960,6 +1013,94 @@ if (
   failAgain.data.sessionId === failStart.data.sessionId
 ) {
   throw new Error(`async pay ${asyncEarly.status} ${asyncDone.status} ${forged.status} ${failHook.status} ${failAgain.raw}`);
+}
+
+stripePaid = true;
+const directWork = await creator.send("/api/products", {
+  title: "卡片直购",
+  description: "不经过购物袋",
+  price: 9,
+  kind: "文本",
+  includes: ["直购.txt"],
+  fileBody: "卡片上买下的句子。",
+});
+const directId = directWork.data.products?.find((item: { title: string }) => item.title === "卡片直购")?.id as string;
+const selfBuy = await creator.send("/api/checkout", { productId: directId });
+const directPaid = await settle(readerNow, { productId: directId });
+const directLibrary = directPaid.data.user?.library?.some((item: { productId: string }) => item.productId === directId);
+if (directWork.status !== 200 || !directId || selfBuy.status !== 400 || selfBuy.data.code !== "err.product.self" || directPaid.status !== 200 || !directLibrary) {
+  throw new Error(`direct buy ${directWork.status} ${selfBuy.status} ${selfBuy.raw} ${directPaid.status} ${directPaid.raw}`);
+}
+
+const bare = client();
+const bareCode = await ticket("bare@example.com");
+const noHandle = await bare.send("/api/register", {
+  name: "无名",
+  email: "bare@example.com",
+  password: "secret12",
+  isCreator: true,
+  ...bareCode,
+});
+if (noHandle.status !== 400 || noHandle.data.code !== "err.handle") throw new Error(`creator without handle ${noHandle.status} ${noHandle.raw}`);
+const sneak = client();
+const sneakCode = await ticket("sneak@example.com");
+const sneaky = await sneak.send("/api/register", {
+  name: "偷偷",
+  email: "sneak@example.com",
+  password: "secret12",
+  handle: "sneaky",
+  isCreator: false,
+  ...sneakCode,
+});
+const sneakHandle = String(sneaky.data.user?.handle ?? "");
+if (sneaky.status !== 200 || sneakHandle === "sneaky" || !/^u[a-f0-9]{12}$/.test(sneakHandle) || sneaky.data.creators?.some((item: { handle: string }) => item.handle === "sneaky")) {
+  throw new Error(`ignored handle ${sneaky.status} ${sneaky.raw}`);
+}
+
+const readerPayout = await readerNow.send("/api/payout/link", { country: "JP" });
+const badCountry = await creator.send("/api/payout/link", { country: "CN" });
+const linked = await creator.send("/api/payout/link", { country: "gb" });
+const deskPending = await creator.send("/api/desk", undefined, "GET");
+const wednesday = await creator.send("/api/payout/run", { now: "2026-10-14T00:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
+const fridayEarly = await creator.send("/api/payout/run", { now: "2026-10-16T00:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
+const beforeReady = transfers.length;
+connectReady = true;
+const deskReady = await creator.send("/api/desk", undefined, "GET");
+const fridayHour = await creator.send("/api/payout/run", { now: "2026-10-16T01:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
+const openRun = await creator.send("/api/payout/run", { now: "2026-10-16T00:00:00.000Z" });
+const friday = await creator.send("/api/payout/run", { now: "2026-10-16T00:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
+const fridayAgain = await creator.send("/api/payout/run", { now: "2026-10-16T00:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
+const deskAfter = await creator.send("/api/desk", undefined, "GET");
+const nextPayout = new Date(String(deskReady.data.nextPayout ?? ""));
+if (
+  readerPayout.status !== 400 ||
+  readerPayout.data.code !== "err.studio" ||
+  badCountry.status !== 400 ||
+  badCountry.data.code !== "err.payout.country" ||
+  linked.status !== 200 ||
+  linked.data.url !== "https://connect.stripe.test/onboard" ||
+  deskPending.data.payoutReady !== false ||
+  !(deskPending.data.pending > 0) ||
+  wednesday.data.transferred !== 0 ||
+  fridayEarly.data.transferred !== 0 ||
+  beforeReady !== 0 ||
+  deskReady.data.payoutReady !== true ||
+  fridayHour.data.transferred !== 0 ||
+  openRun.status !== 404 ||
+  friday.status !== 200 ||
+  friday.data.transferred !== 1 ||
+  transfers.length !== 1 ||
+  transfers[0]?.destination !== "acct_creator_test" ||
+  transfers[0]?.currency !== "cny" ||
+  transfers[0]?.key !== "payout-ashi-cny-2026-10-16" ||
+  !(transfers[0]?.amount > 0) ||
+  fridayAgain.data.transferred !== 0 ||
+  transfers.length !== 1 ||
+  deskAfter.data.pending !== 0 ||
+  nextPayout.getUTCDay() !== 5 ||
+  nextPayout.getUTCHours() !== 0
+) {
+  throw new Error(`payout ${readerPayout.raw} ${badCountry.raw} ${linked.raw} ${JSON.stringify(deskPending.data)} ${JSON.stringify(friday.data)} ${JSON.stringify(transfers)} ${deskAfter.raw}`);
 }
 
 console.log("platform checks passed");

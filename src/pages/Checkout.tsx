@@ -9,16 +9,36 @@ import { creatorShare, yuan } from "../utils";
 export function Checkout() {
   const { t, phrase, lang } = useI18n();
   useTitle(t("checkout.title"));
-  const { user, productById, creatorById, tierById, removeFromCart, checkoutCart, checkoutTier, completeCheckout, activeMembership } = useStore();
+  const { user, productById, creatorById, tierById, removeFromCart, checkoutCart, checkoutTier, checkoutProduct, completeCheckout, activeMembership } = useStore();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const directId = params.get("product") ?? "";
   const sessionId = params.get("session_id") ?? "";
   const canceled = params.get("pay") === "cancel";
   const tier = tierById(params.get("tier") ?? "");
   const creator = tier ? creatorById(tier.creatorId) : undefined;
   const existing = tier ? activeMembership(tier.creatorId) : undefined;
+
+  useEffect(() => {
+    if (!directId || !user || sessionId) return;
+    let stopped = false;
+    setBusy(true);
+    setError("");
+    void checkoutProduct(directId, lang).then((result) => {
+      if (stopped) return;
+      if (result.url) {
+        window.location.assign(result.url);
+        return;
+      }
+      setBusy(false);
+      if (result.error) setError(result.error);
+    });
+    return () => {
+      stopped = true;
+    };
+  }, [directId, user]);
 
   useEffect(() => {
     if (!sessionId || !user) return;
@@ -66,7 +86,10 @@ export function Checkout() {
     );
   }
 
-  const lines = user.cart
+  const direct = directId ? productById(directId) : undefined;
+  const lines = direct
+    ? [direct]
+    : user.cart
     .map((id) => productById(id))
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
     .filter((item) => item.creatorId !== user.handle);
@@ -76,7 +99,7 @@ export function Checkout() {
   const pay = async () => {
     setBusy(true);
     setError("");
-    const result = tier ? await checkoutTier(tier.id, lang) : await checkoutCart(lang);
+    const result = tier ? await checkoutTier(tier.id, lang) : direct ? await checkoutProduct(direct.id, lang) : await checkoutCart(lang);
     if (result.error) {
       setBusy(false);
       setError(result.error);

@@ -116,21 +116,10 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
         <h1>{mode === "login" ? t("auth.loginH") : t("auth.registerH")}</h1>
         <p className="muted">{mode === "register" ? t("auth.registerLead") : t("auth.loginLead")}</p>
         {mode === "register" && (
-          <>
-            <label>
-              {t("auth.name")}
-              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
-            </label>
-            <label>
-              {t("auth.handle")}
-              <input
-                value={form.handle}
-                placeholder={t("auth.handlePh")}
-                onChange={(event) => setForm({ ...form, handle: event.target.value })}
-                required
-              />
-            </label>
-          </>
+          <label>
+            {t("auth.name")}
+            <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
+          </label>
         )}
         <label>
           {t("auth.email")}
@@ -181,9 +170,21 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
             <input
               type="checkbox"
               checked={form.isCreator}
-              onChange={(event) => setForm({ ...form, isCreator: event.target.checked })}
+              onChange={(event) => setForm({ ...form, isCreator: event.target.checked, handle: event.target.checked ? form.handle : "" })}
             />
             {t("auth.creatorCheck")}
+          </label>
+        )}
+        {mode === "register" && form.isCreator && (
+          <label>
+            {t("auth.handle")}
+            <input
+              value={form.handle}
+              placeholder={t("auth.handlePh")}
+              onChange={(event) => setForm({ ...form, handle: event.target.value })}
+              required
+            />
+            <span className="muted">{t("auth.handleLead")}</span>
           </label>
         )}
         {error && <p className="error">{error}</p>}

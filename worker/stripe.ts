@@ -85,6 +85,42 @@ function bodyOf(fields: Record<string, string>) {
     .join("&");
 }
 
+export async function stripeSend(
+  env: PayEnv,
+  path: string,
+  method: "GET" | "POST",
+  jsonBody: Record<string, unknown> | undefined,
+  fetchImpl: typeof fetch,
+  headers: Record<string, string> = {},
+): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; code: string }> {
+  if (!stripeKey(env)) return { ok: false, code: "err.pay.unconfigured" };
+  let response: Response;
+  try {
+    response = await fetchImpl(`https://api.stripe.com${path}`, {
+      method,
+      headers: {
+        Authorization: `Bearer ${stripeKey(env)}`,
+        ...(jsonBody ? { "content-type": "application/json" } : {}),
+        ...(path.startsWith("/v2/") ? { "Stripe-Version": "2026-09-30.preview" } : {}),
+        ...headers,
+      },
+      body: jsonBody ? JSON.stringify(jsonBody) : undefined,
+    });
+  } catch {
+    return { ok: false, code: "err.pay.stripe" };
+  }
+  const data = (await response.json().catch(() => ({}))) as Record<string, unknown> & { error?: { code?: string } };
+  if (!response.ok) {
+    const stripeCode = data.error?.code ?? "";
+    if (stripeCode === "amount_too_small") return { ok: false, code: "err.pay.small" };
+    if (stripeCode === "non_connect_platform_accounts_v2_access_blocked" || stripeCode.includes("liability_unacknowledged")) {
+      return { ok: false, code: "err.payout.platform" };
+    }
+    return { ok: false, code: "err.pay.stripe" };
+  }
+  return { ok: true, data };
+}
+
 export async function stripeGet(
   env: PayEnv,
   path: string,

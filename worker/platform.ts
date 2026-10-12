@@ -2,7 +2,7 @@ import { matchCode, type Limiter, type MailEnv } from "./codes.ts";
 import { sessionCookieHeaders } from "./hosts.ts";
 import { isPlayFormat, parsePlay } from "./play.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
-import { sessionFields, signatureMatches, stripeGet, stripeKey, stripeRequest, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
+import { sessionFields, signatureMatches, stripeGet, stripeKey, stripeRequest, stripeSend, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
 
 const COOKIE = "fanstar_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -171,6 +171,11 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar_type TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar_at TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN stripe_account_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN payout_ready INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE orders ADD COLUMN creator_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'cny'",
+    "ALTER TABLE orders ADD COLUMN transfer_id TEXT NOT NULL DEFAULT ''",
   ]) {
     try {
       sql.exec(statement);
@@ -427,6 +432,23 @@ function handleOf(value: unknown) {
   if (typeof value !== "string") return "";
   const handle = value.trim().toLowerCase();
   return /^[a-z0-9_]{3,16}$/.test(handle) ? handle : "";
+}
+
+function handleTaken(sql: Sql, handle: string, exceptUserId = "") {
+  const user = sql.get("SELECT id FROM users WHERE handle = ?", handle);
+  if (user && String(user.id) !== exceptUserId) return true;
+  const creator = sql.get("SELECT id FROM creators WHERE id = ?", handle);
+  if (!creator) return false;
+  const owner = exceptUserId ? sql.get("SELECT handle FROM users WHERE id = ?", exceptUserId) : undefined;
+  return !owner || String(owner.handle) !== handle;
+}
+
+function privateHandle(sql: Sql) {
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const handle = `u${token().slice(0, 12)}`;
+    if (!handleTaken(sql, handle)) return handle;
+  }
+  return "";
 }
 
 function textOf(value: unknown, max: number) {
@@ -693,7 +715,8 @@ async function register(sql: Sql, request: Request, body: Record<string, unknown
   const name = textOf(body.name, 40);
   const email = emailOf(body.email);
   const password = typeof body.password === "string" ? body.password : "";
-  const handle = handleOf(body.handle);
+  const wantsCreator = body.isCreator === true;
+  const handle = wantsCreator ? handleOf(body.handle) : privateHandle(sql);
   const code = typeof body.code === "string" ? body.code.trim() : "";
   const ticket = typeof body.token === "string" ? body.token : "";
   const expiresAt = typeof body.expiresAt === "number" ? body.expiresAt : Number(body.expiresAt);
@@ -710,9 +733,7 @@ async function register(sql: Sql, request: Request, body: Record<string, unknown
   const codeError = await matchCode(env, email, code, ticket, expiresAt);
   if (codeError) return fail(codeError, codeError === "err.mail.unconfigured" ? 503 : 400);
   if (sql.get("SELECT id FROM users WHERE email = ?", email)) return fail("err.email.taken");
-  if (sql.get("SELECT id FROM users WHERE handle = ?", handle) || sql.get("SELECT id FROM creators WHERE handle = ?", handle)) {
-    return fail("err.handle.taken");
-  }
+  if (handleTaken(sql, handle)) return fail("err.handle.taken");
   const user = id();
   const passwordSalt = salt();
   const passwordHash = await hashPassword(password, passwordSalt);
@@ -728,7 +749,7 @@ async function register(sql: Sql, request: Request, body: Record<string, unknown
     bio,
     new Date().toISOString(),
   );
-  if (body.isCreator === true) openCreator(sql, { id: user, handle, name, bio } as Row);
+  if (wantsCreator) openCreator(sql, { id: user, handle, name, bio } as Row);
   const session = token();
   sql.run("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)", session, user, Date.now() + SESSION_MS);
   return withState(sql, user, body.isCreator === true ? "toast.creatorReady" : "toast.accountReady", sessionCookie(request, session, SESSION_MS / 1000));
@@ -848,9 +869,9 @@ function cart(sql: Sql, request: Request, body: Record<string, unknown>) {
   return withState(sql, viewer, "toast.cart.add");
 }
 
-function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number) {
+function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number, creatorId: string) {
   sql.run(
-    "INSERT INTO orders (id, user_id, kind, target_id, amount, fee, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO orders (id, user_id, kind, target_id, amount, fee, created_at, creator_id, currency, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'cny', '')",
     id(),
     viewer,
     kind,
@@ -858,10 +879,11 @@ function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, am
     amount,
     feeOf(amount),
     new Date().toISOString(),
+    creatorId,
   );
 }
 
-type PayItem = { id: string; price: number; title: string };
+type PayItem = { id: string; price: number; title: string; creatorId: string };
 type PayPayload =
   | { kind: "membership"; tierId: string; creatorId: string; price: number; title: string }
   | { kind: "product"; items: PayItem[] };
@@ -896,7 +918,7 @@ function fulfillPayment(sql: Sql, viewer: string, payment: Row) {
       expiresAt,
       payload.price,
     );
-    placeOrder(sql, viewer, "membership", payload.tierId, payload.price);
+    placeOrder(sql, viewer, "membership", payload.tierId, payload.price, payload.creatorId);
   } else {
     const now = new Date().toISOString();
     for (const item of payload.items) {
@@ -908,7 +930,7 @@ function fulfillPayment(sql: Sql, viewer: string, payment: Row) {
           now,
           item.price,
         );
-        placeOrder(sql, viewer, "product", item.id, item.price);
+        placeOrder(sql, viewer, "product", item.id, item.price, item.creatorId);
       }
       sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, item.id);
     }
@@ -934,9 +956,19 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
   if (!mine) return fail("err.loginRequired", 401);
   if (!stripeKey(env)) return fail("err.pay.unconfigured");
   const tierId = textOf(body.tierId, 80);
+  const directId = textOf(body.productId, 80);
   let payload: PayPayload;
   let cancelPath = "/checkout?pay=cancel";
-  if (tierId) {
+  if (directId) {
+    const product = sql.get("SELECT * FROM products WHERE id = ?", directId);
+    if (!product || Number(product.removed ?? 0) === 1 || Number(product.listed ?? 1) !== 1) return fail("err.product.missing", 404);
+    if (String(product.creator_id) === String(mine.handle)) return fail("err.product.self");
+    payload = {
+      kind: "product",
+      items: [{ id: String(product.id), price: Number(product.price), title: String(product.title), creatorId: String(product.creator_id) }],
+    };
+    cancelPath = `/c/${encodeURIComponent(String(product.creator_id))}/shop/${encodeURIComponent(String(product.id))}?pay=cancel`;
+  } else if (tierId) {
     const tier = sql.get("SELECT * FROM tiers WHERE id = ?", tierId);
     if (!tier) return fail("err.tier.missing");
     if (String(tier.creator_id) === String(mine.handle)) return fail("err.tier.self");
@@ -961,7 +993,7 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
     if (payable.length === 0) return fail("err.cart.empty");
     payload = {
       kind: "product",
-      items: payable.map((item) => ({ id: String(item.id), price: Number(item.price), title: String(item.title) })),
+      items: payable.map((item) => ({ id: String(item.id), price: Number(item.price), title: String(item.title), creatorId: String(item.creator_id) })),
     };
   }
   const serialized = JSON.stringify(payload);
@@ -1455,11 +1487,143 @@ function updateTier(sql: Sql, request: Request, body: Record<string, unknown>) {
   return withState(sql, viewer, "toast.tier");
 }
 
-function desk(sql: Sql, request: Request) {
+const PAYOUT_COUNTRIES = new Set([
+  "AT", "AU", "BE", "CA", "CH", "DE", "DK", "ES", "FI", "FR", "GB", "HK", "IE", "IT", "JP", "LU", "NL", "NO", "NZ", "PL", "PT", "SE", "SG", "US",
+]);
+
+function nextFridayUtc(now = new Date()) {
+  const next = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const day = next.getUTCDay();
+  let add = (5 - day + 7) % 7;
+  const pastMidnight = now.getUTCHours() + now.getUTCMinutes() + now.getUTCSeconds() + now.getUTCMilliseconds() > 0;
+  if (add === 0 && pastMidnight) add = 7;
+  next.setUTCDate(next.getUTCDate() + add);
+  return next;
+}
+
+function payoutStatus(data: Record<string, unknown>) {
+  const configuration = data.configuration as { recipient?: { capabilities?: { stripe_balance?: { stripe_transfers?: { status?: string } } } } } | undefined;
+  return configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status ?? "";
+}
+
+async function refreshPayout(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetch) {
+  const accountId = String(mine.stripe_account_id ?? "");
+  if (!accountId || !stripeKey(env)) return Number(mine.payout_ready) === 1;
+  const loaded = await stripeSend(env, `/v2/core/accounts/${encodeURIComponent(accountId)}?include=configuration.recipient`, "GET", undefined, fetchImpl);
+  if (!loaded.ok) return Number(mine.payout_ready) === 1;
+  const ready = payoutStatus(loaded.data) === "active";
+  sql.run("UPDATE users SET payout_ready = ? WHERE id = ?", ready ? 1 : 0, String(mine.id));
+  return ready;
+}
+
+async function payoutLink(sql: Sql, request: Request, body: Record<string, unknown>, env: PayEnv, fetchImpl: typeof fetch) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
-  const mine = sql.get("SELECT handle, is_creator FROM users WHERE id = ?", viewer);
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
+  if (!stripeKey(env)) return fail("err.pay.unconfigured");
+  const origin = new URL(request.url).origin;
+  let accountId = String(mine.stripe_account_id ?? "");
+  if (!accountId) {
+    const country = textOf(body.country, 2).toUpperCase();
+    if (!PAYOUT_COUNTRIES.has(country)) return fail("err.payout.country");
+    const created = await stripeSend(env, "/v2/core/accounts", "POST", {
+      contact_email: String(mine.email),
+      display_name: String(mine.name).slice(0, 100) || "fanstar",
+      dashboard: "express",
+      identity: { country: country.toLowerCase() },
+      defaults: { responsibilities: { fees_collector: "application", losses_collector: "application" } },
+      configuration: { recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } } },
+      include: ["configuration.recipient", "identity", "requirements"],
+    }, fetchImpl);
+    if (!created.ok || typeof created.data.id !== "string") return fail(created.ok ? "err.payout" : created.code);
+    accountId = created.data.id;
+    sql.run("UPDATE users SET stripe_account_id = ?, payout_ready = 0 WHERE id = ?", accountId, viewer);
+  }
+  const linked = await stripeSend(env, "/v2/core/account_links", "POST", {
+    account: accountId,
+    use_case: {
+      type: "account_onboarding",
+      account_onboarding: {
+        refresh_url: `${origin}/api/payout/refresh`,
+        return_url: `${origin}/studio/orders?payout=return`,
+      },
+    },
+  }, fetchImpl);
+  const url = linked.ok ? linked.data.url : "";
+  if (!linked.ok || typeof url !== "string" || !url) return fail(linked.ok ? "err.payout" : linked.code);
+  return json({ url });
+}
+
+async function payoutRefresh(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine || !String(mine.stripe_account_id ?? "")) return Response.redirect(`${new URL(request.url).origin}/studio/orders`, 302);
+  const origin = new URL(request.url).origin;
+  const linked = await stripeSend(env, "/v2/core/account_links", "POST", {
+    account: String(mine.stripe_account_id),
+    use_case: {
+      type: "account_onboarding",
+      account_onboarding: {
+        refresh_url: `${origin}/api/payout/refresh`,
+        return_url: `${origin}/studio/orders?payout=return`,
+      },
+    },
+  }, fetchImpl);
+  const url = linked.ok ? linked.data.url : "";
+  if (!linked.ok || typeof url !== "string" || !url) return Response.redirect(`${origin}/studio/orders?payout=error`, 302);
+  return Response.redirect(url, 302);
+}
+
+export async function runPayouts(sql: Sql, env: PayEnv, fetchImpl: typeof fetch, now = new Date()) {
+  if (now.getUTCDay() !== 5 || now.getUTCHours() !== 0) return { transferred: 0 };
+  const rows = sql.all("SELECT id, creator_id, currency, amount, fee FROM orders WHERE transfer_id = '' AND creator_id != ''");
+  const groups = new Map<string, { creatorId: string; currency: string; ids: string[]; net: number }>();
+  for (const row of rows) {
+    const creatorId = String(row.creator_id);
+    const currency = String(row.currency || "cny").toLowerCase();
+    const key = `${creatorId}:${currency}`;
+    const group = groups.get(key) ?? { creatorId, currency, ids: [], net: 0 };
+    group.ids.push(String(row.id));
+    group.net += Math.round((Number(row.amount) - Number(row.fee)) * 100);
+    groups.set(key, group);
+  }
+  let transferred = 0;
+  const week = now.toISOString().slice(0, 10);
+  for (const group of groups.values()) {
+    if (group.net < 1) continue;
+    const creator = sql.get("SELECT id, stripe_account_id, payout_ready FROM users WHERE handle = ? AND is_creator = 1", group.creatorId);
+    if (!creator || Number(creator.payout_ready) !== 1 || !String(creator.stripe_account_id ?? "")) continue;
+    const sent = await stripeSend(
+      env,
+      "/v1/transfers",
+      "POST",
+      {
+        amount: group.net,
+        currency: group.currency,
+        destination: String(creator.stripe_account_id),
+        metadata: { creatorId: group.creatorId, week },
+      },
+      fetchImpl,
+      { "Idempotency-Key": `payout-${group.creatorId}-${group.currency}-${week}` },
+    );
+    if (!sent.ok || typeof sent.data.id !== "string") continue;
+    for (const orderId of group.ids) sql.run("UPDATE orders SET transfer_id = ? WHERE id = ? AND transfer_id = ''", sent.data.id, orderId);
+    transferred += 1;
+  }
+  return { transferred };
+}
+
+function desk(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
   if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio", 403);
+  return deskBody(sql, mine, env, fetchImpl);
+}
+
+async function deskBody(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetch) {
   const handle = String(mine.handle);
   const orders = sql.all(
     `SELECT orders.id, orders.kind, orders.target_id, orders.amount, orders.fee, orders.created_at, users.name AS buyer,
@@ -1485,6 +1649,9 @@ function desk(sql: Sql, request: Request) {
   );
   const gross = orders.reduce((sum, row) => sum + Number(row.amount), 0);
   const fee = orders.reduce((sum, row) => sum + Number(row.fee), 0);
+  const payoutReady = await refreshPayout(sql, mine, env, fetchImpl);
+  const pendingRows = sql.all("SELECT amount, fee FROM orders WHERE creator_id = ? AND transfer_id = ''", handle);
+  const pending = pendingRows.reduce((sum, row) => sum + Number(row.amount) - Number(row.fee), 0);
   return json({
     orders: orders.map((row) => ({
       id: String(row.id),
@@ -1506,6 +1673,9 @@ function desk(sql: Sql, request: Request) {
     gross: Math.round(gross * 100) / 100,
     fee: Math.round(fee * 100) / 100,
     net: Math.round((gross - fee) * 100) / 100,
+    payoutReady,
+    pending: Math.round(pending * 100) / 100,
+    nextPayout: nextFridayUtc().toISOString(),
   });
 }
 
@@ -1522,8 +1692,13 @@ function studio(sql: Sql, request: Request, body: Record<string, unknown>) {
   const category = textOf(body.category, 20);
   if (Array.from(bio).length < 8) return fail("err.apply");
   if (!CREATOR_CATEGORIES.includes(category)) return fail("err.category");
-  sql.run("UPDATE users SET bio = ? WHERE id = ?", bio, viewer);
-  openCreator(sql, mine, { category, location, bio });
+  const handle = handleOf(body.handle);
+  if (!handle) return fail("err.handle");
+  if (handleTaken(sql, handle, viewer)) return fail("err.handle.taken");
+  sql.run("UPDATE users SET handle = ?, bio = ? WHERE id = ?", handle, bio, viewer);
+  const updated = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!updated) return fail("err.loginRequired", 401);
+  openCreator(sql, updated, { category, location, bio });
   return withState(sql, viewer, "toast.apply");
 }
 
@@ -1832,7 +2007,8 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (request.method === "GET" && url.pathname === "/api/download") return download(sql, request);
   if (request.method === "GET" && url.pathname === "/api/media") return media(sql, request);
   if (request.method === "GET" && url.pathname === "/api/play") return playRead(sql, request);
-  if (request.method === "GET" && url.pathname === "/api/desk") return desk(sql, request);
+  if (request.method === "GET" && url.pathname === "/api/desk") return desk(sql, request, env, stripeFetch);
+  if (request.method === "GET" && url.pathname === "/api/payout/refresh") return payoutRefresh(sql, request, env, stripeFetch);
   if (request.method === "GET" && url.pathname === "/api/avatar") return readAvatar(sql, request);
   if (request.method === "GET" && url.pathname === "/api/cover") return readCover(sql, request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
@@ -1843,6 +2019,14 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/avatar" && multipart) return uploadAvatar(sql, request);
   if (url.pathname === "/api/stripe/webhook") return stripeWebhook(sql, request, env, stripeFetch);
   const body = await readJson(request);
+  if (url.pathname === "/api/payout/run") {
+    if (!env.CODE_SECRET || request.headers.get("x-fanstar-task") !== env.CODE_SECRET) return fail("err.route", 404);
+    const when = textOf(body.now, 40);
+    const now = when ? new Date(when) : new Date();
+    if (Number.isNaN(now.getTime())) return fail("err.payout");
+    const result = await runPayouts(sql, env, stripeFetch, now);
+    return json(result);
+  }
   if (url.pathname === "/api/register") return register(sql, request, body, env, limiter);
   if (url.pathname === "/api/login") return login(sql, request, body, limiter);
   if (url.pathname === "/api/password") return changePassword(sql, request, body, env, limiter);
@@ -1861,6 +2045,7 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/profile") return profile(sql, request, body);
   if (url.pathname === "/api/tiers") return updateTier(sql, request, body);
   if (url.pathname === "/api/studio") return studio(sql, request, body);
+  if (url.pathname === "/api/payout/link") return payoutLink(sql, request, body, env, stripeFetch);
   if (url.pathname === "/api/account") return deleteAccount(sql, request, body);
   return fail("err.route", 404);
 }

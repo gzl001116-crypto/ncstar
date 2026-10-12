@@ -14,6 +14,14 @@ export interface Env extends MailEnv {
 const limiter = cacheLimiter();
 
 export default {
+  async scheduled(_event: unknown, env: Env): Promise<void> {
+    await env.FANSTAR.get(env.FANSTAR.idFromName("fanstar")).fetch(
+      new Request("https://fanstar.dev/api/payout/run", {
+        method: "POST",
+        headers: { "x-fanstar-task": env.CODE_SECRET ?? "" },
+      }),
+    );
+  },
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     const target = playRedirect(url);

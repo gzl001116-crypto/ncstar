@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
 import type { Creator, Post, Product } from "../types";
 import { useStore } from "../store";
@@ -58,30 +59,60 @@ export function PostCard({ post, large = false, ratio }: { post: Post; large?: b
 }
 
 export function ProductCard({ product }: { product: Product }) {
-  const { phrase } = useI18n();
-  const { creatorById } = useStore();
+  const { t, phrase, lang } = useI18n();
+  const { creatorById, user, owns, checkoutProduct } = useStore();
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   const creator = creatorById(product.creatorId);
+  const mine = user?.handle === product.creatorId;
+  const owned = owns(product.id);
+  const buy = async () => {
+    if (!user) {
+      navigate(`/login?next=${encodeURIComponent(`/checkout?product=${product.id}`)}`);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    const result = await checkoutProduct(product.id, lang);
+    if (result.error || !result.url) {
+      setBusy(false);
+      setError(result.error || t("err.pay.stripe"));
+      return;
+    }
+    window.location.assign(result.url);
+  };
   return (
-    <Link to={`/c/${product.creatorId}/shop/${product.id}`} className="card">
-      <Cover id={product.coverKey} src={coverSrc(product)} ratio="1 / 1" />
-      <div className="card-body">
-        <div className="meta">
-          <span className="pill">{phrase(product.kind)}</span>
-          <span className="price">{yuan(product.price)}</span>
-        </div>
-        <h3>{product.title}</h3>
-        {product.description && <p className="clamp">{phrase(product.description)}</p>}
-        {product.tags.length > 0 && (
-          <div className="tag-row">
-            {product.tags.map((tag) => (
-              <span key={tag} className="pill">
-                {tag}
-              </span>
-            ))}
+    <article className="card product-card">
+      <Link to={`/c/${product.creatorId}/shop/${product.id}`} className="card-link">
+        <Cover id={product.coverKey} src={coverSrc(product)} ratio="1 / 1" />
+        <div className="card-body">
+          <div className="meta">
+            <span className="pill">{phrase(product.kind)}</span>
+            <span className="price">{yuan(product.price)}</span>
           </div>
-        )}
-        {creator && <p className="muted">{creator.name}</p>}
-      </div>
-    </Link>
+          <h3>{product.title}</h3>
+          {product.description && <p className="clamp">{phrase(product.description)}</p>}
+          {product.tags.length > 0 && (
+            <div className="tag-row">
+              {product.tags.map((tag) => (
+                <span key={tag} className="pill">
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+          {creator && <p className="muted">{creator.name}</p>}
+        </div>
+      </Link>
+      {!mine && !owned && (
+        <div className="card-actions">
+          <button type="button" className="btn btn-dark btn-small" disabled={busy} onClick={buy}>
+            {busy ? t("common.wait") : t("card.buy")}
+          </button>
+          {error && <p className="error">{error}</p>}
+        </div>
+      )}
+    </article>
   );
 }

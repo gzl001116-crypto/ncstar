@@ -128,6 +128,9 @@ export type Desk = {
   gross: number;
   fee: number;
   net: number;
+  payoutReady: boolean;
+  pending: number;
+  nextPayout: string;
 };
 
 export type Catalog = {

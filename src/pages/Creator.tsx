@@ -1,5 +1,6 @@
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Avatar, Cover, coverSrc } from "../components/Cover";
+import { ProductCard } from "../components/Cards";
+import { Avatar, Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
@@ -114,26 +115,7 @@ export function CreatorPage() {
         <div className="cards">
           {shelf.length === 0 && <div className="empty">{t("creator.shopEmpty")}</div>}
           {shelf.map((product) => (
-            <Link key={product.id} to={`/c/${creator.handle}/shop/${product.id}`} className="card">
-              <Cover id={product.coverKey} src={coverSrc(product)} ratio="1 / 1" />
-              <div className="card-body">
-                <div className="meta">
-                  <span className="pill">{phrase(product.kind)}</span>
-                  <span className="price">{yuan(product.price)}</span>
-                </div>
-                <h3>{product.title}</h3>
-                {product.description && <p className="clamp">{phrase(product.description)}</p>}
-                {product.tags.length > 0 && (
-                  <div className="tag-row">
-                    {product.tags.map((tag) => (
-                      <span key={tag} className="pill">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Link>
+            <ProductCard key={product.id} product={product} />
           ))}
         </div>
       )}

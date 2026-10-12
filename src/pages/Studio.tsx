@@ -1,12 +1,12 @@
 import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { Avatar, Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { PasswordForm } from "./Password";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { CATEGORIES, type Category, type Product } from "../types";
-import { formatDate, yuan } from "../utils";
+import { formatDate, utcStamp, yuan } from "../utils";
 
 const KINDS = ["数字作品", "插画", "音乐", "设计", "摄影", "写作", "图案"] as const;
 const MAX_FILE = 8 * 1024 * 1024;
@@ -266,6 +266,7 @@ function ApplyCreator() {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const result = await openStudio({
+      handle: String(data.get("handle") ?? ""),
       category: String(data.get("category") ?? ""),
       location: String(data.get("location") ?? ""),
       bio: String(data.get("bio") ?? ""),
@@ -277,6 +278,11 @@ function ApplyCreator() {
     <form className="panel studio-form" onSubmit={onApply}>
       <h2>{t("page.apply")}</h2>
       <p className="muted">{t("page.applyLead")}</p>
+      <p className="muted">{t("auth.handleLead")}</p>
+      <label>
+        {t("studio.handle")}
+        <input name="handle" required placeholder={t("auth.handlePh")} autoCapitalize="none" />
+      </label>
       <label>
         {t("studio.category")}
         <select name="category" defaultValue="写作">
@@ -1047,6 +1053,63 @@ export function StudioTiers() {
   );
 }
 
+const PAYOUT_COUNTRIES = ["AT", "AU", "BE", "CA", "CH", "DE", "DK", "ES", "FI", "FR", "GB", "HK", "IE", "IT", "JP", "LU", "NL", "NO", "NZ", "PL", "PT", "SE", "SG", "US"];
+
+function PayoutPanel() {
+  const { t, lang } = useI18n();
+  const { desk, payoutLink } = useStore();
+  const [params] = useSearchParams();
+  const [country, setCountry] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const region = new Intl.DisplayNames([lang === "zh" ? "zh-CN" : lang === "zh-Hant" ? "zh-TW" : lang], { type: "region" });
+  const next = desk?.nextPayout ? utcStamp(new Date(desk.nextPayout)) : "";
+  const start = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    const result = await payoutLink(country);
+    if (result.error || !result.url) {
+      setBusy(false);
+      setError(result.error || t("err.payout"));
+      return;
+    }
+    window.location.assign(result.url);
+  };
+  return (
+    <section className="panel payout-panel">
+      <h2>{t("studio.payout")}</h2>
+      <p className="muted">{t("studio.payoutLead")}</p>
+      {desk?.payoutReady && <p>{t("studio.payoutReady")}</p>}
+      <p>{t("studio.payoutPending", { amount: yuan(desk?.pending ?? 0) })}</p>
+      {next && <p>{t("studio.payoutFriday", { time: next })}</p>}
+      {params.get("payout") === "return" && <p className="muted">{t("studio.payoutReturn")}</p>}
+      {params.get("payout") === "error" && <p className="error">{t("studio.payoutError")}</p>}
+      <form onSubmit={start}>
+        {!desk?.payoutReady && (
+          <label>
+            {t("studio.payoutCountry")}
+            <select value={country} required onChange={(event) => setCountry(event.target.value)}>
+              <option value="" disabled>
+                {t("studio.payoutCountry")}
+              </option>
+              {PAYOUT_COUNTRIES.map((code) => (
+                <option key={code} value={code}>
+                  {region.of(code)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <button className="btn btn-dark" type="submit" disabled={busy}>
+          {busy ? t("common.wait") : t(desk?.payoutReady ? "studio.payoutUpdate" : "studio.payoutStart")}
+        </button>
+      </form>
+      {error && <p className="error">{error}</p>}
+    </section>
+  );
+}
+
 export function StudioOrders() {
   const { t, phrase } = useI18n();
   const { desk } = useStore();
@@ -1054,6 +1117,7 @@ export function StudioOrders() {
   const members = desk?.members ?? [];
   return (
     <>
+      <PayoutPanel />
       <div className="studio-stats">
         <div>
           <strong>{orders.length}</strong>

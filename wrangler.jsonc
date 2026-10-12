@@ -16,6 +16,9 @@
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["FanstarStore"] }
   ],
+  "triggers": {
+    "crons": ["0 0 * * FRI"]
+  },
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",

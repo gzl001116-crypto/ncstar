@@ -2,7 +2,22 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
+import { utcStamp } from "../utils";
 import { Avatar } from "./Cover";
+
+function UtcClock() {
+  const { t } = useI18n();
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return (
+    <time className="utc-clock" dateTime={now.toISOString()}>
+      {t("clock.utc", { time: utcStamp(now) })}
+    </time>
+  );
+}
 
 function Mark() {
   return (
@@ -59,6 +74,7 @@ export function Layout() {
               aria-label={t("search.label")}
             />
           </form>
+          <UtcClock />
           <div className="nav-actions">
             <Link to="/checkout" className="cart-link" aria-label={t("cart")}>
               {t("cart")}
@@ -125,6 +141,7 @@ export function Layout() {
               <span>{t("brand")}</span>
             </Link>
             <p>{t("footer.blurb")}</p>
+            <UtcClock />
           </div>
           <div>
             <strong>{t("footer.browse")}</strong>
