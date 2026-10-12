@@ -5,7 +5,7 @@ import { useTitle } from "../hooks";
 import { isMessage, useI18n } from "../i18n";
 import { useStore } from "../store";
 import type { Product } from "../types";
-import { downloadText } from "../utils";
+import { saveDownload } from "../utils";
 
 const FORMATS = ["comic", "voice", "video", "novel", "game"] as const;
 
@@ -217,7 +217,7 @@ export function PlayViewer() {
   const download = async () => {
     const response = await fetch(`/api/download?productId=${encodeURIComponent(file.id)}`, { credentials: "same-origin" });
     if (!response.ok) return;
-    downloadText(file.title, await response.text());
+    await saveDownload(response, file.title);
   };
 
   return (

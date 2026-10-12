@@ -52,6 +52,23 @@ function client() {
       const data = raw.startsWith("{") || raw.startsWith("[") ? JSON.parse(raw) : raw;
       return { status: response.status, data, raw };
     },
+    async sendForm(path: string, form: FormData) {
+      const response = await handleApp(
+        new Request(`http://127.0.0.1${path}`, {
+          method: "POST",
+          headers: { cookie, "cf-connecting-ip": "198.51.100.10" },
+          body: form,
+        }),
+        sql,
+        env,
+        limiter,
+      );
+      const setCookie = response.headers.get("set-cookie");
+      if (setCookie) cookie = setCookie.split(";")[0] ?? "";
+      const raw = await response.text();
+      const data = raw.startsWith("{") || raw.startsWith("[") ? JSON.parse(raw) : raw;
+      return { status: response.status, data, raw };
+    },
   };
 }
 
@@ -171,5 +188,21 @@ if (!opened.body.includes("创作者自己写下")) throw new Error("membership 
 
 const bad = await client().send("/api/login", { email: "fan@example.com", password: "nope" });
 if (bad.status !== 401) throw new Error("bad password should fail");
+
+const upload = new FormData();
+upload.set("title", "上传的短文");
+upload.set("description", "文件就是正文");
+upload.set("price", "4");
+upload.set("kind", "小说");
+upload.set("includes", "原文");
+upload.set("file", new File(["文件里的第一句。"], "note.txt", { type: "text/plain" }));
+const uploaded = await creator.sendForm("/api/products", upload);
+if (uploaded.status !== 200) throw new Error(`upload failed ${uploaded.status} ${uploaded.raw}`);
+const uploadedId = uploaded.data.products.find((item: { title: string }) => item.title === "上传的短文").id as string;
+if (uploaded.data.products.find((item: { id: string }) => item.id === uploadedId).playFormat !== "novel") {
+  throw new Error("text upload should open as a novel on play");
+}
+const uploadedFile = await creator.send(`/api/download?productId=${uploadedId}`, undefined, "GET");
+if (!String(uploadedFile.raw).includes("文件里的第一句")) throw new Error("uploaded file did not download");
 
 console.log("platform checks passed");

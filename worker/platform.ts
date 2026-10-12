@@ -128,6 +128,8 @@ function ensureSchema(sql: Sql) {
   for (const statement of [
     "ALTER TABLE products ADD COLUMN play_format TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN play_body TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN file_name TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN file_type TEXT NOT NULL DEFAULT ''",
   ]) {
     try {
       sql.exec(statement);
@@ -146,16 +148,61 @@ function json(body: unknown, status = 200, cookie?: string) {
   return response;
 }
 
+function disposition(filename: string, inline: boolean) {
+  const ascii = filename.replace(/[^\u0020-\u007E]+/g, "_") || "file";
+  return `${inline ? "inline" : "attachment"}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
 function text(body: string, status: number, filename: string) {
-  const ascii = filename.replace(/[^\u0020-\u007E]+/g, "_");
   return new Response(body, {
     status,
     headers: {
       "content-type": "text/plain; charset=utf-8",
       "cache-control": "no-store",
-      "content-disposition": `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      "content-disposition": disposition(filename, false),
     },
   });
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(value: string) {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+const MAX_UPLOAD = 8 * 1024 * 1024;
+
+function inferPlay(productId: string, filename: string, mime: string, bytes: Uint8Array) {
+  const name = filename.toLowerCase();
+  const type = mime.toLowerCase();
+  const media = `/api/media?productId=${encodeURIComponent(productId)}`;
+  const decode = () => new TextDecoder().decode(bytes).slice(0, 100_000);
+  if (type.startsWith("text/html") || name.endsWith(".html") || name.endsWith(".htm")) {
+    return { format: "game", body: JSON.stringify({ html: decode() }) };
+  }
+  if (type.startsWith("text/") || name.endsWith(".txt") || name.endsWith(".md")) {
+    return { format: "novel", body: JSON.stringify({ novel: decode() }) };
+  }
+  if (type.startsWith("audio/") || /\.(mp3|m4a|wav|ogg|flac)$/.test(name)) {
+    const title = filename.replace(/\.[^.]+$/, "").slice(0, 80) || filename;
+    return { format: "voice", body: JSON.stringify({ tracks: [{ title, src: media, text: "" }] }) };
+  }
+  if (type.startsWith("video/") || /\.(mp4|webm)$/.test(name)) {
+    return { format: "video", body: JSON.stringify({ video: media }) };
+  }
+  if (type.startsWith("image/") || /\.(png|jpe?g|gif|webp)$/.test(name)) {
+    return { format: "comic", body: JSON.stringify({ pages: [{ text: "", image: media }] }) };
+  }
+  return { format: "", body: "" };
 }
 
 async function readJson(request: Request): Promise<Record<string, unknown>> {
@@ -674,6 +721,56 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   return withState(sql, viewer, "toast.product");
 }
 
+async function publishUpload(sql: Sql, request: Request) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return fail("err.file");
+  }
+  const title = textOf(form.get("title"), 80);
+  const description = textOf(form.get("description"), 2000) || "创作者刚刚上架的数字作品。";
+  const price = Number(form.get("price"));
+  const kind = textOf(form.get("kind"), 40) || "数字作品";
+  const includes = textOf(form.get("includes"), 400)
+    .split(/[,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const uploaded = form.get("file");
+  if (!(uploaded instanceof File)) return fail("err.file");
+  if (uploaded.size < 1) return fail("err.file");
+  if (uploaded.size > MAX_UPLOAD) return fail("err.file.size");
+  if (title.length < 2) return fail("err.product.title");
+  if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
+  const bytes = new Uint8Array(await uploaded.arrayBuffer());
+  const productId = id();
+  const filename = uploaded.name.replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120) || "file";
+  const mime = (uploaded.type || "application/octet-stream").slice(0, 120);
+  const play = inferPlay(productId, filename, mime, bytes);
+  sql.run(
+    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    productId,
+    String(mine.handle),
+    title,
+    description,
+    Math.round(price * 100) / 100,
+    kind,
+    JSON.stringify(includes.length ? includes : [filename]),
+    id(),
+    bytesToBase64(bytes),
+    filename,
+    mime,
+    play.format,
+    play.body,
+  );
+  return withState(sql, viewer, "toast.product");
+}
+
 function profile(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
@@ -725,7 +822,7 @@ function download(sql: Sql, request: Request) {
     const mine = viewer ? sql.get("SELECT handle FROM users WHERE id = ?", viewer) : undefined;
     const owns = sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, productId);
     if (!owns && !(mine && String(mine.handle) === String(product.creator_id))) return fail("err.download.product", 403);
-    return text(String(product.file_body), 200, fileName(String(product.title)));
+    return fileResponse(product, false);
   }
   if (postId) {
     const post = sql.get("SELECT * FROM posts WHERE id = ?", postId);
@@ -736,6 +833,30 @@ function download(sql: Sql, request: Request) {
     return text(String(post.body), 200, fileName(String(post.title)));
   }
   return fail("err.file.missing", 404);
+}
+
+function fileResponse(product: Row, inline: boolean) {
+  const storedName = String(product.file_name ?? "");
+  if (!storedName) return text(String(product.file_body), 200, fileName(String(product.title)));
+  const bytes = base64ToBytes(String(product.file_body));
+  const type = String(product.file_type || "application/octet-stream");
+  return new Response(bytes, {
+    status: 200,
+    headers: {
+      "content-type": type,
+      "cache-control": "private, no-store",
+      "content-disposition": disposition(storedName, inline),
+    },
+  });
+}
+
+function media(sql: Sql, request: Request) {
+  const viewer = userId(sql, request);
+  const productId = new URL(request.url).searchParams.get("productId") ?? "";
+  const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
+  if (!product || !String(product.file_name ?? "")) return fail("err.file.missing", 404);
+  if (!canPlay(sql, viewer, product)) return fail("err.play.forbidden", 403);
+  return fileResponse(product, true);
 }
 
 function canPlay(sql: Sql, viewer: string, product: Row) {
@@ -798,9 +919,13 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   const url = new URL(request.url);
   if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request)));
   if (request.method === "GET" && url.pathname === "/api/download") return download(sql, request);
+  if (request.method === "GET" && url.pathname === "/api/media") return media(sql, request);
   if (request.method === "GET" && url.pathname === "/api/play") return playRead(sql, request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (request.method !== "POST") return fail("err.method", 405);
+  if (url.pathname === "/api/products" && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
+    return publishUpload(sql, request);
+  }
   const body = await readJson(request);
   if (url.pathname === "/api/register") return register(sql, request, body, env, limiter);
   if (url.pathname === "/api/login") return login(sql, request, body, limiter);

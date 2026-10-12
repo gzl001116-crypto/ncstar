@@ -43,7 +43,8 @@ type StoreValue = {
     price: number;
     kind: string;
     includes: string[];
-    fileBody: string;
+    file?: File;
+    fileBody?: string;
     playFormat?: string;
     playBody?: string;
   }) => Promise<string | null>;
@@ -195,7 +196,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     checkoutCart: () => mutate("/api/checkout", {}),
     checkoutTier: (tierId) => mutate("/api/checkout", { tierId }),
     publishPost: (input) => mutate("/api/posts", input),
-    publishProduct: (input) => mutate("/api/products", input),
+    publishProduct: async (input) => {
+      if (!input.file) return mutate("/api/products", input);
+      const form = new FormData();
+      form.set("title", input.title);
+      form.set("description", input.description);
+      form.set("price", String(input.price));
+      form.set("kind", input.kind);
+      form.set("includes", input.includes.join(","));
+      form.set("file", input.file);
+      try {
+        const response = await fetch("/api/products", { method: "POST", credentials: "same-origin", body: form });
+        const data = (await response.json().catch(() => ({}))) as Catalog & { code?: string; name?: string; toast?: string; error?: string };
+        if (!response.ok) return say(data.code, data.name, data.error);
+        apply(data);
+        return null;
+      } catch {
+        return t("err.network");
+      }
+    },
     togglePlayList: async (productId) => {
       const error = await mutate("/api/play", { productId, op: "list" });
       if (error) toast(error);

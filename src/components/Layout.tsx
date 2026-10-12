@@ -46,7 +46,6 @@ export function Layout() {
           </Link>
           <nav className="nav-links">
             <NavLink to="/explore">{t("nav.explore")}</NavLink>
-            <NavLink to="/play">play.fanstar</NavLink>
             <NavLink to="/studio">{t("nav.studio")}</NavLink>
             <NavLink to="/about">{t("nav.about")}</NavLink>
           </nav>
@@ -72,7 +71,6 @@ export function Layout() {
                 </button>
                 {menu && (
                   <div className="menu-pop">
-                    <Link to="/play">play.fanstar</Link>
                     <Link to="/library">{t("library")}</Link>
                     <Link to="/studio">{t("nav.studio")}</Link>
                     {user.isCreator && <Link to={`/c/${user.handle}`}>{t("my.page")}</Link>}
@@ -104,7 +102,6 @@ export function Layout() {
               />
             </form>
             <NavLink to="/explore">{t("nav.explore")}</NavLink>
-            <NavLink to="/play">play.fanstar</NavLink>
             <NavLink to="/studio">{t("nav.studio")}</NavLink>
             <NavLink to="/about">{t("nav.about")}</NavLink>
             <NavLink to="/terms">{t("footer.terms")}</NavLink>
@@ -129,7 +126,6 @@ export function Layout() {
           <div>
             <strong>{t("footer.browse")}</strong>
             <Link to="/explore">{t("nav.explore")}</Link>
-            <Link to="/play">play.fanstar</Link>
             <Link to="/about">{t("footer.about")}</Link>
             <Link to="/terms">{t("footer.terms")}</Link>
             <Link to="/privacy">{t("footer.privacy")}</Link>

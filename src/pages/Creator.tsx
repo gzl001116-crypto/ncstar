@@ -119,7 +119,6 @@ export function CreatorPage() {
               <div className="card-body">
                 <div className="meta">
                   <span className="pill">{phrase(product.kind)}</span>
-                  {product.playFormat ? <span className="pill">play.fanstar</span> : null}
                   <span className="price">{yuan(product.price)}</span>
                 </div>
                 <h3>{product.title}</h3>

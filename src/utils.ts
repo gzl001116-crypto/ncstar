@@ -59,6 +59,22 @@ export function visibilityLabel(rank: number) {
   return "更高档位";
 }
 
+export async function saveDownload(response: Response, fallback: string) {
+  const blob = await response.blob();
+  const header = response.headers.get("content-disposition") ?? "";
+  const star = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  const plain = /filename="([^"]+)"/i.exec(header);
+  const name = star ? decodeURIComponent(star[1]) : plain?.[1] || fallback;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function downloadText(filename: string, content: string) {
   const blob = new Blob([content.endsWith("\n") ? content : `${content}\n`], { type: "text/plain;charset=utf-8" });
   const url = URL.createObjectURL(blob);

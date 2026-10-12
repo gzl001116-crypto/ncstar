@@ -3,7 +3,7 @@ import { Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
-import { daysLeft, downloadText, formatDate, yuan } from "../utils";
+import { daysLeft, formatDate, saveDownload, yuan } from "../utils";
 
 export function Library() {
   const { t, phrase } = useI18n();
@@ -27,7 +27,7 @@ export function Library() {
   const save = async (productId: string, title: string) => {
     const response = await fetch(`/api/download?productId=${encodeURIComponent(productId)}`, { credentials: "same-origin" });
     if (!response.ok) return;
-    downloadText(title, await response.text());
+    await saveDownload(response, title);
   };
 
   return (
@@ -84,11 +84,6 @@ export function Library() {
                     {creator?.name} · {formatDate(item.purchasedAt)}
                   </p>
                   <div className="hero-actions">
-                    {product.playFormat && (
-                      <Link to={`/play/${product.id}`} className="btn btn-dark">
-                        {t("play.open")}
-                      </Link>
-                    )}
                     <button type="button" className="btn btn-line" onClick={() => save(product.id, product.title)}>
                       {t("common.download")}
                     </button>
