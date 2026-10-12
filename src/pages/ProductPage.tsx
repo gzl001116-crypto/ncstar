@@ -36,13 +36,13 @@ export function ProductPage() {
           <Avatar name={creator.name} id={creator.id} size={36} stamp={creator.avatarAt} />
           <span>{creator.name}</span>
         </Link>
-        <p className="meta">
+        <div className="tag-row">
           <span className="pill">{phrase(product.kind)}</span>
           {product.playFormat && <span className="pill">{t("product.viaPlay")}</span>}
           {product.allowDownload && <span className="pill">{t("product.canDownload")}</span>}
           {!product.allowDownload && product.playFormat && <span className="pill">{t("product.playOnly")}</span>}
           {product.allowPreview && <span className="pill">{t("product.preview")}</span>}
-        </p>
+        </div>
         {product.tags.length > 0 && (
           <div className="tag-row">
             {product.tags.map((tag) => (
@@ -90,10 +90,14 @@ export function ProductPage() {
             </Link>
           </div>
         ) : mine ? (
-          <div className="hero-actions">
+          <>
             <p className="muted">{t("product.mine")}</p>
-            {product.playFormat && <PlayLink id={product.id} className="btn btn-dark">{t("play.open")}</PlayLink>}
-          </div>
+            {product.playFormat && (
+              <div className="hero-actions">
+                <PlayLink id={product.id} className="btn btn-dark">{t("play.open")}</PlayLink>
+              </div>
+            )}
+          </>
         ) : (
           <div className="hero-actions">
             <button
