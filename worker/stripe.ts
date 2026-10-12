@@ -42,6 +42,7 @@ export function sessionFields(input: {
     client_reference_id: input.paymentId,
     "metadata[paymentId]": input.paymentId,
     "metadata[userId]": input.userId,
+    "payment_method_options[wechat_pay][client]": "web",
   };
   input.items.forEach((item, index) => {
     fields[`line_items[${index}][quantity]`] = "1";

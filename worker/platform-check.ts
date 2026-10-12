@@ -13,6 +13,9 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
   const url = String(input);
   if (init?.method === "POST") {
     const params = new URLSearchParams(String(init.body ?? ""));
+    if (url.includes("/v1/checkout/sessions") && params.get("payment_method_options[wechat_pay][client]") !== "web") {
+      throw new Error("wechat client missing");
+    }
     let amount = 0;
     for (const [key, value] of params) {
       if (key.endsWith("[price_data][unit_amount]")) amount += Number(value);
