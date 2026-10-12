@@ -1,3 +1,4 @@
+import { LegalBlocks, JapaneseLegal, LegalLinks, TERMS_BLOCKS } from "../components/LegalCopy";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 
@@ -9,16 +10,15 @@ export function Terms() {
       <p className="kicker">{t("terms.kicker")}</p>
       <h1>{t("terms.h1")}</h1>
       <p>{t("terms.lead")}</p>
-      <h2>{t("terms.hAccount")}</h2>
-      <p>{t("terms.pAccount")}</p>
-      <h2>{t("terms.hRoles")}</h2>
-      <p>{t("terms.pRoles")}</p>
-      <h2>{t("terms.hDigital")}</h2>
-      <p>{t("terms.pDigital")}</p>
-      <h2>{t("terms.hFee")}</h2>
-      <p>{t("terms.pFee")}</p>
-      <h2>{t("terms.hBad")}</h2>
-      <p>{t("terms.pBad")}</p>
+      <p>
+        {t("terms.urlLabel")}{" "}
+        <a className="legal-url" href="https://fanstar.dev/terms">
+          https://fanstar.dev/terms
+        </a>
+      </p>
+      <LegalBlocks blocks={TERMS_BLOCKS} />
+      <LegalLinks />
+      <JapaneseLegal title="利用規約" note="terms.statutory" blocks={TERMS_BLOCKS} />
     </article>
   );
 }

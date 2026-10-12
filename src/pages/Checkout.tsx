@@ -60,7 +60,11 @@ export function Checkout() {
         <p className="kicker">{t("checkout.kicker")}</p>
         <h1>{tier ? t("checkout.member") : t("cart")}</h1>
         <p className="fineprint">
-          {t("checkout.note")} <Link to="/tokushoho">{t("footer.tokushoho")}</Link>
+          {t("checkout.note")} <Link to="/terms">{t("footer.terms")}</Link>
+          <span> · </span>
+          <Link to="/privacy">{t("footer.privacy")}</Link>
+          <span> · </span>
+          <Link to="/tokushoho">{t("footer.tokushoho")}</Link>
         </p>
         {tier && creator ? (
           <article className="line">

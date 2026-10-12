@@ -13,6 +13,7 @@ import { PlayHome, PlayViewer } from "./pages/Play";
 import { NotFound } from "./pages/NotFound";
 import { PostPage } from "./pages/PostPage";
 import { ProductPage } from "./pages/ProductPage";
+import { Privacy } from "./pages/Privacy";
 import { Studio } from "./pages/Studio";
 import { Terms } from "./pages/Terms";
 import { Tokushoho } from "./pages/Tokushoho";
@@ -47,6 +48,7 @@ export function App() {
           <Route path="studio" element={<Studio />} />
           <Route path="about" element={<About />} />
           <Route path="terms" element={<Terms />} />
+          <Route path="privacy" element={<Privacy />} />
           <Route path="tokushoho" element={<Tokushoho />} />
           <Route path="*" element={<NotFound />} />
         </Route>

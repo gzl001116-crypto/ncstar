@@ -43,7 +43,9 @@ export function Tokushoho() {
       <p>
         <Link to="/">{t("toku.home")}</Link>
         <span> · </span>
-        <Link to="/terms">{t("toku.terms")}</Link>
+        <Link to="/terms">{t("footer.terms")}</Link>
+        <span> · </span>
+        <Link to="/privacy">{t("footer.privacy")}</Link>
       </p>
     </article>
   );

@@ -55,6 +55,11 @@ export function PlayLayout() {
       <main>
         <Outlet />
       </main>
+      <footer className="play-legal">
+        <Link to="/terms">{t("footer.terms")}</Link>
+        <Link to="/privacy">{t("footer.privacy")}</Link>
+        <Link to="/tokushoho">{t("footer.tokushoho")}</Link>
+      </footer>
       <div className="toasts" aria-live="polite">
         {toasts.map((item) => (
           <div className="toast" key={item.id}>

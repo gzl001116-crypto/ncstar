@@ -181,6 +181,13 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
           </label>
         )}
         {error && <p className="error">{error}</p>}
+        {mode === "register" && (
+          <p className="fineprint">
+            {t("auth.agreeBefore")} <Link to="/terms">{t("footer.terms")}</Link> {t("auth.agreeMid")}{" "}
+            <Link to="/privacy">{t("footer.privacy")}</Link>
+            {t("auth.agreeAfter")}
+          </p>
+        )}
         <button className="btn btn-dark btn-block" type="submit" disabled={busy}>
           {busy ? t("common.wait") : mode === "login" ? t("login") : t("register")}
         </button>

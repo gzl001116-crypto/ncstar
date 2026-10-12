@@ -17,6 +17,8 @@ export function About() {
         <Link to="/explore">{t("about.explore")}</Link>
         <span> · </span>
         <Link to="/terms">{t("footer.terms")}</Link>
+        <span> · </span>
+        <Link to="/privacy">{t("footer.privacy")}</Link>
       </p>
     </article>
   );

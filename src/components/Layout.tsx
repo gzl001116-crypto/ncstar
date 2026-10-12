@@ -107,6 +107,8 @@ export function Layout() {
             <NavLink to="/play">play.fanstar</NavLink>
             <NavLink to="/studio">{t("nav.studio")}</NavLink>
             <NavLink to="/about">{t("nav.about")}</NavLink>
+            <NavLink to="/terms">{t("footer.terms")}</NavLink>
+            <NavLink to="/privacy">{t("footer.privacy")}</NavLink>
             <NavLink to="/library">{t("library")}</NavLink>
             <NavLink to="/checkout">{t("cart")}</NavLink>
           </div>
@@ -130,6 +132,7 @@ export function Layout() {
             <Link to="/play">play.fanstar</Link>
             <Link to="/about">{t("footer.about")}</Link>
             <Link to="/terms">{t("footer.terms")}</Link>
+            <Link to="/privacy">{t("footer.privacy")}</Link>
             <Link to="/tokushoho">{t("footer.tokushoho")}</Link>
           </div>
           <div>

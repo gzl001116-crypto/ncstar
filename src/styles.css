@@ -467,6 +467,10 @@ main { flex: 1; min-height: 60vh; }
 .prose { display: grid; gap: 14px; font-size: 17px; }
 .prose-page { display: grid; gap: 12px; }
 .prose-page h2 { margin-top: 12px; }
+.prose-page h3 { margin-top: 8px; font-size: 18px; }
+.legal-url { word-break: break-all; }
+.play-legal { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; padding: 8px 16px 32px; }
+.play-legal a { color: var(--muted); text-decoration: none; }
 .legal-table {
   width: 100%;
   border-collapse: collapse;
