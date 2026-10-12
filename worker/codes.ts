@@ -1,7 +1,13 @@
 export type MailEnv = {
   RESEND_API_KEY?: string;
+  resend?: string;
   CODE_SECRET?: string;
 };
+
+function resendKey(env: MailEnv) {
+  const key = env.RESEND_API_KEY || env.resend;
+  return key || undefined;
+}
 
 export type Limiter = {
   allowed(key: string, limit: number, windowSec: number): Promise<boolean>;
@@ -125,10 +131,11 @@ function sixDigits() {
 
 async function signingKey(env: MailEnv): Promise<string | null> {
   if (env.CODE_SECRET) return env.CODE_SECRET;
-  if (!env.RESEND_API_KEY) return null;
+  const apiKey = resendKey(env);
+  if (!apiKey) return null;
   const digest = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(`xingye-code:${env.RESEND_API_KEY}`),
+    new TextEncoder().encode(`xingye-code:${apiKey}`),
   );
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
@@ -205,12 +212,13 @@ export async function handleSend(
     return json({ code: "err.send.cooldown" }, 429);
   }
 
+  const apiKey = resendKey(env);
   const secret = await signingKey(env);
-  if (!secret || !env.RESEND_API_KEY) return json({ code: "err.mail.unconfigured" }, 503);
+  if (!secret || !apiKey) return json({ code: "err.mail.unconfigured" }, 503);
 
   const code = sixDigits();
   const expiresAt = Date.now() + TTL_MS;
-  const sent = await (deps.deliver ?? deliverMail)(env.RESEND_API_KEY, email, code, mailLang(body.lang));
+  const sent = await (deps.deliver ?? deliverMail)(apiKey, email, code, mailLang(body.lang));
   if (!sent.ok) return json({ code: sent.error }, 502);
 
   await limiter.record(`send:ip:${ip}`, 600);

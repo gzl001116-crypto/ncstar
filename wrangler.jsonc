@@ -5,9 +5,9 @@
   "observability": {
     "enabled": true
   },
-  // RESEND_API_KEY is a Worker secret, not a committed value:
-  // npx wrangler secret put RESEND_API_KEY
-  // CODE_SECRET is optional. When it is absent, codes are signed with a key derived from RESEND_API_KEY.
+  // Keep variables saved in the Cloudflare dashboard, including the Resend key.
+  // The key itself stays there. This file is in a public repository, so it does not contain the value.
+  "keep_vars": true,
   "durable_objects": {
     "bindings": [
       { "name": "FANSTAR", "class_name": "FanstarStore" }

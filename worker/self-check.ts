@@ -70,4 +70,21 @@ const missing = await handleSend(
 );
 if (missing.status !== 503) throw new Error(`missing key should be 503, got ${missing.status}`);
 
+const dashboardName = await handleSend(
+  new Request("http://local/api/send-code", {
+    method: "POST",
+    headers: { "content-type": "application/json", "cf-connecting-ip": "203.0.113.11" },
+    body: JSON.stringify({ email: "dash@example.com" }),
+  }),
+  { resend: "dashboard-key" },
+  memoryLimiter(),
+  {
+    deliver: async (apiKey) => {
+      if (apiKey !== "dashboard-key") throw new Error("dashboard binding was not used");
+      return { ok: true };
+    },
+  },
+);
+if (!dashboardName.ok) throw new Error(`resend binding should send, got ${dashboardName.status}`);
+
 console.log("verification checks passed");
