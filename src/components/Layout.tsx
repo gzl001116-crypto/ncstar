@@ -46,7 +46,8 @@ export function Layout() {
           </Link>
           <nav className="nav-links">
             <NavLink to="/explore">{t("nav.explore")}</NavLink>
-            <NavLink to="/studio">{t("nav.studio")}</NavLink>
+            {user && <NavLink to="/page">{t("studio.navProfile")}</NavLink>}
+            {user?.isCreator && <NavLink to="/studio">{t("nav.studio")}</NavLink>}
             <NavLink to="/about">{t("nav.about")}</NavLink>
           </nav>
           <form className="search" onSubmit={onSearch}>
@@ -72,8 +73,9 @@ export function Layout() {
                 {menu && (
                   <div className="menu-pop">
                     <Link to="/library">{t("library")}</Link>
-                    <Link to="/studio">{t("nav.studio")}</Link>
-                    {user.isCreator && <Link to={`/c/${user.handle}`}>{t("my.page")}</Link>}
+                    <Link to="/page">{t("studio.navProfile")}</Link>
+                    {user.isCreator && <Link to="/studio">{t("nav.studio")}</Link>}
+                    {user.isCreator && <Link to={`/c/${user.handle}`}>{t("studio.viewPage")}</Link>}
                     <button type="button" onClick={logout}>
                       {t("logout")}
                     </button>
@@ -102,7 +104,8 @@ export function Layout() {
               />
             </form>
             <NavLink to="/explore">{t("nav.explore")}</NavLink>
-            <NavLink to="/studio">{t("nav.studio")}</NavLink>
+            {user && <NavLink to="/page">{t("studio.navProfile")}</NavLink>}
+            {user?.isCreator && <NavLink to="/studio">{t("nav.studio")}</NavLink>}
             <NavLink to="/about">{t("nav.about")}</NavLink>
             <NavLink to="/terms">{t("footer.terms")}</NavLink>
             <NavLink to="/privacy">{t("footer.privacy")}</NavLink>
@@ -136,7 +139,8 @@ export function Layout() {
             <Link to="/register">{t("register")}</Link>
             <Link to="/login">{t("login")}</Link>
             <Link to="/library">{t("library")}</Link>
-            <Link to="/studio">{t("nav.studio")}</Link>
+            {user && <Link to="/page">{t("studio.navProfile")}</Link>}
+            {user?.isCreator && <Link to="/studio">{t("nav.studio")}</Link>}
           </div>
         </div>
       </footer>

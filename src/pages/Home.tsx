@@ -9,7 +9,7 @@ import { yuan } from "../utils";
 export function Home() {
   const { t, phrase } = useI18n();
   useTitle(t("home.title"));
-  const { ready, creators, posts, products, tiers } = useStore();
+  const { ready, user, creators, posts, products, tiers } = useStore();
   const words = t("home.words").split("|");
   const featured = creators.slice(0, 4);
   const lead = posts[0];
@@ -36,7 +36,7 @@ export function Home() {
             <Link to="/explore" className="btn btn-dark">
               {t("home.browse")}
             </Link>
-            <Link to="/register?as=creator" className="btn btn-line">
+            <Link to={user ? "/page" : "/register?as=creator"} className="btn btn-line">
               {t("home.open")}
             </Link>
           </div>

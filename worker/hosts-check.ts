@@ -20,6 +20,8 @@ expect(shopPage === "https://fanstar.dev/explore?kind=products", `play explore �
 const studio = playRedirect(new URL("https://play.fanstar.dev/studio/works"));
 expect(studio === "https://fanstar.dev/studio/works", `play studio → ${studio}`);
 
+expect(playRedirect(new URL("https://play.fanstar.dev/page")) === "https://fanstar.dev/page", "play page returns to the shop");
+
 const creator = playRedirect(new URL("https://play.fanstar.dev/c/ashi"));
 expect(creator === "https://fanstar.dev/c/ashi", `play creator → ${creator}`);
 

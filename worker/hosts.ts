@@ -9,6 +9,7 @@ const SHOP_ROOTS = new Set([
   "privacy",
   "tokushoho",
   "about",
+  "page",
   "studio",
   "library",
   "checkout",

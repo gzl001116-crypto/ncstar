@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
@@ -11,10 +11,8 @@ const KINDS = ["数字作品", "插画", "音乐", "设计", "摄影", "写作",
 function StudioGate({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   useTitle(t("studio.title"));
-  const { ready, user, creatorById, openStudio, loadDesk } = useStore();
-  const navigate = useNavigate();
+  const { ready, user, creatorById, loadDesk } = useStore();
   const location = useLocation();
-  const [openError, setOpenError] = useState("");
 
   useEffect(() => {
     if (user?.isCreator) void loadDesk();
@@ -43,31 +41,7 @@ function StudioGate({ children }: { children: ReactNode }) {
   }
 
   const creator = creatorById(user.handle);
-  if (!user.isCreator || !creator) {
-    return (
-      <div className="page">
-        <header className="page-intro">
-          <p className="kicker">{t("nav.studio")}</p>
-          <h1>{t("studio.openH")}</h1>
-        </header>
-        <div className="empty">
-          <p>{t("studio.openP")}</p>
-          {openError && <p className="error">{openError}</p>}
-          <button
-            type="button"
-            className="btn btn-dark"
-            onClick={async () => {
-              const result = await openStudio();
-              setOpenError(result ?? "");
-              if (!result) navigate("/studio");
-            }}
-          >
-            {t("home.open")}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (!user.isCreator || !creator) return <Navigate to="/page" replace />;
 
   return (
     <div className="page">
@@ -83,7 +57,6 @@ function StudioGate({ children }: { children: ReactNode }) {
         <NavLink to="/studio/works">{t("studio.navWorks")}</NavLink>
         <NavLink to="/studio/tiers">{t("studio.tiers")}</NavLink>
         <NavLink to="/studio/orders">{t("studio.orders")}</NavLink>
-        <NavLink to="/studio/profile">{t("studio.navProfile")}</NavLink>
         <NavLink to="/studio/guide">{t("studio.navGuide")}</NavLink>
       </nav>
       {children}
@@ -111,7 +84,6 @@ export function StudioHome() {
     ["/studio/works", t("studio.openWorks"), t("studio.shortcutWorks")],
     ["/studio/tiers", t("studio.openTiers"), t("studio.shortcutTiers")],
     ["/studio/orders", t("studio.openOrders"), t("studio.shortcutOrders")],
-    ["/studio/profile", t("studio.openProfile"), t("studio.shortcutProfile")],
     ["/studio/guide", t("studio.openGuide"), t("studio.shortcutGuide")],
   ] as const;
   return (
@@ -188,6 +160,73 @@ export function StudioHome() {
         </div>
       </section>
     </>
+  );
+}
+
+export function MyPage() {
+  const { t } = useI18n();
+  useTitle(t("my.page"));
+  const { ready, user, creatorById, openStudio } = useStore();
+  const navigate = useNavigate();
+  const [openError, setOpenError] = useState("");
+
+  if (!ready) {
+    return (
+      <div className="page narrow">
+        <p className="muted">{t("common.loading")}</p>
+      </div>
+    );
+  }
+  if (!user) {
+    return (
+      <div className="page narrow">
+        <div className="empty">
+          <h1>{t("studio.openH")}</h1>
+          <p>{t("studio.openP")}</p>
+          <Link to="/login?next=/page" className="btn btn-dark">
+            {t("login")}
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  const creator = creatorById(user.handle);
+  if (!user.isCreator || !creator) {
+    return (
+      <div className="page">
+        <header className="page-intro">
+          <p className="kicker">{t("studio.navProfile")}</p>
+          <h1>{t("studio.openH")}</h1>
+        </header>
+        <div className="empty">
+          <p>{t("studio.openP")}</p>
+          {openError && <p className="error">{openError}</p>}
+          <button
+            type="button"
+            className="btn btn-dark"
+            onClick={async () => {
+              const result = await openStudio();
+              setOpenError(result ?? "");
+              if (!result) navigate("/studio");
+            }}
+          >
+            {t("home.open")}
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="page">
+      <header className="page-intro">
+        <p className="kicker">{t("studio.navProfile")}</p>
+        <h1>{t("my.page")}</h1>
+        <Link to={`/c/${creator.handle}`} className="btn btn-line">
+          {t("studio.viewPage")}
+        </Link>
+      </header>
+      <StudioProfile />
+    </div>
   );
 }
 

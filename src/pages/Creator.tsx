@@ -64,7 +64,7 @@ export function CreatorPage() {
             </div>
           </div>
           {own ? (
-            <Link to="/studio" className="btn btn-line">
+            <Link to="/page" className="btn btn-line">
               {t("creator.edit")}
             </Link>
           ) : (

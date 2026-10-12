@@ -1,4 +1,4 @@
-import { Route, Routes, useLocation } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect, useLayoutEffect, type ReactNode } from "react";
 import { clientRedirect, isPlayHost, isShopHost } from "./site";
 import { Layout } from "./components/Layout";
@@ -15,7 +15,7 @@ import { NotFound } from "./pages/NotFound";
 import { PostPage } from "./pages/PostPage";
 import { ProductPage } from "./pages/ProductPage";
 import { Privacy } from "./pages/Privacy";
-import { StudioGuide, StudioHome, StudioLayout, StudioOrders, StudioPosts, StudioProfile, StudioTiers, StudioWorks } from "./pages/Studio";
+import { MyPage, StudioGuide, StudioHome, StudioLayout, StudioOrders, StudioPosts, StudioTiers, StudioWorks } from "./pages/Studio";
 import { Terms } from "./pages/Terms";
 import { Tokushoho } from "./pages/Tokushoho";
 
@@ -66,11 +66,12 @@ export function App() {
           <Route path="login" element={<Auth mode="login" />} />
           <Route path="register" element={<Auth mode="register" />} />
           <Route path="library" element={<Library />} />
+          <Route path="page" element={<MyPage />} />
           <Route path="studio" element={<StudioLayout />}>
             <Route index element={<StudioHome />} />
-            <Route path="profile" element={<StudioProfile />} />
             <Route path="posts" element={<StudioPosts />} />
             <Route path="works" element={<StudioWorks />} />
+            <Route path="profile" element={<Navigate to="/page" replace />} />
             <Route path="tiers" element={<StudioTiers />} />
             <Route path="orders" element={<StudioOrders />} />
             <Route path="guide" element={<StudioGuide />} />
