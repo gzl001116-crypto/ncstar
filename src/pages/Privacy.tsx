@@ -1,4 +1,4 @@
-import { JapaneseLegal, LegalBlocks, LegalLinks, PRIVACY_BLOCKS } from "../components/LegalCopy";
+import { LegalBlocks, LegalLinks, PRIVACY_BLOCKS } from "../components/LegalCopy";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 
@@ -18,7 +18,6 @@ export function Privacy() {
       </p>
       <LegalBlocks blocks={PRIVACY_BLOCKS} />
       <LegalLinks />
-      <JapaneseLegal title="プライバシーポリシー" note="privacy.statutory" blocks={PRIVACY_BLOCKS} />
     </article>
   );
 }

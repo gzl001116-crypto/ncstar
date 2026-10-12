@@ -205,4 +205,26 @@ if (uploaded.data.products.find((item: { id: string }) => item.id === uploadedId
 const uploadedFile = await creator.send(`/api/download?productId=${uploadedId}`, undefined, "GET");
 if (!String(uploadedFile.raw).includes("文件里的第一句")) throw new Error("uploaded file did not download");
 
+const denied = await fan.send("/api/desk", undefined, "GET");
+if (denied.status !== 403) throw new Error(`reader desk should be 403, got ${denied.status}`);
+const desk = await creator.send("/api/desk", undefined, "GET");
+if (desk.status !== 200 || !desk.data.orders.some((item: { kind: string }) => item.kind === "membership")) {
+  throw new Error(`desk missing membership ${desk.status} ${desk.raw}`);
+}
+if (desk.data.members.length < 1 || !(desk.data.net < desk.data.gross)) throw new Error(`desk totals ${desk.raw}`);
+const renamed = await creator.send("/api/tiers", {
+  id: tierId,
+  name: "读者席",
+  price: 21,
+  blurb: "解锁会员动态，并下载附件。",
+  perks: ["会员动态", "附件下载"],
+});
+if (renamed.status !== 200 || !renamed.data.tiers.some((item: { id: string; price: number }) => item.id === tierId && item.price === 21)) {
+  throw new Error(`tier update failed ${renamed.status} ${renamed.raw}`);
+}
+const tagged = await creator.send("/api/profile", { name: "阿实", bio: "刚来到 fanstar。", tags: "写作, 夜间" });
+if (tagged.status !== 200 || !tagged.data.creators.find((item: { handle: string }) => item.handle === "ashi").tags.includes("夜间")) {
+  throw new Error(`tags were not saved ${tagged.raw}`);
+}
+
 console.log("platform checks passed");

@@ -91,6 +91,33 @@ export type User = {
   playProgress: { productId: string; cursor: string; updatedAt: string }[];
 };
 
+export type DeskOrder = {
+  id: string;
+  kind: string;
+  targetId: string;
+  title: string;
+  buyer: string;
+  amount: number;
+  fee: number;
+  createdAt: string;
+};
+
+export type DeskMember = {
+  name: string;
+  handle: string;
+  tier: string;
+  price: number;
+  expiresAt: string;
+};
+
+export type Desk = {
+  orders: DeskOrder[];
+  members: DeskMember[];
+  gross: number;
+  fee: number;
+  net: number;
+};
+
 export type Catalog = {
   creators: Creator[];
   posts: Post[];

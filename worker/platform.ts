@@ -794,10 +794,97 @@ function profile(sql: Sql, request: Request, body: Record<string, unknown>) {
       sets.push("category = ?");
       params.push(category);
     }
+    if ("tags" in body) {
+      const raw = typeof body.tags === "string" ? body.tags.split(/[,，]/) : Array.isArray(body.tags) ? body.tags : [];
+      const tags = raw.map((item) => textOf(item, 20)).filter(Boolean).slice(0, 6);
+      sets.push("tags = ?");
+      params.push(JSON.stringify(tags));
+    }
     params.push(String(mine.handle));
     sql.run(`UPDATE creators SET ${sets.join(", ")} WHERE id = ?`, ...params);
   }
   return withState(sql, viewer, "toast.profile");
+}
+
+function updateTier(sql: Sql, request: Request, body: Record<string, unknown>) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
+  const tier = sql.get("SELECT * FROM tiers WHERE id = ?", textOf(body.id, 80));
+  if (!tier || String(tier.creator_id) !== String(mine.handle)) return fail("err.tier.missing", 404);
+  const name = textOf(body.name, 40);
+  const blurb = textOf(body.blurb, 400);
+  const price = Number(body.price);
+  const perks = (Array.isArray(body.perks) ? body.perks : [])
+    .map((item) => textOf(item, 40))
+    .filter(Boolean)
+    .slice(0, 8);
+  if (name.length < 2) return fail("err.title");
+  if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
+  sql.run(
+    "UPDATE tiers SET name = ?, price = ?, blurb = ?, perks = ? WHERE id = ?",
+    name,
+    Math.round(price * 100) / 100,
+    blurb,
+    JSON.stringify(perks),
+    String(tier.id),
+  );
+  return withState(sql, viewer, "toast.tier");
+}
+
+function desk(sql: Sql, request: Request) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT handle, is_creator FROM users WHERE id = ?", viewer);
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio", 403);
+  const handle = String(mine.handle);
+  const orders = sql.all(
+    `SELECT orders.id, orders.kind, orders.target_id, orders.amount, orders.fee, orders.created_at, users.name AS buyer,
+            CASE WHEN orders.kind = 'product' THEN products.title ELSE tiers.name END AS title
+     FROM orders
+     JOIN users ON users.id = orders.user_id
+     LEFT JOIN products ON orders.kind = 'product' AND products.id = orders.target_id
+     LEFT JOIN tiers ON orders.kind = 'membership' AND tiers.id = orders.target_id
+     WHERE products.creator_id = ? OR tiers.creator_id = ?
+     ORDER BY orders.created_at DESC
+     LIMIT 40`,
+    handle,
+    handle,
+  );
+  const members = sql.all(
+    `SELECT users.name, users.handle, tiers.name AS tier, memberships.price, memberships.expires_at
+     FROM memberships
+     JOIN users ON users.id = memberships.user_id
+     JOIN tiers ON tiers.id = memberships.tier_id
+     WHERE memberships.creator_id = ?
+     ORDER BY memberships.expires_at DESC`,
+    handle,
+  );
+  const gross = orders.reduce((sum, row) => sum + Number(row.amount), 0);
+  const fee = orders.reduce((sum, row) => sum + Number(row.fee), 0);
+  return json({
+    orders: orders.map((row) => ({
+      id: String(row.id),
+      kind: String(row.kind),
+      targetId: String(row.target_id),
+      title: String(row.title ?? ""),
+      buyer: String(row.buyer),
+      amount: Number(row.amount),
+      fee: Number(row.fee),
+      createdAt: String(row.created_at),
+    })),
+    members: members.map((row) => ({
+      name: String(row.name),
+      handle: String(row.handle),
+      tier: String(row.tier),
+      price: Number(row.price),
+      expiresAt: String(row.expires_at),
+    })),
+    gross: Math.round(gross * 100) / 100,
+    fee: Math.round(fee * 100) / 100,
+    net: Math.round((gross - fee) * 100) / 100,
+  });
 }
 
 function studio(sql: Sql, request: Request) {
@@ -922,6 +1009,7 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (request.method === "GET" && url.pathname === "/api/download") return download(sql, request);
   if (request.method === "GET" && url.pathname === "/api/media") return media(sql, request);
   if (request.method === "GET" && url.pathname === "/api/play") return playRead(sql, request);
+  if (request.method === "GET" && url.pathname === "/api/desk") return desk(sql, request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (request.method !== "POST") return fail("err.method", 405);
   if (url.pathname === "/api/products" && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
@@ -940,6 +1028,7 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (url.pathname === "/api/products") return publishProduct(sql, request, body);
   if (url.pathname === "/api/play") return playWrite(sql, request, body);
   if (url.pathname === "/api/profile") return profile(sql, request, body);
+  if (url.pathname === "/api/tiers") return updateTier(sql, request, body);
   if (url.pathname === "/api/studio") return studio(sql, request);
   return fail("err.route", 404);
 }

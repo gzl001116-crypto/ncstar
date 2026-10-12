@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { isMessage, useI18n } from "./i18n";
-import type { Catalog, Category, Creator, Post, Product, Tier, User } from "./types";
+import type { Catalog, Category, Creator, Desk, Post, Product, Tier, User } from "./types";
 
 type Toast = { id: number; text: string };
 
@@ -50,8 +50,11 @@ type StoreValue = {
   }) => Promise<string | null>;
   togglePlayList: (productId: string) => Promise<void>;
   savePlayProgress: (productId: string, cursor: string) => Promise<void>;
-  updateProfile: (input: { name: string; bio: string; location?: string; category?: Category }) => Promise<string | null>;
+  updateProfile: (input: { name: string; bio: string; location?: string; category?: Category; tags?: string }) => Promise<string | null>;
+  updateTier: (input: { id: string; name: string; price: number; blurb: string; perks: string[] }) => Promise<string | null>;
   openStudio: () => Promise<string | null>;
+  desk: Desk | null;
+  loadDesk: () => Promise<string | null>;
   creatorById: (id: string) => Creator | undefined;
   tierById: (id: string) => Tier | undefined;
   productById: (id: string) => Product | undefined;
@@ -86,6 +89,7 @@ async function call(path: string, body?: unknown) {
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   const [catalog, setCatalog] = useState<Catalog>(empty);
+  const [desk, setDesk] = useState<Desk | null>(null);
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const say = (code?: string, name?: string, legacy?: string) => {
@@ -136,6 +140,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // Language is chosen once, before the first paint of this provider.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadDesk = async () => {
+    try {
+      const response = await fetch("/api/desk", { credentials: "same-origin" });
+      const data = (await response.json().catch(() => ({}))) as Desk & { code?: string; error?: string };
+      if (!response.ok) return say(data.code, undefined, data.error);
+      setDesk({
+        orders: data.orders ?? [],
+        members: data.members ?? [],
+        gross: data.gross ?? 0,
+        fee: data.fee ?? 0,
+        net: data.net ?? 0,
+      });
+      return null;
+    } catch {
+      return t("err.network");
+    }
+  };
 
   const mutate = async (path: string, body?: unknown) => {
     try {
@@ -221,7 +243,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     savePlayProgress: (productId, cursor) => mutate("/api/play", { productId, op: "progress", cursor }).then(() => undefined),
     updateProfile: (input) => mutate("/api/profile", input),
+    updateTier: async (input) => {
+      const error = await mutate("/api/tiers", input);
+      if (!error) await loadDesk();
+      return error;
+    },
     openStudio: () => mutate("/api/studio", {}),
+    desk,
+    loadDesk,
     creatorById,
     tierById,
     productById,

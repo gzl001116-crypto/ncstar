@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import { useI18n } from "../i18n";
-import { ja } from "../locales/ja";
 import type { MessageKey } from "../locales/zh";
 
 export const TERMS_BLOCKS = [
@@ -39,23 +38,6 @@ export function LegalBlocks({ blocks }: { blocks: Blocks }) {
         <section key={heading}>
           <h2>{t(heading)}</h2>
           <p>{t(body)}</p>
-        </section>
-      ))}
-    </>
-  );
-}
-
-export function JapaneseLegal({ title, note, blocks }: { title: string; note: MessageKey; blocks: Blocks }) {
-  const { lang } = useI18n();
-  if (lang === "ja") return null;
-  return (
-    <>
-      <h2>{title}</h2>
-      <p>{ja[note]}</p>
-      {blocks.map(([heading, body]) => (
-        <section key={`ja-${heading}`}>
-          <h3>{ja[heading]}</h3>
-          <p>{ja[body]}</p>
         </section>
       ))}
     </>

@@ -1,4 +1,4 @@
-import { LegalBlocks, JapaneseLegal, LegalLinks, TERMS_BLOCKS } from "../components/LegalCopy";
+import { LegalBlocks, LegalLinks, TERMS_BLOCKS } from "../components/LegalCopy";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 
@@ -18,7 +18,6 @@ export function Terms() {
       </p>
       <LegalBlocks blocks={TERMS_BLOCKS} />
       <LegalLinks />
-      <JapaneseLegal title="利用規約" note="terms.statutory" blocks={TERMS_BLOCKS} />
     </article>
   );
 }

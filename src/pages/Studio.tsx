@@ -1,18 +1,24 @@
-import { FormEvent, useState, type ReactNode } from "react";
+import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { CATEGORIES, type Category } from "../types";
-import { yuan } from "../utils";
+import { formatDate, yuan } from "../utils";
+
+const KINDS = ["数字作品", "插画", "音乐", "设计", "摄影", "写作", "图案"] as const;
 
 function StudioGate({ children }: { children: ReactNode }) {
   const { t } = useI18n();
   useTitle(t("studio.title"));
-  const { ready, user, creatorById, openStudio } = useStore();
+  const { ready, user, creatorById, openStudio, loadDesk } = useStore();
   const navigate = useNavigate();
   const location = useLocation();
   const [openError, setOpenError] = useState("");
+
+  useEffect(() => {
+    if (user?.isCreator) void loadDesk();
+  }, [user?.isCreator, user?.handle]);
 
   if (!ready) {
     return (
@@ -73,9 +79,12 @@ function StudioGate({ children }: { children: ReactNode }) {
         <NavLink to="/studio" end>
           {t("studio.navHome")}
         </NavLink>
-        <NavLink to="/studio/profile">{t("studio.navProfile")}</NavLink>
         <NavLink to="/studio/posts">{t("studio.navPosts")}</NavLink>
         <NavLink to="/studio/works">{t("studio.navWorks")}</NavLink>
+        <NavLink to="/studio/tiers">{t("studio.tiers")}</NavLink>
+        <NavLink to="/studio/orders">{t("studio.orders")}</NavLink>
+        <NavLink to="/studio/profile">{t("studio.navProfile")}</NavLink>
+        <NavLink to="/studio/guide">{t("studio.navGuide")}</NavLink>
       </nav>
       {children}
     </div>
@@ -92,14 +101,22 @@ export function StudioLayout() {
 
 export function StudioHome() {
   const { t, phrase, locale } = useI18n();
-  const { user, posts, products, tiers, creatorById, followerCount, supporterCount } = useStore();
+  const { user, posts, products, creatorById, followerCount, supporterCount, desk } = useStore();
   const creator = creatorById(user?.handle ?? "");
   if (!user || !creator) return null;
   const minePosts = posts.filter((post) => post.creatorId === user.handle);
   const mineProducts = products.filter((product) => product.creatorId === user.handle);
-  const plans = tiers.filter((tier) => tier.creatorId === user.handle);
+  const shortcuts = [
+    ["/studio/posts", t("studio.openPosts"), t("studio.shortcutPosts")],
+    ["/studio/works", t("studio.openWorks"), t("studio.shortcutWorks")],
+    ["/studio/tiers", t("studio.openTiers"), t("studio.shortcutTiers")],
+    ["/studio/orders", t("studio.openOrders"), t("studio.shortcutOrders")],
+    ["/studio/profile", t("studio.openProfile"), t("studio.shortcutProfile")],
+    ["/studio/guide", t("studio.openGuide"), t("studio.shortcutGuide")],
+  ] as const;
   return (
     <>
+      <p className="studio-lead">{t("studio.lead")}</p>
       <div className="studio-stats">
         <div>
           <strong>{followerCount(creator).toLocaleString(locale)}</strong>
@@ -110,29 +127,63 @@ export function StudioHome() {
           <span>{t("common.supporters")}</span>
         </div>
         <div>
-          <strong>{minePosts.length}</strong>
+          <strong>{minePosts.length.toLocaleString(locale)}</strong>
           <span>{t("common.posts")}</span>
         </div>
         <div>
-          <strong>{yuan(mineProducts.reduce((sum, item) => sum + item.price, 0))}</strong>
-          <span>{t("studio.priceSum")}</span>
+          <strong>{mineProducts.length.toLocaleString(locale)}</strong>
+          <span>{t("common.products")}</span>
+        </div>
+        <div>
+          <strong>{desk ? yuan(desk.net) : "—"}</strong>
+          <span>{t("studio.net")}</span>
         </div>
         <Link to={`/c/${creator.handle}`} className="btn btn-line">
           {t("studio.viewPage")}
         </Link>
       </div>
+      <p className="desk-note">{t("studio.feeNote")}</p>
+      <div className="studio-shortcuts">
+        {shortcuts.map(([to, title, text]) => (
+          <Link key={to} to={to}>
+            <strong>{title}</strong>
+            <span>{text}</span>
+          </Link>
+        ))}
+      </div>
       <section className="section">
-        <h2>{t("studio.tiers")}</h2>
-        <div className="tier-grid">
-          {plans.map((tier) => (
-            <article key={tier.id} className="ticket">
-              <h3>{phrase(tier.name)}</h3>
-              <div className="ticket-price">
-                <strong>{yuan(tier.price)}</strong>
-                <span>{t("common.per30")}</span>
+        <div className="section-head">
+          <h2>{t("studio.recentPosts")}</h2>
+          <Link to="/studio/posts">{t("studio.navPosts")}</Link>
+        </div>
+        <div className="stack">
+          {minePosts.length === 0 && <div className="empty">{t("studio.emptyPosts")}</div>}
+          {minePosts.slice(0, 3).map((post) => (
+            <Link key={post.id} to={`/c/${user.handle}/posts/${post.id}`} className="line">
+              <div>
+                <strong>{post.title}</strong>
+                <p className="muted">{formatDate(post.createdAt)}</p>
               </div>
-              <p>{phrase(tier.blurb)}</p>
-            </article>
+            </Link>
+          ))}
+        </div>
+      </section>
+      <section className="section">
+        <div className="section-head">
+          <h2>{t("studio.recentWorks")}</h2>
+          <Link to="/studio/works">{t("studio.navWorks")}</Link>
+        </div>
+        <div className="stack">
+          {mineProducts.length === 0 && <div className="empty">{t("studio.emptyWorks")}</div>}
+          {mineProducts.slice(0, 3).map((product) => (
+            <Link key={product.id} to={`/c/${user.handle}/shop/${product.id}`} className="line">
+              <div>
+                <strong>{product.title}</strong>
+                <p className="muted">
+                  {phrase(product.kind)} · {yuan(product.price)}
+                </p>
+              </div>
+            </Link>
           ))}
         </div>
       </section>
@@ -154,12 +205,18 @@ export function StudioProfile() {
       bio: String(data.get("bio") ?? ""),
       location: String(data.get("location") ?? ""),
       category: String(data.get("category") ?? "") as Category,
+      tags: String(data.get("tags") ?? ""),
     });
     setError(result ?? "");
   };
   return (
     <form className="panel studio-form" onSubmit={onProfile}>
       <h2>{t("studio.profile")}</h2>
+      <p className="muted">{t("studio.since", { date: creator.since })}</p>
+      <label>
+        {t("studio.handle")}
+        <input className="locked" readOnly value={`fanstar.dev/c/${creator.handle}`} />
+      </label>
       <label>
         {t("auth.name")}
         <input name="name" defaultValue={creator.name} />
@@ -181,6 +238,10 @@ export function StudioProfile() {
       <label>
         {t("studio.bio")}
         <textarea name="bio" defaultValue={creator.bio} rows={4} />
+      </label>
+      <label>
+        {t("studio.tags")}
+        <input name="tags" defaultValue={creator.tags.join("，")} placeholder={t("studio.tagsPh")} />
       </label>
       {error && <p className="error">{error}</p>}
       <button className="btn btn-dark" type="submit">
@@ -253,7 +314,9 @@ export function StudioPosts() {
             <Link key={post.id} to={`/c/${user.handle}/posts/${post.id}`} className="line">
               <div>
                 <strong>{post.title}</strong>
-                <p className="muted">{t("studio.postMeta", { vis: rank(post.minRank) })}</p>
+                <p className="muted">
+                  {t("studio.postMeta", { vis: rank(post.minRank) })} · {formatDate(post.createdAt)}
+                </p>
               </div>
             </Link>
           ))}
@@ -265,7 +328,7 @@ export function StudioPosts() {
 
 export function StudioWorks() {
   const { t, phrase } = useI18n();
-  const { user, products, publishProduct } = useStore();
+  const { user, products, publishProduct, desk } = useStore();
   const [error, setError] = useState("");
   const [filename, setFilename] = useState("");
   if (!user) return null;
@@ -307,7 +370,13 @@ export function StudioWorks() {
         </label>
         <label>
           {t("studio.kind")}
-          <input name="kind" placeholder={t("studio.kindPh")} />
+          <select name="kind" defaultValue="数字作品">
+            {KINDS.map((item) => (
+              <option key={item} value={item}>
+                {phrase(item)}
+              </option>
+            ))}
+          </select>
         </label>
         <label>
           {t("studio.price")}
@@ -340,18 +409,160 @@ export function StudioWorks() {
         <h2>{t("studio.listed")}</h2>
         <div className="stack">
           {mineProducts.length === 0 && <div className="empty">{t("studio.emptyWorks")}</div>}
-          {mineProducts.map((product) => (
-            <Link key={product.id} to={`/c/${user.handle}/shop/${product.id}`} className="line">
-              <div>
-                <strong>{product.title}</strong>
-                <p className="muted">
-                  {phrase(product.kind)} · {yuan(product.price)}
-                </p>
-              </div>
-            </Link>
-          ))}
+          {mineProducts.map((product) => {
+            const sold = desk?.orders.filter((order) => order.kind === "product" && order.targetId === product.id).length ?? 0;
+            return (
+              <Link key={product.id} to={`/c/${user.handle}/shop/${product.id}`} className="line">
+                <div>
+                  <strong>{product.title}</strong>
+                  <p className="muted">
+                    {phrase(product.kind)} · {yuan(product.price)} · {t("studio.sold", { n: sold })}
+                  </p>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
     </>
+  );
+}
+
+export function StudioTiers() {
+  const { t, phrase } = useI18n();
+  const { user, tiers, updateTier } = useStore();
+  const [error, setError] = useState("");
+  if (!user) return null;
+  const plans = tiers.filter((tier) => tier.creatorId === user.handle);
+  const onSave = async (event: FormEvent<HTMLFormElement>, id: string) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const result = await updateTier({
+      id,
+      name: String(data.get("name") ?? ""),
+      price: Number(data.get("price") ?? 0),
+      blurb: String(data.get("blurb") ?? ""),
+      perks: String(data.get("perks") ?? "")
+        .split(/[,，]/)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    });
+    setError(result ?? "");
+  };
+  return (
+    <>
+      <p className="desk-note">{t("studio.tierNote")}</p>
+      {plans.map((tier) => (
+        <form className="panel studio-form" key={`${tier.id}-${tier.name}-${tier.price}`} onSubmit={(event) => onSave(event, tier.id)}>
+          <h2>{t("studio.tierRank", { n: tier.rank })}</h2>
+          <label>
+            {t("auth.name")}
+            <input name="name" defaultValue={tier.name} required />
+          </label>
+          <label>
+            {t("studio.tierPrice")}
+            <input name="price" type="number" min="1" max="9999" step="1" defaultValue={tier.price} required />
+          </label>
+          <label>
+            {t("studio.tierBlurb")}
+            <textarea name="blurb" rows={3} defaultValue={tier.blurb} />
+          </label>
+          <label>
+            {t("studio.tierPerks")}
+            <input name="perks" defaultValue={tier.perks.join("，")} placeholder={t("studio.tierPerksPh")} />
+          </label>
+          <p className="muted">
+            {phrase(tier.name)} · {yuan(tier.price)}
+            {t("common.per30")}
+          </p>
+          {error && <p className="error">{error}</p>}
+          <button className="btn btn-dark" type="submit">
+            {t("studio.tierSave")}
+          </button>
+        </form>
+      ))}
+    </>
+  );
+}
+
+export function StudioOrders() {
+  const { t, phrase } = useI18n();
+  const { desk } = useStore();
+  const orders = desk?.orders ?? [];
+  const members = desk?.members ?? [];
+  return (
+    <>
+      <div className="studio-stats">
+        <div>
+          <strong>{orders.length}</strong>
+          <span>{t("studio.orders")}</span>
+        </div>
+        <div>
+          <strong>{yuan(desk?.gross ?? 0)}</strong>
+          <span>{t("studio.gross")}</span>
+        </div>
+        <div>
+          <strong>{yuan(desk?.fee ?? 0)}</strong>
+          <span>{t("studio.fee")}</span>
+        </div>
+        <div>
+          <strong>{yuan(desk?.net ?? 0)}</strong>
+          <span>{t("studio.net")}</span>
+        </div>
+      </div>
+      <p className="desk-note">{t("studio.feeNote")}</p>
+      <section className="section">
+        <h2>{t("studio.orders")}</h2>
+        <div className="order-table">
+          {orders.length === 0 && <div className="empty">{t("studio.emptyOrders")}</div>}
+          {orders.map((order) => (
+            <article key={order.id} className="order-row">
+              <span className="pill">{order.kind === "membership" ? t("studio.orderMember") : t("studio.orderProduct")}</span>
+              <div>
+                <strong>{phrase(order.title)}</strong>
+                <p className="muted">{t("studio.buyer", { name: order.buyer })}</p>
+              </div>
+              <span>{yuan(order.amount)}</span>
+              <span className="muted">{formatDate(order.createdAt)}</span>
+            </article>
+          ))}
+        </div>
+      </section>
+      <section className="section">
+        <h2>{t("studio.members")}</h2>
+        <div className="order-table">
+          {members.length === 0 && <div className="empty">{t("studio.emptyMembers")}</div>}
+          {members.map((member) => {
+            const active = new Date(member.expiresAt).getTime() > Date.now();
+            return (
+              <article key={`${member.handle}-${member.expiresAt}`} className="order-row">
+                <span className="pill">{active ? t("studio.active") : t("studio.ended")}</span>
+                <div>
+                  <strong>{member.name}</strong>
+                  <p className="muted">@{member.handle}</p>
+                </div>
+                <span>{phrase(member.tier)}</span>
+                <span className="muted">{t("studio.expires", { date: formatDate(member.expiresAt) })}</span>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+    </>
+  );
+}
+
+export function StudioGuide() {
+  const { t } = useI18n();
+  return (
+    <article className="panel prose-page studio-form">
+      <h2>{t("studio.guideH")}</h2>
+      <p>{t("studio.guideP1")}</p>
+      <p>{t("studio.guideP2")}</p>
+      <p>{t("studio.guideP3")}</p>
+      <p>{t("studio.guideP4")}</p>
+      <p>{t("studio.guideP5")}</p>
+      <p>{t("studio.guideP6")}</p>
+    </article>
   );
 }
