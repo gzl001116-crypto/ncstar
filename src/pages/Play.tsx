@@ -6,7 +6,6 @@ import { isMessage, useI18n } from "../i18n";
 import { isAbsolute, loginHref, playPath, shopHref } from "../site";
 import { useStore } from "../store";
 import type { Product } from "../types";
-import { saveDownload } from "../utils";
 
 const FORMATS = ["comic", "voice", "video", "novel", "game"] as const;
 
@@ -17,6 +16,9 @@ type PlayFile = {
   format: string;
   title: string;
   creatorId: string;
+  preview?: boolean;
+  previewLimit?: number;
+  note?: string;
   pages?: PlayPage[];
   tracks?: PlayTrack[];
   video?: string;
@@ -230,15 +232,11 @@ export function PlayViewer() {
   const saved = Boolean(user?.playList.includes(file.id));
   const cursor = user?.playProgress.find((item) => item.productId === file.id)?.cursor ?? "0";
   const remember = (value: string) => savePlayProgress(file.id, value);
-
-  const download = async () => {
-    const response = await fetch(`/api/download?productId=${encodeURIComponent(file.id)}`, { credentials: "same-origin" });
-    if (!response.ok) return;
-    await saveDownload(response, file.title);
-  };
+  const limit = file.preview ? file.previewLimit ?? 0 : 0;
+  const block = (event: { preventDefault: () => void }) => event.preventDefault();
 
   return (
-    <div className="page play-view">
+    <div className="page play-view play-lock" onContextMenu={block} onCopy={block} onCut={block} onDragStart={block}>
       <div className="play-bar">
         <Link to={playPath()} className="back">
           ← play.fanstar
@@ -248,19 +246,19 @@ export function PlayViewer() {
           <h1>{file.title}</h1>
           {creator && <p className="muted">{creator.name}</p>}
         </div>
-        <div className="hero-actions">
-          <button type="button" className={saved ? "btn btn-soft" : "btn btn-line"} onClick={() => togglePlayList(file.id)}>
-            {saved ? t("play.unsave") : t("play.save")}
-          </button>
-          <button type="button" className="btn btn-line" onClick={download}>
-            {t("play.download")}
-          </button>
-        </div>
+        {!file.preview && (
+          <div className="hero-actions">
+            <button type="button" className={saved ? "btn btn-soft" : "btn btn-line"} onClick={() => togglePlayList(file.id)}>
+              {saved ? t("play.unsave") : t("play.save")}
+            </button>
+          </div>
+        )}
       </div>
+      {file.preview && <p className="banner-note">{t("play.previewNote")}</p>}
       {file.format === "comic" && <ComicReader pages={file.pages ?? []} cursor={cursor} onCursor={remember} />}
-      {file.format === "voice" && <VoiceReader tracks={file.tracks ?? []} cursor={cursor} onCursor={remember} />}
-      {file.format === "video" && <VideoReader src={file.video ?? ""} cursor={cursor} onCursor={remember} />}
-      {file.format === "novel" && <NovelReader text={file.novel ?? ""} cursor={cursor} onCursor={remember} />}
+      {file.format === "voice" && <VoiceReader tracks={file.tracks ?? []} cursor={cursor} onCursor={remember} limit={limit} />}
+      {file.format === "video" && <VideoReader src={file.video ?? ""} note={file.note} cursor={cursor} onCursor={remember} limit={limit} />}
+      {file.format === "novel" && <NovelReader text={file.novel ?? file.note ?? ""} cursor={cursor} onCursor={remember} />}
       {file.format === "game" && <GameReader html={file.html ?? ""} title={file.title} />}
     </div>
   );
@@ -307,7 +305,7 @@ function ComicReader({ pages, cursor, onCursor }: { pages: PlayPage[]; cursor: s
       <div className={`reader-pages ${spread ? "spread" : ""}`}>
         {shown.map((page, offset) => (
           <article key={`${index}-${offset}`} className="reader-page">
-            {page.image && <img src={page.image} alt="" />}
+            {page.image && <img src={page.image} alt="" draggable={false} />}
             {page.text.split("\n").map((line, lineIndex) => (
               <p key={lineIndex}>{line}</p>
             ))}
@@ -349,10 +347,11 @@ function ComicReader({ pages, cursor, onCursor }: { pages: PlayPage[]; cursor: s
   );
 }
 
-function VoiceReader({ tracks, cursor, onCursor }: { tracks: PlayTrack[]; cursor: string; onCursor: (value: string) => void }) {
+function VoiceReader({ tracks, cursor, onCursor, limit }: { tracks: PlayTrack[]; cursor: string; onCursor: (value: string) => void; limit: number }) {
   const { t } = useI18n();
   const [index, setIndex] = useState(() => clamp(Number(cursor) || 0, 0, Math.max(tracks.length - 1, 0)));
   const [playing, setPlaying] = useState(false);
+  const [capped, setCapped] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const track = tracks[index];
   const saveRef = useRef(onCursor);
@@ -402,9 +401,24 @@ function VoiceReader({ tracks, cursor, onCursor }: { tracks: PlayTrack[]; cursor
             ref={audioRef}
             src={track.src}
             controls
+            controlsList="nodownload"
+            onContextMenu={(event) => event.preventDefault()}
             onPlay={() => setPlaying(true)}
             onPause={() => setPlaying(false)}
             onEnded={() => setIndex((current) => Math.min(tracks.length - 1, current + 1))}
+            onTimeUpdate={(event) => {
+              if (limit > 0 && event.currentTarget.currentTime >= limit) {
+                event.currentTarget.pause();
+                event.currentTarget.currentTime = Math.max(0, limit - 0.05);
+                setCapped(true);
+              }
+            }}
+            onSeeking={(event) => {
+              if (limit > 0 && event.currentTarget.currentTime > limit) {
+                event.currentTarget.currentTime = Math.max(0, limit - 0.05);
+                setCapped(true);
+              }
+            }}
           />
         ) : (
           <>
@@ -415,6 +429,7 @@ function VoiceReader({ tracks, cursor, onCursor }: { tracks: PlayTrack[]; cursor
             {track.text && <p className="voice-script">{track.text}</p>}
           </>
         )}
+        {capped && <p className="banner-note">{t("play.previewEnd")}</p>}
       </div>
       <ol className="voice-list">
         {tracks.map((item, itemIndex) => (
@@ -429,24 +444,46 @@ function VoiceReader({ tracks, cursor, onCursor }: { tracks: PlayTrack[]; cursor
   );
 }
 
-function VideoReader({ src, cursor, onCursor }: { src: string; cursor: string; onCursor: (value: string) => void }) {
+function VideoReader({ src, note, cursor, onCursor, limit }: { src: string; note?: string; cursor: string; onCursor: (value: string) => void; limit: number }) {
   const { t } = useI18n();
-  if (!src) return <p className="empty">{t("play.videoMissing")}</p>;
+  const [capped, setCapped] = useState(false);
+  if (!src) {
+    if (note) return <div className="novel-scroll"><p>{note}</p></div>;
+    return <p className="empty">{t("play.videoMissing")}</p>;
+  }
   return (
-    <video
-      className="play-video"
-      src={src}
-      controls
-      playsInline
-      onLoadedMetadata={(event) => {
-        const next = Number(cursor);
-        if (next > 0) event.currentTarget.currentTime = next;
-      }}
-      onTimeUpdate={(event) => {
-        const now = Math.floor(event.currentTarget.currentTime);
-        if (now > 0 && now % 5 === 0) onCursor(String(now));
-      }}
-    />
+    <>
+      <video
+        className="play-video"
+        src={src}
+        controls
+        controlsList="nodownload"
+        playsInline
+        disablePictureInPicture
+        onContextMenu={(event) => event.preventDefault()}
+        onLoadedMetadata={(event) => {
+          const next = Number(cursor);
+          if (next > 0 && (limit <= 0 || next < limit)) event.currentTarget.currentTime = next;
+        }}
+        onTimeUpdate={(event) => {
+          if (limit > 0 && event.currentTarget.currentTime >= limit) {
+            event.currentTarget.pause();
+            event.currentTarget.currentTime = Math.max(0, limit - 0.05);
+            setCapped(true);
+            return;
+          }
+          const now = Math.floor(event.currentTarget.currentTime);
+          if (now > 0 && now % 5 === 0) onCursor(String(now));
+        }}
+        onSeeking={(event) => {
+          if (limit > 0 && event.currentTarget.currentTime > limit) {
+            event.currentTarget.currentTime = Math.max(0, limit - 0.05);
+            setCapped(true);
+          }
+        }}
+      />
+      {capped && <p className="banner-note">{t("play.previewEnd")}</p>}
+    </>
   );
 }
 
@@ -492,7 +529,8 @@ function NovelReader({ text, cursor, onCursor }: { text: string; cursor: string;
 }
 
 function GameReader({ html, title }: { html: string; title: string }) {
-  return <iframe className="play-frame" sandbox="allow-scripts" srcDoc={html} title={title} />;
+  const guard = `<script>document.addEventListener("contextmenu",function(e){e.preventDefault()});document.addEventListener("copy",function(e){e.preventDefault()});document.addEventListener("cut",function(e){e.preventDefault()});</script><style>html,body{-webkit-user-select:none;user-select:none}</style>`;
+  return <iframe className="play-frame" sandbox="allow-scripts" srcDoc={`${guard}${html}`} title={title} />;
 }
 
 function clamp(value: number, min: number, max: number) {

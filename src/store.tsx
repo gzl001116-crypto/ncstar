@@ -44,6 +44,12 @@ type StoreValue = {
     kind: string;
     includes: string[];
     tags?: string;
+    play?: boolean;
+    download?: boolean;
+    preview?: boolean;
+    previewMode?: string;
+    previewLimit?: number;
+    previewBody?: string;
     file?: File;
     fileBody?: string;
     playFormat?: string;
@@ -111,7 +117,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setCatalog({
       creators: (data.creators ?? []).map((creator) => ({ ...creator, avatarAt: creator.avatarAt ?? "" })),
       posts: data.posts ?? [],
-      products: (data.products ?? []).map((product) => ({ ...product, tags: product.tags ?? [] })),
+      products: (data.products ?? []).map((product) => ({
+        ...product,
+        tags: product.tags ?? [],
+        allowPlay: product.allowPlay ?? Boolean(product.playFormat),
+        allowDownload: product.allowDownload ?? true,
+        allowPreview: product.allowPreview ?? false,
+        previewMode: product.previewMode === "content" || product.previewMode === "progress" ? product.previewMode : "",
+        previewLimit: product.previewLimit ?? 0,
+      })),
       tiers: data.tiers ?? [],
       comments: data.comments ?? [],
       user: data.user
@@ -232,6 +246,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       form.set("kind", input.kind);
       form.set("includes", input.includes.join(","));
       form.set("tags", input.tags ?? "");
+      if (typeof input.play === "boolean") {
+        form.set("play", input.play ? "1" : "0");
+        form.set("download", input.download ? "1" : "0");
+        form.set("preview", input.preview ? "1" : "0");
+        form.set("previewMode", input.previewMode ?? "");
+        form.set("previewLimit", String(input.previewLimit ?? ""));
+        form.set("previewBody", input.previewBody ?? "");
+      }
       form.set("file", input.file);
       try {
         const response = await fetch("/api/products", { method: "POST", credentials: "same-origin", body: form });

@@ -132,6 +132,12 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE products ADD COLUMN file_name TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN file_type TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE products ADD COLUMN allow_play INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE products ADD COLUMN allow_download INTEGER NOT NULL DEFAULT 1",
+    "ALTER TABLE products ADD COLUMN allow_preview INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN preview_mode TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN preview_limit INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN preview_body TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar_type TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE users ADD COLUMN avatar_at TEXT NOT NULL DEFAULT ''",
@@ -254,6 +260,95 @@ function inferPlay(productId: string, filename: string, mime: string, bytes: Uin
     return { format: "comic", body: JSON.stringify({ pages: [{ text: "", image: media }] }) };
   }
   return { format: "", body: "" };
+}
+
+type ChosenAccess = {
+  allowPlay: number;
+  allowDownload: number;
+  allowPreview: number;
+  previewMode: string;
+  previewLimit: number;
+  previewBody: string;
+};
+
+function fieldOf(source: FormData | Record<string, unknown>, key: string) {
+  if (source instanceof FormData) {
+    const value = source.get(key);
+    return value === null ? undefined : value;
+  }
+  return key in source ? source[key] : undefined;
+}
+
+function flagOn(value: unknown) {
+  return value === true || value === 1 || value === "1" || value === "on" || value === "true";
+}
+
+function chosenAccess(source: FormData | Record<string, unknown>): ChosenAccess | { code: string } | undefined {
+  const playField = fieldOf(source, "play");
+  const downloadField = fieldOf(source, "download");
+  if (playField === undefined && downloadField === undefined) return undefined;
+  const allowPlay = flagOn(playField);
+  const allowDownload = flagOn(downloadField);
+  if (!allowPlay && !allowDownload) return { code: "err.open" };
+  const allowPreview = flagOn(fieldOf(source, "preview"));
+  if (allowPreview && !allowPlay) return { code: "err.preview.play" };
+  if (!allowPreview) {
+    return {
+      allowPlay: allowPlay ? 1 : 0,
+      allowDownload: allowDownload ? 1 : 0,
+      allowPreview: 0,
+      previewMode: "",
+      previewLimit: 0,
+      previewBody: "",
+    };
+  }
+  const mode = textOf(fieldOf(source, "previewMode"), 20);
+  if (mode !== "content" && mode !== "progress") return { code: "err.preview" };
+  if (mode === "content") {
+    const previewBody = textOf(fieldOf(source, "previewBody"), 4000);
+    if (Array.from(previewBody).length < 1) return { code: "err.preview.body" };
+    return { allowPlay: 1, allowDownload: allowDownload ? 1 : 0, allowPreview: 1, previewMode: "content", previewLimit: 0, previewBody };
+  }
+  const limit = Number(fieldOf(source, "previewLimit"));
+  if (!Number.isInteger(limit) || limit < 1 || limit > 20000) return { code: "err.preview.limit" };
+  return { allowPlay: 1, allowDownload: allowDownload ? 1 : 0, allowPreview: 1, previewMode: "progress", previewLimit: limit, previewBody: "" };
+}
+
+function legacyAccess(play: boolean): ChosenAccess {
+  return { allowPlay: play ? 1 : 0, allowDownload: 1, allowPreview: 0, previewMode: "", previewLimit: 0, previewBody: "" };
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    if (char === "&") return "&amp;";
+    if (char === "<") return "&lt;";
+    if (char === ">") return "&gt;";
+    if (char === '"') return "&quot;";
+    return "&#39;";
+  });
+}
+
+function cutText(value: string, limit: number) {
+  return Array.from(value).slice(0, Math.max(0, limit)).join("");
+}
+
+function safeNote(value: string) {
+  return `<!doctype html><meta charset="utf-8"><style>html,body{margin:0;user-select:none;-webkit-user-select:none}</style><body><pre style="white-space:pre-wrap;font:16px/1.7 sans-serif;padding:28px">${escapeHtml(value)}</pre></body>`;
+}
+
+function clipPlay(format: string, body: Record<string, unknown>, mode: string, limit: number, custom: string) {
+  if (mode === "content") {
+    if (format === "novel") return { novel: custom };
+    if (format === "comic") return { pages: [{ text: custom, image: "" }] };
+    if (format === "voice") return { tracks: [{ title: "", src: "", text: custom }] };
+    if (format === "video") return { note: custom };
+    return { html: safeNote(custom) };
+  }
+  if (format === "novel") return { novel: cutText(String(body.novel ?? ""), limit) };
+  if (format === "comic") return { pages: Array.isArray(body.pages) ? body.pages.slice(0, limit) : [] };
+  if (format === "voice") return { tracks: Array.isArray(body.tracks) ? body.tracks.slice(0, 1) : [] };
+  if (format === "video") return { video: String(body.video ?? "") };
+  return { html: safeNote(cutText(String(body.html ?? ""), limit)) };
 }
 
 async function readJson(request: Request): Promise<Record<string, unknown>> {
@@ -428,6 +523,11 @@ function snapshot(sql: Sql, viewer: string) {
     coverKey: String(row.cover_key),
     playFormat: String(row.play_format ?? ""),
     tags: tagsOf(row.tags),
+    allowPlay: Number(row.allow_play ?? 1) === 1,
+    allowDownload: Number(row.allow_download ?? 1) === 1,
+    allowPreview: Number(row.allow_preview ?? 0) === 1,
+    previewMode: String(row.preview_mode ?? ""),
+    previewLimit: Number(row.preview_limit ?? 0),
   }));
   const tiers = sql.all("SELECT * FROM tiers ORDER BY rank").map((row) => ({
     id: String(row.id),
@@ -765,8 +865,20 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   if (!parsed.ok) return fail(parsed.code);
   const workTags = parseWorkTags(body.tags);
   if (!workTags.ok) return fail(workTags.code);
+  const chosen = chosenAccess(body);
+  if (chosen && "code" in chosen) return fail(chosen.code);
+  let format = playFormat;
+  let storedBody = playFormat ? JSON.stringify(parsed.body) : "";
+  const access = chosen ?? legacyAccess(Boolean(format));
+  if (chosen) {
+    if (access.allowPlay === 1 && !format) return fail("err.play.file");
+    if (access.allowPlay !== 1) {
+      format = "";
+      storedBody = "";
+    }
+  }
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, play_format, play_body, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     id(),
     String(mine.handle),
     title,
@@ -776,9 +888,15 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
     JSON.stringify(includes.length ? includes : [fileName(title)]),
     id(),
     fileBody,
-    playFormat,
-    playFormat ? JSON.stringify(parsed.body) : "",
+    format,
+    storedBody,
     JSON.stringify(workTags.tags),
+    access.allowPlay,
+    access.allowDownload,
+    access.allowPreview,
+    access.previewMode,
+    access.previewLimit,
+    access.previewBody,
   );
   return withState(sql, viewer, "toast.product");
 }
@@ -811,13 +929,20 @@ async function publishUpload(sql: Sql, request: Request) {
   if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
   const workTags = parseWorkTags(form.get("tags"));
   if (!workTags.ok) return fail(workTags.code);
+  const chosen = chosenAccess(form);
+  if (chosen && "code" in chosen) return fail(chosen.code);
   const bytes = new Uint8Array(await uploaded.arrayBuffer());
   const productId = id();
   const filename = uploaded.name.replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120) || "file";
   const mime = (uploaded.type || "application/octet-stream").slice(0, 120);
-  const play = inferPlay(productId, filename, mime, bytes);
+  let play = inferPlay(productId, filename, mime, bytes);
+  const access = chosen ?? legacyAccess(Boolean(play.format));
+  if (chosen) {
+    if (access.allowPlay === 1 && !play.format) return fail("err.play.file");
+    if (access.allowPlay !== 1) play = { format: "", body: "" };
+  }
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     productId,
     String(mine.handle),
     title,
@@ -832,6 +957,12 @@ async function publishUpload(sql: Sql, request: Request) {
     play.format,
     play.body,
     JSON.stringify(workTags.tags),
+    access.allowPlay,
+    access.allowDownload,
+    access.allowPreview,
+    access.previewMode,
+    access.previewLimit,
+    access.previewBody,
   );
   return withState(sql, viewer, "toast.product");
 }
@@ -1080,6 +1211,7 @@ function download(sql: Sql, request: Request) {
   if (productId) {
     const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
     if (!product) return fail("err.product.missing", 404);
+    if (Number(product.allow_download ?? 1) !== 1) return fail("err.download.closed", 403);
     const mine = viewer ? sql.get("SELECT handle FROM users WHERE id = ?", viewer) : undefined;
     const owns = sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, productId);
     if (!owns && !(mine && String(mine.handle) === String(product.creator_id))) return fail("err.download.product", 403);
@@ -1116,15 +1248,33 @@ function media(sql: Sql, request: Request) {
   const productId = new URL(request.url).searchParams.get("productId") ?? "";
   const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
   if (!product || !String(product.file_name ?? "")) return fail("err.file.missing", 404);
-  if (!canPlay(sql, viewer, product)) return fail("err.play.forbidden", 403);
+  const level = accessLevel(sql, viewer, product);
+  if (level === "none") return fail("err.play.forbidden", 403);
+  if (level === "preview") {
+    const format = String(product.play_format);
+    const progressMedia = String(product.preview_mode) === "progress" && (format === "voice" || format === "video" || format === "comic");
+    if (!progressMedia) return fail("err.play.forbidden", 403);
+  }
   return fileResponse(product, true);
 }
 
-function canPlay(sql: Sql, viewer: string, product: Row) {
-  if (!viewer) return false;
+function accessLevel(sql: Sql, viewer: string, product: Row) {
+  if (!viewer || !String(product.play_format ?? "")) return "none";
   const mine = sql.get("SELECT handle FROM users WHERE id = ?", viewer);
-  if (mine && String(mine.handle) === String(product.creator_id)) return true;
-  return Boolean(sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, String(product.id)));
+  if (mine && String(mine.handle) === String(product.creator_id)) return "full";
+  if (sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, String(product.id))) return "full";
+  if (Number(product.allow_preview ?? 0) === 1) return "preview";
+  return "none";
+}
+
+function playBody(product: Row) {
+  try {
+    const parsed = JSON.parse(String(product.play_body || "{}"));
+    if (parsed && typeof parsed === "object") return parsed as Record<string, unknown>;
+  } catch {
+    /* The stored player document is not JSON. */
+  }
+  return {};
 }
 
 function playRead(sql: Sql, request: Request) {
@@ -1133,19 +1283,21 @@ function playRead(sql: Sql, request: Request) {
   const productId = new URL(request.url).searchParams.get("productId") ?? "";
   const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
   if (!product || !String(product.play_format)) return fail("err.play.missing", 404);
-  if (!canPlay(sql, viewer, product)) return fail("err.play.forbidden", 403);
-  let body: unknown = {};
-  try {
-    body = JSON.parse(String(product.play_body || "{}"));
-  } catch {
-    body = {};
-  }
+  const level = accessLevel(sql, viewer, product);
+  if (level === "none") return fail("err.play.forbidden", 403);
+  const format = String(product.play_format);
+  const stored = playBody(product);
+  const body = level === "preview"
+    ? clipPlay(format, stored, String(product.preview_mode ?? ""), Number(product.preview_limit ?? 0), String(product.preview_body ?? ""))
+    : stored;
   return json({
     id: String(product.id),
-    format: String(product.play_format),
+    format,
     title: String(product.title),
     creatorId: String(product.creator_id),
-    ...(body as object),
+    preview: level === "preview",
+    previewLimit: level === "preview" && String(product.preview_mode) === "progress" ? Number(product.preview_limit ?? 0) : 0,
+    ...body,
   });
 }
 
@@ -1155,7 +1307,9 @@ function playWrite(sql: Sql, request: Request, body: Record<string, unknown>) {
   const productId = textOf(body.productId, 80);
   const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
   if (!product || !String(product.play_format)) return fail("err.play.missing", 404);
-  if (!canPlay(sql, viewer, product)) return fail("err.play.forbidden", 403);
+  const level = accessLevel(sql, viewer, product);
+  if (level === "none") return fail("err.play.forbidden", 403);
+  if (body.op !== "progress" && level !== "full") return fail("err.play.forbidden", 403);
   if (body.op === "progress") {
     const cursor = textOf(body.cursor, 40);
     const now = new Date().toISOString();

@@ -313,4 +313,96 @@ if (removed.status !== 200 || removed.data.user || removed.data.creators?.some((
 const again = await gone.send("/api/login", { email: "gone@example.com", password: "secret12" });
 if (again.status !== 401) throw new Error("deleted account should not log in");
 
+const closedForm = new FormData();
+closedForm.set("title", "只能播放");
+closedForm.set("description", "不提供下载");
+closedForm.set("price", "4");
+closedForm.set("kind", "小说");
+closedForm.set("play", "1");
+closedForm.set("download", "0");
+closedForm.set("file", new File(["完整正文比预览更长。"], "story.txt", { type: "text/plain" }));
+const closed = await creator.sendForm("/api/products", closedForm);
+if (closed.status !== 200) throw new Error(`play only upload ${closed.status} ${closed.raw}`);
+const closedWork = closed.data.products.find((item: { title: string }) => item.title === "只能播放");
+if (closedWork?.playFormat !== "novel" || closedWork.allowDownload) throw new Error(`play only flags ${JSON.stringify(closedWork)}`);
+const closedFile = await creator.send(`/api/download?productId=${closedWork.id}`, undefined, "GET");
+if (closedFile.status !== 403 || closedFile.data.code !== "err.download.closed") throw new Error(`closed download ${closedFile.status} ${closedFile.raw}`);
+
+const downloadOnly = new FormData();
+downloadOnly.set("title", "只能下载");
+downloadOnly.set("description", "不进入 play");
+downloadOnly.set("price", "4");
+downloadOnly.set("kind", "小说");
+downloadOnly.set("play", "0");
+downloadOnly.set("download", "1");
+downloadOnly.set("file", new File(["这是只能下载的正文。"], "file.txt", { type: "text/plain" }));
+const downloadedOnly = await creator.sendForm("/api/products", downloadOnly);
+const downloadWork = downloadedOnly.data.products?.find((item: { title: string }) => item.title === "只能下载");
+if (downloadedOnly.status !== 200 || downloadWork?.playFormat) throw new Error(`download only ${downloadedOnly.status} ${downloadedOnly.raw}`);
+
+const neither = new FormData();
+neither.set("title", "不能打开");
+neither.set("description", "没有打开方式");
+neither.set("price", "4");
+neither.set("kind", "小说");
+neither.set("play", "0");
+neither.set("download", "0");
+neither.set("file", new File(["这段不会保存。"], "nope.txt", { type: "text/plain" }));
+const refused = await creator.sendForm("/api/products", neither);
+if (refused.status !== 400 || refused.data.code !== "err.open") throw new Error(`neither ${refused.status} ${refused.raw}`);
+
+const opaque = new FormData();
+opaque.set("title", "无法解析");
+opaque.set("description", "二进制不能播放");
+opaque.set("price", "4");
+opaque.set("kind", "数字作品");
+opaque.set("play", "1");
+opaque.set("download", "1");
+opaque.set("file", new File([Uint8Array.from([1, 2, 3, 4, 5, 6, 7, 8])], "blob.bin", { type: "application/octet-stream" }));
+const unparsed = await creator.sendForm("/api/products", opaque);
+if (unparsed.status !== 400 || unparsed.data.code !== "err.play.file") throw new Error(`unparsed ${unparsed.status} ${unparsed.raw}`);
+
+const previewForm = new FormData();
+previewForm.set("title", "可预览");
+previewForm.set("description", "只公开开头");
+previewForm.set("price", "4");
+previewForm.set("kind", "小说");
+previewForm.set("play", "1");
+previewForm.set("download", "1");
+previewForm.set("preview", "1");
+previewForm.set("previewMode", "progress");
+previewForm.set("previewLimit", "4");
+previewForm.set("file", new File(["预览作品的完整正文在这里。"], "preview.txt", { type: "text/plain" }));
+const previewed = await creator.sendForm("/api/products", previewForm);
+const previewWork = previewed.data.products?.find((item: { title: string }) => item.title === "可预览");
+if (previewed.status !== 200 || !previewWork?.allowPreview) throw new Error(`preview upload ${previewed.status} ${previewed.raw}`);
+const guestPreview = await fan.send(`/api/play?productId=${previewWork.id}`, undefined, "GET");
+if (guestPreview.status !== 200 || guestPreview.data.preview !== true || guestPreview.data.novel !== "预览作品") {
+  throw new Error(`guest preview ${guestPreview.status} ${guestPreview.raw}`);
+}
+const ownerPreview = await creator.send(`/api/play?productId=${previewWork.id}`, undefined, "GET");
+if (ownerPreview.data.preview !== false || !String(ownerPreview.data.novel).includes("完整正文")) {
+  throw new Error(`owner should see the full text ${ownerPreview.raw}`);
+}
+const customForm = new FormData();
+customForm.set("title", "自定义预览");
+customForm.set("description", "另写一段");
+customForm.set("price", "4");
+customForm.set("kind", "小说");
+customForm.set("play", "1");
+customForm.set("download", "0");
+customForm.set("preview", "1");
+customForm.set("previewMode", "content");
+customForm.set("previewBody", "这里是单独写的预览。");
+customForm.set("file", new File(["正式正文不应该出现在预览里。"], "custom.txt", { type: "text/plain" }));
+const custom = await creator.sendForm("/api/products", customForm);
+const customWork = custom.data.products?.find((item: { title: string }) => item.title === "自定义预览");
+if (custom.status !== 200 || !customWork) throw new Error(`custom preview ${custom.status} ${custom.raw}`);
+const customRead = await fan.send(`/api/play?productId=${customWork.id}`, undefined, "GET");
+if (customRead.data.novel !== "这里是单独写的预览。" || String(customRead.data.novel).includes("正式正文")) {
+  throw new Error(`custom preview text ${customRead.raw}`);
+}
+const customFile = await fan.send(`/api/download?productId=${customWork.id}`, undefined, "GET");
+if (customFile.status !== 403) throw new Error(`preview must not download ${customFile.status}`);
+
 console.log("platform checks passed");

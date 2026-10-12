@@ -46,6 +46,11 @@ export type Product = {
   coverKey: string;
   playFormat: string;
   tags: string[];
+  allowPlay: boolean;
+  allowDownload: boolean;
+  allowPreview: boolean;
+  previewMode: "" | "content" | "progress";
+  previewLimit: number;
 };
 
 export type Tier = {

@@ -2,9 +2,16 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { Avatar, Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
+import { isAbsolute, playHref, playPath } from "../site";
 import { useStore } from "../store";
-import { creatorShare, yuan } from "../utils";
+import { creatorShare, saveDownload, yuan } from "../utils";
 import { NotFound } from "./NotFound";
+
+function PlayLink({ id, className, children }: { id: string; className: string; children: string }) {
+  const href = playHref(id);
+  if (isAbsolute(href)) return <a className={className} href={href}>{children}</a>;
+  return <Link className={className} to={href}>{children}</Link>;
+}
 
 export function ProductPage() {
   const { handle = "", productId = "" } = useParams();
@@ -31,6 +38,10 @@ export function ProductPage() {
         </Link>
         <p className="meta">
           <span className="pill">{phrase(product.kind)}</span>
+          {product.playFormat && <span className="pill">{t("product.viaPlay")}</span>}
+          {product.allowDownload && <span className="pill">{t("product.canDownload")}</span>}
+          {!product.allowDownload && product.playFormat && <span className="pill">{t("product.playOnly")}</span>}
+          {product.allowPreview && <span className="pill">{t("product.preview")}</span>}
         </p>
         {product.tags.length > 0 && (
           <div className="tag-row">
@@ -50,14 +61,39 @@ export function ProductPage() {
           ))}
         </ul>
         <p className="fineprint">{t("product.share", { amount: yuan(creatorShare(product.price)) })}</p>
+        {product.allowPreview && product.playFormat && !owned && !mine && (
+          user ? (
+            <PlayLink id={product.id} className="btn btn-line">{t("product.preview")}</PlayLink>
+          ) : (
+            <button type="button" className="btn btn-line" onClick={() => navigate(`/login?next=${encodeURIComponent(playPath(product.id))}`)}>
+              {t("product.preview")}
+            </button>
+          )
+        )}
         {owned ? (
           <div className="hero-actions">
+            {product.playFormat && <PlayLink id={product.id} className="btn btn-dark">{t("play.open")}</PlayLink>}
+            {product.allowDownload && (
+              <button
+                type="button"
+                className="btn btn-line"
+                onClick={async () => {
+                  const response = await fetch(`/api/download?productId=${encodeURIComponent(product.id)}`, { credentials: "same-origin" });
+                  if (response.ok) await saveDownload(response, product.title);
+                }}
+              >
+                {t("common.download")}
+              </button>
+            )}
             <Link to="/library" className="btn btn-pine">
               {t("product.inLibrary")}
             </Link>
           </div>
         ) : mine ? (
-          <p className="muted">{t("product.mine")}</p>
+          <div className="hero-actions">
+            <p className="muted">{t("product.mine")}</p>
+            {product.playFormat && <PlayLink id={product.id} className="btn btn-dark">{t("play.open")}</PlayLink>}
+          </div>
         ) : (
           <div className="hero-actions">
             <button

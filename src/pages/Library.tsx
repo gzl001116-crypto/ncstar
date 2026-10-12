@@ -2,6 +2,7 @@ import { Link, useLocation } from "react-router-dom";
 import { Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
+import { isAbsolute, playHref } from "../site";
 import { useStore } from "../store";
 import { daysLeft, formatDate, saveDownload, yuan } from "../utils";
 
@@ -84,9 +85,18 @@ export function Library() {
                     {creator?.name} · {formatDate(item.purchasedAt)}
                   </p>
                   <div className="hero-actions">
-                    <button type="button" className="btn btn-line" onClick={() => save(product.id, product.title)}>
-                      {t("common.download")}
-                    </button>
+                    {product.playFormat && (
+                      isAbsolute(playHref(product.id)) ? (
+                        <a className="btn btn-line" href={playHref(product.id)}>{t("play.open")}</a>
+                      ) : (
+                        <Link className="btn btn-line" to={playHref(product.id)}>{t("play.open")}</Link>
+                      )
+                    )}
+                    {product.allowDownload && (
+                      <button type="button" className="btn btn-line" onClick={() => save(product.id, product.title)}>
+                        {t("common.download")}
+                      </button>
+                    )}
                   </div>
                 </div>
               </article>

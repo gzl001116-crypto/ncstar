@@ -465,6 +465,12 @@ export function StudioWorks() {
   const [filename, setFilename] = useState("");
   const [tagError, setTagError] = useState("");
   const [tagFor, setTagFor] = useState("");
+  const [usePlay, setUsePlay] = useState(true);
+  const [allowDownload, setAllowDownload] = useState(true);
+  const [allowPreview, setAllowPreview] = useState(false);
+  const [previewMode, setPreviewMode] = useState<"content" | "progress">("progress");
+  const [previewLimit, setPreviewLimit] = useState("1");
+  const [previewBody, setPreviewBody] = useState("");
   if (!user) return null;
   const mineProducts = products.filter((product) => product.creatorId === user.handle);
   const onProduct = async (event: FormEvent<HTMLFormElement>) => {
@@ -473,6 +479,23 @@ export function StudioWorks() {
     const file = data.get("file");
     if (!(file instanceof File) || file.size < 1) {
       setError(t("err.file"));
+      return;
+    }
+    if (!usePlay && !allowDownload) {
+      setError(t("err.open"));
+      return;
+    }
+    if (allowPreview && !usePlay) {
+      setError(t("err.preview.play"));
+      return;
+    }
+    if (allowPreview && previewMode === "content" && Array.from(previewBody.trim()).length < 1) {
+      setError(t("err.preview.body"));
+      return;
+    }
+    const limit = Number(previewLimit);
+    if (allowPreview && previewMode === "progress" && (!Number.isInteger(limit) || limit < 1 || limit > 20000)) {
+      setError(t("err.preview.limit"));
       return;
     }
     const result = await publishProduct({
@@ -485,6 +508,12 @@ export function StudioWorks() {
         .map((item) => item.trim())
         .filter(Boolean),
       tags: String(data.get("tags") ?? ""),
+      play: usePlay,
+      download: allowDownload,
+      preview: allowPreview,
+      previewMode,
+      previewLimit: limit,
+      previewBody,
       file,
     });
     if (result) {
@@ -493,6 +522,12 @@ export function StudioWorks() {
     }
     event.currentTarget.reset();
     setFilename("");
+    setUsePlay(true);
+    setAllowDownload(true);
+    setAllowPreview(false);
+    setPreviewMode("progress");
+    setPreviewLimit("1");
+    setPreviewBody("");
     setError("");
   };
   return (
@@ -539,6 +574,72 @@ export function StudioWorks() {
           />
           <span className="fineprint">{filename || t("studio.fileHint")}</span>
         </label>
+        <div className="choice-list">
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={usePlay}
+              onChange={(event) => {
+                setUsePlay(event.target.checked);
+                if (!event.target.checked) setAllowPreview(false);
+              }}
+            />
+            {t("studio.play")}
+          </label>
+          <p className="fineprint">{t("studio.playHint")}</p>
+          <label className="check">
+            <input type="checkbox" checked={allowDownload} onChange={(event) => setAllowDownload(event.target.checked)} />
+            {t("studio.download")}
+          </label>
+          <p className="fineprint">{t("studio.accessHint")}</p>
+          <label className="check">
+            <input
+              type="checkbox"
+              checked={allowPreview}
+              disabled={!usePlay}
+              onChange={(event) => setAllowPreview(event.target.checked)}
+            />
+            {t("studio.preview")}
+          </label>
+          <p className="fineprint">{t("studio.previewHint")}</p>
+        </div>
+        {usePlay && allowPreview && (
+          <>
+            <label>
+              {t("studio.previewMode")}
+              <select name="previewMode" value={previewMode} onChange={(event) => setPreviewMode(event.target.value === "content" ? "content" : "progress")}>
+                <option value="progress">{t("studio.previewProgress")}</option>
+                <option value="content">{t("studio.previewContent")}</option>
+              </select>
+            </label>
+            {previewMode === "progress" ? (
+              <label>
+                {t("studio.previewLimit")}
+                <input
+                  name="previewLimit"
+                  type="number"
+                  min="1"
+                  max="20000"
+                  step="1"
+                  value={previewLimit}
+                  onChange={(event) => setPreviewLimit(event.target.value)}
+                />
+                <span className="fineprint">{t("studio.previewLimitPh")}</span>
+              </label>
+            ) : (
+              <label>
+                {t("studio.previewBody")}
+                <textarea
+                  name="previewBody"
+                  rows={4}
+                  value={previewBody}
+                  placeholder={t("studio.previewBodyPh")}
+                  onChange={(event) => setPreviewBody(event.target.value)}
+                />
+              </label>
+            )}
+          </>
+        )}
         {error && <p className="error">{error}</p>}
         <button className="btn btn-dark" type="submit">
           {t("studio.newProduct")}
@@ -556,6 +657,9 @@ export function StudioWorks() {
                   <strong>{product.title}</strong>
                   <p className="muted">
                     {phrase(product.kind)} · {yuan(product.price)} · {t("studio.sold", { n: sold })}
+                    {product.playFormat ? ` · ${t("product.viaPlay")}` : ""}
+                    {product.allowDownload ? ` · ${t("product.canDownload")}` : product.playFormat ? ` · ${t("product.playOnly")}` : ""}
+                    {product.allowPreview ? ` · ${t("product.preview")}` : ""}
                   </p>
                 </Link>
                 {product.tags.length > 0 && (

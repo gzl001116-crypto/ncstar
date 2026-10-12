@@ -710,6 +710,9 @@ img.avatar { object-fit: cover; display: block; }
 .voice-list button.on { background: var(--pine-soft); }
 .voice-script { white-space: pre-wrap; margin-top: 16px; }
 .play-video, .play-frame { width: 100%; min-height: 70vh; border: 0; border-radius: 16px; background: #111318; }
+.play-lock, .play-lock * { user-select: none; -webkit-user-select: none; }
+.play-lock img, .play-lock video { -webkit-user-drag: none; }
+.choice-list { display: grid; gap: 8px; }
 .novel-scroll { max-height: 70vh; overflow: auto; background: white; border-radius: 16px; padding: 28px; }
 .novel-scroll p + p { margin-top: 1em; }
 
