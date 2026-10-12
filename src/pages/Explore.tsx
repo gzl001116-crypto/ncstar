@@ -2,19 +2,21 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { CreatorCard, PostCard, ProductCard } from "../components/Cards";
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { CATEGORIES } from "../types";
 import { includesQuery } from "../utils";
 
 const KINDS = [
-  { id: "all", label: "全部" },
-  { id: "creators", label: "创作者" },
-  { id: "posts", label: "动态" },
-  { id: "products", label: "作品" },
+  { id: "all", label: "explore.kind.all" },
+  { id: "creators", label: "explore.kind.creators" },
+  { id: "posts", label: "explore.kind.posts" },
+  { id: "products", label: "explore.kind.products" },
 ] as const;
 
 export function Explore() {
-  useTitle("探索 · 星页");
+  const { t, phrase } = useI18n();
+  useTitle(t("explore.title"));
   const { ready, creators, posts, products } = useStore();
   const [params, setParams] = useSearchParams();
   const q = params.get("q") ?? "";
@@ -67,14 +69,14 @@ export function Explore() {
   return (
     <div className="page">
       <header className="page-intro">
-        <p className="kicker">探索</p>
-        <h1>找一个还想再看一页的人</h1>
+        <p className="kicker">{t("nav.explore")}</p>
+        <h1>{t("explore.h1")}</h1>
         <label className="search search-large">
           <input
             value={q}
             onChange={(event) => set("q", event.target.value)}
-            placeholder="搜索名字、动态或作品"
-            aria-label="筛选"
+            placeholder={t("explore.ph")}
+            aria-label={t("explore.filter")}
           />
         </label>
       </header>
@@ -82,29 +84,29 @@ export function Explore() {
         <div className="chips">
           {KINDS.map((item) => (
             <button key={item.id} type="button" className={kind === item.id ? "chip on" : "chip"} onClick={() => set("kind", item.id)}>
-              {item.label}
+              {t(item.label)}
             </button>
           ))}
         </div>
         <div className="chips">
           {["全部", ...CATEGORIES].map((item) => (
             <button key={item} type="button" className={cat === item ? "chip on" : "chip"} onClick={() => set("cat", item)}>
-              {item}
+              {phrase(item)}
             </button>
           ))}
         </div>
       </div>
 
       {!ready ? (
-        <div className="empty">正在载入</div>
+        <div className="empty">{t("common.loading")}</div>
       ) : empty ? (
-        <div className="empty">{q ? "没有匹配的页面。换一个词，或者把分类放回全部。" : "还没有内容。注册并开通创作页后，动态和作品会出现在这里。"}</div>
+        <div className="empty">{q ? t("explore.noMatch") : t("explore.empty")}</div>
       ) : null}
 
       {showCreators && creatorHits.length > 0 && (
         <section className="section">
           <div className="section-head">
-            <h2>创作者</h2>
+            <h2>{t("explore.creators")}</h2>
             <span className="muted">{creatorHits.length}</span>
           </div>
           <div className="cards four">{creatorHits.map((creator) => <CreatorCard key={creator.id} creator={creator} />)}</div>
@@ -113,7 +115,7 @@ export function Explore() {
       {showPosts && postHits.length > 0 && (
         <section className="section">
           <div className="section-head">
-            <h2>动态</h2>
+            <h2>{t("explore.posts")}</h2>
             <span className="muted">{postHits.length}</span>
           </div>
           <div className="cards">{postHits.map((post) => <PostCard key={post.id} post={post} />)}</div>
@@ -122,7 +124,7 @@ export function Explore() {
       {showProducts && productHits.length > 0 && (
         <section className="section">
           <div className="section-head">
-            <h2>作品</h2>
+            <h2>{t("explore.products")}</h2>
             <span className="muted">{productHits.length}</span>
           </div>
           <div className="cards">{productHits.map((product) => <ProductCard key={product.id} product={product} />)}</div>

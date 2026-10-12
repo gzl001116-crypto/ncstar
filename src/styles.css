@@ -10,7 +10,7 @@
   --pine: #4338ca;
   --pine-soft: #eef0ff;
   --shadow: 0 12px 32px rgba(17, 19, 24, 0.06);
-  --sans: "Outfit", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  --sans: "Outfit", "Noto Sans JP", "Noto Sans TC", "Noto Sans SC", "PingFang SC", "Hiragino Sans", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   --serif: var(--sans);
   --max: 1160px;
 }

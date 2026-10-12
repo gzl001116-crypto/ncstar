@@ -17,7 +17,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === "/api/send-code" || url.pathname === "/api/verify-code") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-      if (request.method !== "POST") return json({ error: "请使用 POST" }, 405);
+      if (request.method !== "POST") return json({ code: "err.method" }, 405);
       return url.pathname === "/api/send-code"
         ? handleSend(request, env, limiter)
         : handleVerify(request, env, limiter);

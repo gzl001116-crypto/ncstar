@@ -1,20 +1,22 @@
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { Avatar, Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 import { useStore } from "../store";
-import { fromNow, visibilityLabel, yuan } from "../utils";
+import { yuan } from "../utils";
 import { NotFound } from "./NotFound";
 
 export function CreatorPage() {
   const { handle = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "posts";
+  const { t, phrase, rel, rank, locale } = useI18n();
   const { ready, creators, posts, products, tiers, user, followed, toggleFollow, followerCount, supporterCount, canRead, activeMembership } =
     useStore();
   const navigate = useNavigate();
   const creator = creators.find((item) => item.handle === handle);
-  useTitle(creator ? `${creator.name} · 星页` : "未找到 · 星页");
-  if (!ready) return <div className="page"><p className="muted">正在载入</p></div>;
+  useTitle(creator ? `${creator.name} · ${t("brand")}` : t("creator.missingTitle"));
+  if (!ready) return <div className="page"><p className="muted">{t("common.loading")}</p></div>;
   if (!creator) return <NotFound />;
 
   const own = user?.handle === creator.handle;
@@ -37,15 +39,15 @@ export function CreatorPage() {
         <Avatar name={creator.name} id={creator.id} size={88} />
         <div className="profile-copy">
           <p className="kicker">
-            {creator.category} · {creator.location}
+            {phrase(creator.category)} · {phrase(creator.location)}
           </p>
           <h1>{creator.name}</h1>
           <p className="muted">@{creator.handle}</p>
-          <p>{creator.bio}</p>
+          <p>{phrase(creator.bio)}</p>
           <div className="tag-row">
             {creator.tags.map((tag) => (
               <span key={tag} className="pill">
-                {tag}
+                {phrase(tag)}
               </span>
             ))}
           </div>
@@ -53,17 +55,17 @@ export function CreatorPage() {
         <div className="profile-side">
           <div className="stat-row">
             <div className="stat">
-              <strong>{followerCount(creator).toLocaleString("zh-CN")}</strong>
-              <span>关注</span>
+              <strong>{followerCount(creator).toLocaleString(locale)}</strong>
+              <span>{t("common.followers")}</span>
             </div>
             <div className="stat">
-              <strong>{supporterCount(creator.id).toLocaleString("zh-CN")}</strong>
-              <span>支持中</span>
+              <strong>{supporterCount(creator.id).toLocaleString(locale)}</strong>
+              <span>{t("common.supporters")}</span>
             </div>
           </div>
           {own ? (
             <Link to="/studio" className="btn btn-line">
-              编辑创作页
+              {t("creator.edit")}
             </Link>
           ) : (
             <button
@@ -71,7 +73,7 @@ export function CreatorPage() {
               className={followed(creator.id) ? "btn btn-soft" : "btn btn-dark"}
               onClick={() => (user ? toggleFollow(creator.id) : navigate(`/login?next=/c/${creator.handle}`))}
             >
-              {followed(creator.id) ? "已关注" : "关注"}
+              {followed(creator.id) ? t("creator.following") : t("creator.follow")}
             </button>
           )}
         </div>
@@ -79,9 +81,9 @@ export function CreatorPage() {
 
       <div className="tabs" role="tablist">
         {[
-          ["posts", "动态"],
-          ["shop", "商店"],
-          ["member", "会员"],
+          ["posts", t("creator.tab.posts")],
+          ["shop", t("creator.tab.shop")],
+          ["member", t("creator.tab.member")],
         ].map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} className={tab === id ? "on" : ""} onClick={() => setTab(id)}>
             {label}
@@ -91,14 +93,14 @@ export function CreatorPage() {
 
       {tab === "posts" && (
         <div className="stack">
-          {list.length === 0 && <div className="empty">还没有动态。</div>}
+          {list.length === 0 && <div className="empty">{t("creator.noPosts")}</div>}
           {list.map((post) => (
             <Link key={post.id} to={`/c/${creator.handle}/posts/${post.id}`} className="post-row">
               <Cover id={post.coverKey} ratio="1 / 1" />
               <div>
                 <div className="meta">
-                  <span className="pill">{canRead(post) ? visibilityLabel(post.minRank) : "会员可见"}</span>
-                  <span className="muted">{fromNow(post.createdAt)}</span>
+                  <span className="pill">{canRead(post) ? rank(post.minRank) : t("rank.locked")}</span>
+                  <span className="muted">{rel(post.createdAt)}</span>
                 </div>
                 <h2>{post.title}</h2>
                 <p>{post.excerpt}</p>
@@ -110,17 +112,17 @@ export function CreatorPage() {
 
       {tab === "shop" && (
         <div className="cards">
-          {shelf.length === 0 && <div className="empty">商店还空着。</div>}
+          {shelf.length === 0 && <div className="empty">{t("creator.shopEmpty")}</div>}
           {shelf.map((product) => (
             <Link key={product.id} to={`/c/${creator.handle}/shop/${product.id}`} className="card">
               <Cover id={product.coverKey} ratio="1 / 1" />
               <div className="card-body">
                 <div className="meta">
-                  <span className="pill">{product.kind}</span>
+                  <span className="pill">{phrase(product.kind)}</span>
                   <span className="price">{yuan(product.price)}</span>
                 </div>
                 <h3>{product.title}</h3>
-                <p className="clamp">{product.description}</p>
+                <p className="clamp">{phrase(product.description)}</p>
               </div>
             </Link>
           ))}
@@ -135,28 +137,26 @@ export function CreatorPage() {
             const current = membership?.tierId === tier.id;
             return (
               <article key={tier.id} className="ticket">
-                <p className="kicker">{current ? "当前档位" : `${tier.rank === 1 ? "入门" : "更完整"}`}</p>
-                <h2>{tier.name}</h2>
+                <p className="kicker">{current ? t("creator.current") : tier.rank === 1 ? t("creator.entry") : t("creator.fuller")}</p>
+                <h2>{phrase(tier.name)}</h2>
                 <div className="ticket-price">
                   <strong>{yuan(tier.price)}</strong>
-                  <span>/ 30 天</span>
+                  <span>{t("common.per30")}</span>
                 </div>
-                <p>{tier.blurb}</p>
-                <p className="muted">
-                  可解锁 {unlocks.length} 篇动态 · {files} 个附件
-                </p>
+                <p>{phrase(tier.blurb)}</p>
+                <p className="muted">{t("creator.unlocks", { posts: unlocks.length, files })}</p>
                 <div className="ticket-dash" />
                 <ul>
                   {tier.perks.map((perk) => (
-                    <li key={perk}>{perk}</li>
+                    <li key={perk}>{phrase(perk)}</li>
                   ))}
                 </ul>
-                <span className="stamp">不自动续费</span>
+                <span className="stamp">{t("common.noRenew")}</span>
                 {own ? (
-                  <span className="muted">这是你的会员档</span>
+                  <span className="muted">{t("creator.ownTier")}</span>
                 ) : (
                   <Link to={`/checkout?tier=${tier.id}`} className="btn btn-dark btn-block">
-                    {current ? "再续 30 天" : membership ? "换成此档" : "开通 30 天"}
+                    {current ? t("creator.renew") : membership ? t("creator.switch") : t("creator.open30")}
                   </Link>
                 )}
               </article>

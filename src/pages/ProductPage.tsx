@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Avatar, Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { creatorShare, yuan } from "../utils";
 import { NotFound } from "./NotFound";
@@ -8,11 +9,12 @@ import { NotFound } from "./NotFound";
 export function ProductPage() {
   const { handle = "", productId = "" } = useParams();
   const navigate = useNavigate();
+  const { t, phrase } = useI18n();
   const { ready, productById, creatorById, addToCart, owns, user } = useStore();
   const product = productById(productId);
   const creator = creatorById(handle);
-  useTitle(product ? `${product.title} · 星页` : "未找到 · 星页");
-  if (!ready) return <div className="page"><p className="muted">正在载入</p></div>;
+  useTitle(product ? `${product.title} · ${t("brand")}` : t("nf.title"));
+  if (!ready) return <div className="page"><p className="muted">{t("common.loading")}</p></div>;
   if (!product || !creator || product.creatorId !== creator.id) return <NotFound />;
   const owned = owns(product.id);
   const mine = user?.handle === creator.id;
@@ -27,22 +29,22 @@ export function ProductPage() {
           <Avatar name={creator.name} id={creator.id} size={36} />
           <span>{creator.name}</span>
         </Link>
-        <p className="pill">{product.kind}</p>
+        <p className="pill">{phrase(product.kind)}</p>
         <h1>{product.title}</h1>
         <p className="price price-lg">{yuan(product.price)}</p>
-        <p>{product.description}</p>
+        <p>{phrase(product.description)}</p>
         <ul className="includes">
           {product.includes.map((item) => (
-            <li key={item}>{item}</li>
+            <li key={item}>{phrase(item)}</li>
           ))}
         </ul>
-        <p className="fineprint">创作者实收约 {yuan(creatorShare(product.price))}，平台服务费 8% 从这一侧扣除。支持者支付的是标价。</p>
+        <p className="fineprint">{t("product.share", { amount: yuan(creatorShare(product.price)) })}</p>
         {owned ? (
           <Link to="/library" className="btn btn-pine btn-block">
-            已在我的库
+            {t("product.inLibrary")}
           </Link>
         ) : mine ? (
-          <p className="muted">这是你上架的作品。</p>
+          <p className="muted">{t("product.mine")}</p>
         ) : (
           <div className="hero-actions">
             <button
@@ -56,7 +58,7 @@ export function ProductPage() {
                 addToCart(product.id);
               }}
             >
-              放入购物袋
+              {t("product.add")}
             </button>
             <button
               type="button"
@@ -70,7 +72,7 @@ export function ProductPage() {
                 navigate("/checkout");
               }}
             >
-              直接结账
+              {t("product.buy")}
             </button>
           </div>
         )}

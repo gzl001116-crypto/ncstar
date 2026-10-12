@@ -343,17 +343,17 @@ function snapshot(sql: Sql, viewer: string) {
   return { creators, posts, products, tiers, comments, user };
 }
 
-function withState(sql: Sql, viewer: string, toast: string, cookie?: string) {
-  return json({ ...snapshot(sql, viewer), toast }, 200, cookie);
+function withState(sql: Sql, viewer: string, code: string, cookie?: string, name?: string) {
+  return json({ ...snapshot(sql, viewer), code, ...(name ? { name } : {}) }, 200, cookie);
 }
 
-function fail(message: string, status = 400) {
-  return json({ error: message }, status);
+function fail(code: string, status = 400) {
+  return json({ code }, status);
 }
 
 function requireUser(sql: Sql, request: Request) {
   const viewer = userId(sql, request);
-  if (!viewer) return { viewer: "", response: fail("请先登录", 401) };
+  if (!viewer) return { viewer: "", response: fail("err.loginRequired", 401) };
   return { viewer, response: null as Response | null };
 }
 
@@ -401,21 +401,21 @@ async function register(sql: Sql, request: Request, body: Record<string, unknown
   const code = typeof body.code === "string" ? body.code.trim() : "";
   const ticket = typeof body.token === "string" ? body.token : "";
   const expiresAt = typeof body.expiresAt === "number" ? body.expiresAt : Number(body.expiresAt);
-  if (!name) return fail("请填写名字");
-  if (!email) return fail("请填写有效邮箱");
-  if (password.length < 6) return fail("密码至少 6 位");
-  if (!handle) return fail("主页地址用 3-16 位小写字母、数字或下划线");
+  if (!name) return fail("err.name");
+  if (!email) return fail("err.email");
+  if (password.length < 6) return fail("err.password");
+  if (!handle) return fail("err.handle");
   const ip = request.headers.get("cf-connecting-ip") ?? "local";
   if (!(await limiter.allowed(`verify:ip:${ip}`, 20, 600)) || !(await limiter.allowed(`verify:${ticket}`, 5, 600))) {
-    return fail("验证次数过多，请重新获取验证码", 429);
+    return fail("err.code.limit", 429);
   }
   await limiter.record(`verify:ip:${ip}`, 600);
   await limiter.record(`verify:${ticket}`, 600);
   const codeError = await matchCode(env, email, code, ticket, expiresAt);
-  if (codeError) return fail(codeError, codeError === "邮件服务还没有配置" ? 503 : 400);
-  if (sql.get("SELECT id FROM users WHERE email = ?", email)) return fail("这个邮箱已经注册");
+  if (codeError) return fail(codeError, codeError === "err.mail.unconfigured" ? 503 : 400);
+  if (sql.get("SELECT id FROM users WHERE email = ?", email)) return fail("err.email.taken");
   if (sql.get("SELECT id FROM users WHERE handle = ?", handle) || sql.get("SELECT id FROM creators WHERE handle = ?", handle)) {
-    return fail("这个主页地址已经被使用");
+    return fail("err.handle.taken");
   }
   const user = id();
   const passwordSalt = salt();
@@ -435,52 +435,52 @@ async function register(sql: Sql, request: Request, body: Record<string, unknown
   if (body.isCreator === true) openCreator(sql, { id: user, handle, name, bio } as Row);
   const session = token();
   sql.run("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)", session, user, Date.now() + SESSION_MS);
-  return withState(sql, user, body.isCreator === true ? "创作页已开通" : "账号已就绪", sessionCookie(request, session, SESSION_MS / 1000));
+  return withState(sql, user, body.isCreator === true ? "toast.creatorReady" : "toast.accountReady", sessionCookie(request, session, SESSION_MS / 1000));
 }
 
 async function login(sql: Sql, request: Request, body: Record<string, unknown>, limiter: Limiter) {
   const email = emailOf(body.email);
   const password = typeof body.password === "string" ? body.password : "";
   const ip = request.headers.get("cf-connecting-ip") ?? "local";
-  if (!(await limiter.allowed(`login:ip:${ip}`, 20, 600))) return fail("登录太频繁，请稍后再试", 429);
+  if (!(await limiter.allowed(`login:ip:${ip}`, 20, 600))) return fail("err.login.limit", 429);
   await limiter.record(`login:ip:${ip}`, 600);
   const row = email ? sql.get("SELECT * FROM users WHERE email = ?", email) : undefined;
-  if (!row) return fail("邮箱或密码不正确", 401);
+  if (!row) return fail("err.login", 401);
   const hashed = await hashPassword(password, String(row.password_salt));
-  if (hashed !== String(row.password_hash)) return fail("邮箱或密码不正确", 401);
+  if (hashed !== String(row.password_hash)) return fail("err.login", 401);
   const session = token();
   sql.run("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)", session, String(row.id), Date.now() + SESSION_MS);
-  return withState(sql, String(row.id), `欢迎回来，${row.name}`, sessionCookie(request, session, SESSION_MS / 1000));
+  return withState(sql, String(row.id), "toast.welcome", sessionCookie(request, session, SESSION_MS / 1000), String(row.name));
 }
 
 function logout(sql: Sql, request: Request) {
   const current = cookieToken(request);
   if (current) sql.run("DELETE FROM sessions WHERE token = ?", current);
-  return withState(sql, "", "已退出", sessionCookie(request, "", 0));
+  return withState(sql, "", "toast.logout", sessionCookie(request, "", 0));
 }
 
 function follow(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const creatorId = textOf(body.creatorId, 40);
-  if (!sql.get("SELECT id FROM creators WHERE id = ?", creatorId)) return fail("找不到这个创作者");
+  if (!sql.get("SELECT id FROM creators WHERE id = ?", creatorId)) return fail("err.creator.missing");
   const mine = sql.get("SELECT handle FROM users WHERE id = ?", viewer);
-  if (mine && String(mine.handle) === creatorId) return fail("不用关注自己");
+  if (mine && String(mine.handle) === creatorId) return fail("err.follow.self");
   const existing = sql.get("SELECT user_id FROM follows WHERE user_id = ? AND creator_id = ?", viewer, creatorId);
   if (existing) sql.run("DELETE FROM follows WHERE user_id = ? AND creator_id = ?", viewer, creatorId);
   else sql.run("INSERT INTO follows (user_id, creator_id) VALUES (?, ?)", viewer, creatorId);
-  return withState(sql, viewer, existing ? "已取消关注" : "已关注");
+  return withState(sql, viewer, existing ? "toast.unfollow" : "toast.follow");
 }
 
 function like(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const postId = textOf(body.postId, 80);
-  if (!sql.get("SELECT id FROM posts WHERE id = ?", postId)) return fail("找不到这条动态");
+  if (!sql.get("SELECT id FROM posts WHERE id = ?", postId)) return fail("err.post.missing");
   const existing = sql.get("SELECT user_id FROM likes WHERE user_id = ? AND post_id = ?", viewer, postId);
   if (existing) sql.run("DELETE FROM likes WHERE user_id = ? AND post_id = ?", viewer, postId);
   else sql.run("INSERT INTO likes (user_id, post_id) VALUES (?, ?)", viewer, postId);
-  return withState(sql, viewer, existing ? "已取消喜欢" : "已喜欢");
+  return withState(sql, viewer, existing ? "toast.unlike" : "toast.like");
 }
 
 function comment(sql: Sql, request: Request, body: Record<string, unknown>) {
@@ -488,8 +488,8 @@ function comment(sql: Sql, request: Request, body: Record<string, unknown>) {
   if (response) return response;
   const postId = textOf(body.postId, 80);
   const message = textOf(body.text, 500);
-  if (!sql.get("SELECT id FROM posts WHERE id = ?", postId)) return fail("找不到这条动态");
-  if (!message) return fail("评论不能为空");
+  if (!sql.get("SELECT id FROM posts WHERE id = ?", postId)) return fail("err.post.missing");
+  if (!message) return fail("err.comment.empty");
   const author = sql.get("SELECT name FROM users WHERE id = ?", viewer);
   sql.run(
     "INSERT INTO comments (id, post_id, author, user_id, text, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -500,7 +500,7 @@ function comment(sql: Sql, request: Request, body: Record<string, unknown>) {
     message,
     new Date().toISOString(),
   );
-  return withState(sql, viewer, "评论已发布");
+  return withState(sql, viewer, "toast.comment");
 }
 
 function cart(sql: Sql, request: Request, body: Record<string, unknown>) {
@@ -508,17 +508,17 @@ function cart(sql: Sql, request: Request, body: Record<string, unknown>) {
   if (response) return response;
   const productId = textOf(body.productId, 80);
   const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
-  if (!product) return fail("找不到这件作品");
+  if (!product) return fail("err.product.missing");
   const mine = sql.get("SELECT handle FROM users WHERE id = ?", viewer);
   if (body.op === "remove") {
     sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, productId);
-    return withState(sql, viewer, "已从购物袋移除");
+    return withState(sql, viewer, "toast.cart.remove");
   }
-  if (mine && String(mine.handle) === String(product.creator_id)) return fail("这是你自己的作品");
-  if (sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, productId)) return fail("这件作品已经在库里");
-  if (sql.get("SELECT product_id FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, productId)) return fail("已经在购物袋里");
+  if (mine && String(mine.handle) === String(product.creator_id)) return fail("err.product.self");
+  if (sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, productId)) return fail("err.product.owned");
+  if (sql.get("SELECT product_id FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, productId)) return fail("err.cart.exists");
   sql.run("INSERT INTO cart_items (user_id, product_id) VALUES (?, ?)", viewer, productId);
-  return withState(sql, viewer, "已放入购物袋");
+  return withState(sql, viewer, "toast.cart.add");
 }
 
 function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number) {
@@ -538,12 +538,12 @@ function checkout(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
-  if (!mine) return fail("请先登录", 401);
+  if (!mine) return fail("err.loginRequired", 401);
   const tierId = textOf(body.tierId, 80);
   if (tierId) {
     const tier = sql.get("SELECT * FROM tiers WHERE id = ?", tierId);
-    if (!tier) return fail("找不到这个会员档");
-    if (String(tier.creator_id) === String(mine.handle)) return fail("不能开通自己的会员");
+    if (!tier) return fail("err.tier.missing");
+    if (String(tier.creator_id) === String(mine.handle)) return fail("err.tier.self");
     const expiresAt = addDays(30);
     sql.run("DELETE FROM memberships WHERE user_id = ? AND creator_id = ?", viewer, String(tier.creator_id));
     sql.run(
@@ -555,7 +555,7 @@ function checkout(sql: Sql, request: Request, body: Record<string, unknown>) {
       Number(tier.price),
     );
     placeOrder(sql, viewer, "membership", String(tier.id), Number(tier.price));
-    return withState(sql, viewer, "会员已生效");
+    return withState(sql, viewer, "toast.member");
   }
   const items = sql.all(
     `SELECT products.* FROM cart_items JOIN products ON products.id = cart_items.product_id
@@ -563,7 +563,7 @@ function checkout(sql: Sql, request: Request, body: Record<string, unknown>) {
     viewer,
   );
   const payable = items.filter((item) => String(item.creator_id) !== String(mine.handle));
-  if (payable.length === 0) return fail("购物袋里没有可结算的作品");
+  if (payable.length === 0) return fail("err.cart.empty");
   const now = new Date().toISOString();
   for (const item of payable) {
     sql.run(
@@ -576,21 +576,21 @@ function checkout(sql: Sql, request: Request, body: Record<string, unknown>) {
     placeOrder(sql, viewer, "product", String(item.id), Number(item.price));
   }
   sql.run("DELETE FROM cart_items WHERE user_id = ?", viewer);
-  return withState(sql, viewer, "已入库");
+  return withState(sql, viewer, "toast.library");
 }
 
 function publishPost(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
-  if (!mine || Number(mine.is_creator) !== 1) return fail("先开通创作页");
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
   const title = textOf(body.title, 80);
   const content = textOf(body.body, 8000);
   const excerpt = textOf(body.excerpt, 140) || content.slice(0, 42);
   const minRank = Number(body.minRank ?? 0);
-  if (title.length < 2) return fail("标题再写具体一点");
-  if (content.length < 8) return fail("正文再多写一点");
-  if (![0, 1, 2].includes(minRank)) return fail("可见范围不正确");
+  if (title.length < 2) return fail("err.title");
+  if (content.length < 8) return fail("err.body");
+  if (![0, 1, 2].includes(minRank)) return fail("err.rank");
   sql.run(
     "INSERT INTO posts (id, creator_id, title, excerpt, body, created_at, min_rank, cover_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     id(),
@@ -602,14 +602,14 @@ function publishPost(sql: Sql, request: Request, body: Record<string, unknown>) 
     minRank,
     id(),
   );
-  return withState(sql, viewer, "动态已发布");
+  return withState(sql, viewer, "toast.post");
 }
 
 function publishProduct(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
-  if (!mine || Number(mine.is_creator) !== 1) return fail("先开通创作页");
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
   const title = textOf(body.title, 80);
   const description = textOf(body.description, 2000) || "创作者刚刚上架的数字作品。";
   const fileBody = textOf(body.fileBody, 20000);
@@ -618,9 +618,9 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   const includes = Array.isArray(body.includes)
     ? body.includes.map((item) => textOf(item, 40)).filter(Boolean).slice(0, 8)
     : [];
-  if (title.length < 2) return fail("给作品起个名字");
-  if (fileBody.length < 8) return fail("写下购买后可以下载的正文");
-  if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("价格需要在 1 到 9999 之间");
+  if (title.length < 2) return fail("err.product.title");
+  if (fileBody.length < 8) return fail("err.file");
+  if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
   sql.run(
     "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     id(),
@@ -633,14 +633,14 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
     id(),
     fileBody,
   );
-  return withState(sql, viewer, "作品已上架");
+  return withState(sql, viewer, "toast.product");
 }
 
 function profile(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
-  if (!mine) return fail("请先登录", 401);
+  if (!mine) return fail("err.loginRequired", 401);
   const name = textOf(body.name, 40) || String(mine.name);
   const bio = textOf(body.bio, 400) || String(mine.bio);
   const location = textOf(body.location, 40);
@@ -661,19 +661,19 @@ function profile(sql: Sql, request: Request, body: Record<string, unknown>) {
     params.push(String(mine.handle));
     sql.run(`UPDATE creators SET ${sets.join(", ")} WHERE id = ?`, ...params);
   }
-  return withState(sql, viewer, "主页已更新");
+  return withState(sql, viewer, "toast.profile");
 }
 
 function studio(sql: Sql, request: Request) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
-  if (!mine) return fail("请先登录", 401);
+  if (!mine) return fail("err.loginRequired", 401);
   if (Number(mine.is_creator) === 1 && sql.get("SELECT id FROM creators WHERE id = ?", String(mine.handle))) {
-    return withState(sql, viewer, "创作页已在");
+    return withState(sql, viewer, "toast.studio.exists");
   }
   openCreator(sql, mine);
-  return withState(sql, viewer, "创作页已开通");
+  return withState(sql, viewer, "toast.creatorReady");
 }
 
 function download(sql: Sql, request: Request) {
@@ -683,21 +683,21 @@ function download(sql: Sql, request: Request) {
   const postId = url.searchParams.get("postId") ?? "";
   if (productId) {
     const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
-    if (!product) return fail("找不到这件作品", 404);
+    if (!product) return fail("err.product.missing", 404);
     const mine = viewer ? sql.get("SELECT handle FROM users WHERE id = ?", viewer) : undefined;
     const owns = sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, productId);
-    if (!owns && !(mine && String(mine.handle) === String(product.creator_id))) return fail("购买后才能下载", 403);
+    if (!owns && !(mine && String(mine.handle) === String(product.creator_id))) return fail("err.download.product", 403);
     return text(String(product.file_body), 200, fileName(String(product.title)));
   }
   if (postId) {
     const post = sql.get("SELECT * FROM posts WHERE id = ?", postId);
-    if (!post) return fail("找不到这条动态", 404);
+    if (!post) return fail("err.post.missing", 404);
     const mine = viewer ? sql.get("SELECT handle FROM users WHERE id = ?", viewer) : undefined;
     const open = canRead(sql, viewer, String(post.creator_id), Number(post.min_rank), mine ? String(mine.handle) : "");
-    if (!open) return fail("开通会员后才能下载", 403);
+    if (!open) return fail("err.download.post", 403);
     return text(String(post.body), 200, fileName(String(post.title)));
   }
-  return fail("找不到这个文件", 404);
+  return fail("err.file.missing", 404);
 }
 
 export async function handleApp(request: Request, sql: Sql, env: MailEnv, limiter: Limiter): Promise<Response> {
@@ -706,7 +706,7 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request)));
   if (request.method === "GET" && url.pathname === "/api/download") return download(sql, request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
-  if (request.method !== "POST") return fail("请使用 POST", 405);
+  if (request.method !== "POST") return fail("err.method", 405);
   const body = await readJson(request);
   if (url.pathname === "/api/register") return register(sql, request, body, env, limiter);
   if (url.pathname === "/api/login") return login(sql, request, body, limiter);
@@ -720,5 +720,5 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (url.pathname === "/api/products") return publishProduct(sql, request, body);
   if (url.pathname === "/api/profile") return profile(sql, request, body);
   if (url.pathname === "/api/studio") return studio(sql, request);
-  return fail("没有这个接口", 404);
+  return fail("err.route", 404);
 }

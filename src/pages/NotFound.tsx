@@ -1,16 +1,18 @@
 import { Link } from "react-router-dom";
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 
 export function NotFound() {
-  useTitle("未找到 · 星页");
+  const { t } = useI18n();
+  useTitle(t("nf.title"));
   return (
     <div className="page narrow">
       <div className="empty">
         <p className="kicker">404</p>
-        <h1>这一页还没被装订</h1>
-        <p>地址可能写错了，或者创作者还没来。</p>
+        <h1>{t("nf.h1")}</h1>
+        <p>{t("nf.p")}</p>
         <Link to="/explore" className="btn btn-dark">
-          回到探索
+          {t("nf.back")}
         </Link>
       </div>
     </div>

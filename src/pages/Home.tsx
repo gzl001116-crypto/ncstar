@@ -2,14 +2,15 @@ import { Link } from "react-router-dom";
 import { CreatorCard, PostCard, ProductCard } from "../components/Cards";
 import { Avatar, Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { yuan } from "../utils";
 
-const WORDS = ["速写", "环境音", "作品集", "胶片配方", "一个人的晚饭", "织物纹样", "小册子", "壁纸", "展板网格", "分轨"];
-
 export function Home() {
-  useTitle("星页 — 把作品交给喜欢它的人");
+  const { t, phrase } = useI18n();
+  useTitle(t("home.title"));
   const { ready, creators, posts, products, tiers } = useStore();
+  const words = t("home.words").split("|");
   const featured = creators.slice(0, 4);
   const lead = posts[0];
   const side = posts.slice(1, 3);
@@ -21,24 +22,25 @@ export function Home() {
     <div className="page">
       <section className="hero">
         <div className="hero-copy">
-          <p className="kicker">创作者社区</p>
+          <p className="kicker">{t("home.kicker")}</p>
           <h1>
-            把作品交给
-            <br />
-            真正喜欢它的人
+            {t("home.h1").split("\n").map((line, index) => (
+              <span key={line}>
+                {index > 0 && <br />}
+                {line}
+              </span>
+            ))}
           </h1>
-          <p className="lead">
-            星页给插画、音乐、摄影、设计和写作一个安静的主页。发布动态，上架数字作品，用 30 天会员接受支持。到期即止，不会自动续费。
-          </p>
+          <p className="lead">{t("home.lead")}</p>
           <div className="hero-actions">
             <Link to="/explore" className="btn btn-dark">
-              开始逛
+              {t("home.browse")}
             </Link>
             <Link to="/register?as=creator" className="btn btn-line">
-              开通创作页
+              {t("home.open")}
             </Link>
           </div>
-          <p className="fineprint">平台服务费 8%，由创作者承担。会员 30 天，不自动续费。</p>
+          <p className="fineprint">{t("common.feeNote")}</p>
         </div>
         {spotlight && lead && (
           <Link to={`/c/${spotlight.handle}`} className="stage">
@@ -52,7 +54,9 @@ export function Home() {
                   <Avatar name={spotlight.name} id={spotlight.id} size={36} />
                   <div>
                     <strong>{spotlight.name}</strong>
-                    <p className="muted">{sample ? `${sample.name} ${yuan(sample.price)} / 30 天` : "创作者"}</p>
+                    <p className="muted">
+                      {sample ? t("home.tierLine", { name: phrase(sample.name), price: yuan(sample.price) }) : t("common.creator")}
+                    </p>
                   </div>
                 </div>
                 <h2>{lead.title}</h2>
@@ -65,7 +69,7 @@ export function Home() {
 
       <div className="marquee" aria-hidden="true">
         <div className="marquee-track">
-          {WORDS.map((word) => (
+          {words.map((word) => (
             <span key={word}>{word}</span>
           ))}
         </div>
@@ -74,15 +78,15 @@ export function Home() {
       <section className="section">
         <div className="section-head">
           <div>
-            <p className="kicker">本周内页</p>
-            <h2>创作者刚刚写下的</h2>
+            <p className="kicker">{t("home.week")}</p>
+            <h2>{t("home.justWrote")}</h2>
           </div>
-          <Link to="/explore?kind=posts">全部动态</Link>
+          <Link to="/explore?kind=posts">{t("home.allPosts")}</Link>
         </div>
         {!ready ? (
-          <div className="empty">正在载入</div>
+          <div className="empty">{t("common.loading")}</div>
         ) : posts.length === 0 ? (
-          <div className="empty">还没有动态。开通创作页后，可以从创作台发布。</div>
+          <div className="empty">{t("home.noPosts")}</div>
         ) : (
           <div className="feature">
             {lead && <PostCard post={lead} large />}
@@ -98,13 +102,13 @@ export function Home() {
       <section className="section">
         <div className="section-head">
           <div>
-            <p className="kicker">在册</p>
-            <h2>可以跟着看下去的人</h2>
+            <p className="kicker">{t("home.onList")}</p>
+            <h2>{t("home.followPeople")}</h2>
           </div>
-          <Link to="/explore?kind=creators">全部创作者</Link>
+          <Link to="/explore?kind=creators">{t("home.allCreators")}</Link>
         </div>
         {!ready || featured.length === 0 ? (
-          <div className="empty">{ready ? "还没有创作者。" : "正在载入"}</div>
+          <div className="empty">{ready ? t("home.noCreators") : t("common.loading")}</div>
         ) : (
           <div className="cards four">
             {featured.map((creator) => (
@@ -117,13 +121,13 @@ export function Home() {
       <section className="section">
         <div className="section-head">
           <div>
-            <p className="kicker">商店</p>
-            <h2>能放进库里的作品</h2>
+            <p className="kicker">{t("home.shop")}</p>
+            <h2>{t("home.shelf")}</h2>
           </div>
-          <Link to="/explore?kind=products">全部作品</Link>
+          <Link to="/explore?kind=products">{t("home.allProducts")}</Link>
         </div>
         {!ready || shelf.length === 0 ? (
-          <div className="empty">{ready ? "还没有上架的作品。" : "正在载入"}</div>
+          <div className="empty">{ready ? t("home.noProducts") : t("common.loading")}</div>
         ) : (
           <div className="cards">
             {shelf.map((product) => (
@@ -135,28 +139,28 @@ export function Home() {
 
       <section className="section split">
         <div>
-          <p className="kicker">30 天</p>
-          <h2>支持一次，看到下一页</h2>
+          <p className="kicker">{t("home.thirty")}</p>
+          <h2>{t("home.supportOnce")}</h2>
           <ol className="steps">
             <li>
               <span>01</span>
               <div>
-                <strong>找到喜欢的主页</strong>
-                <p>动态是公开的门口。想看线稿、分轨、配方和未刊页，再决定要不要进去。</p>
+                <strong>{t("home.s1t")}</strong>
+                <p>{t("home.s1p")}</p>
               </div>
             </li>
             <li>
               <span>02</span>
               <div>
-                <strong>开通一档会员</strong>
-                <p>按 30 天计算，不自动续费。到期前可以再开一档，也可以什么都不做。</p>
+                <strong>{t("home.s2t")}</strong>
+                <p>{t("home.s2p")}</p>
               </div>
             </li>
             <li>
               <span>03</span>
               <div>
-                <strong>作品直接入库</strong>
-                <p>确认订单后，数字作品进入我的库，可以再次下载创作者写下的正文。</p>
+                <strong>{t("home.s3t")}</strong>
+                <p>{t("home.s3p")}</p>
               </div>
             </li>
           </ol>
@@ -164,20 +168,20 @@ export function Home() {
         {sample && spotlight && (
           <Link to={`/c/${spotlight.handle}?tab=member`} className="ticket ticket-link">
             <p className="kicker">
-              {spotlight.name} · {sample.name}
+              {spotlight.name} · {phrase(sample.name)}
             </p>
             <div className="ticket-price">
               <strong>{yuan(sample.price)}</strong>
-              <span>/ 30 天</span>
+              <span>{t("common.per30")}</span>
             </div>
-            <p>{sample.blurb}</p>
+            <p>{phrase(sample.blurb)}</p>
             <div className="ticket-dash" />
             <ul>
               {sample.perks.map((perk) => (
-                <li key={perk}>{perk}</li>
+                <li key={perk}>{phrase(perk)}</li>
               ))}
             </ul>
-            <span className="stamp">不自动续费</span>
+            <span className="stamp">{t("common.noRenew")}</span>
           </Link>
         )}
       </section>

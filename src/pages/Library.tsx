@@ -1,11 +1,13 @@
 import { Link, useLocation } from "react-router-dom";
 import { Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { daysLeft, downloadText, formatDate, yuan } from "../utils";
 
 export function Library() {
-  useTitle("我的库 · 星页");
+  const { t, phrase } = useI18n();
+  useTitle(t("lib.title"));
   const { user, productById, creatorById, tierById } = useStore();
   const location = useLocation();
   const flash = (location.state as { flash?: string } | null)?.flash;
@@ -13,9 +15,9 @@ export function Library() {
     return (
       <div className="page narrow">
         <div className="empty">
-          <h1>登录后查看我的库</h1>
+          <h1>{t("lib.loginH")}</h1>
           <Link to="/login?next=/library" className="btn btn-dark">
-            登录
+            {t("login")}
           </Link>
         </div>
       </div>
@@ -31,14 +33,14 @@ export function Library() {
   return (
     <div className="page">
       <header className="page-intro">
-        <p className="kicker">我的库</p>
-        <h1>{user.name}的支持</h1>
+        <p className="kicker">{t("lib.kicker")}</p>
+        <h1>{t("lib.support", { name: user.name })}</h1>
       </header>
       {flash && <p className="banner-note">{flash}</p>}
       <section className="section">
-        <h2>生效中的会员</h2>
+        <h2>{t("lib.active")}</h2>
         <div className="stack">
-          {user.memberships.length === 0 && <div className="empty">还没有开通会员。</div>}
+          {user.memberships.length === 0 && <div className="empty">{t("lib.noneMember")}</div>}
           {user.memberships.map((item) => {
             const tier = tierById(item.tierId);
             const creator = creatorById(item.creatorId);
@@ -47,14 +49,18 @@ export function Library() {
               <article key={`${item.creatorId}-${item.tierId}`} className="line">
                 <div>
                   <strong>
-                    {creator?.name} · {tier?.name ?? "会员"}
+                    {creator?.name} · {phrase(tier?.name ?? "") || t("common.member")}
                   </strong>
                   <p className="muted">
-                    {left > 0 ? `还剩 ${left} 天` : "已到期"} · 至 {formatDate(item.expiresAt)} · {yuan(tier?.price ?? 0)} / 30 天
+                    {t("lib.until", {
+                      status: left > 0 ? t("lib.left", { n: left }) : t("lib.expired"),
+                      date: formatDate(item.expiresAt),
+                      price: yuan(tier?.price ?? 0),
+                    })}
                   </p>
                 </div>
                 <Link to={`/c/${item.creatorId}?tab=member`} className="btn btn-line">
-                  {left > 0 ? "查看" : "重新开通"}
+                  {left > 0 ? t("common.view") : t("lib.reopen")}
                 </Link>
               </article>
             );
@@ -62,9 +68,9 @@ export function Library() {
         </div>
       </section>
       <section className="section">
-        <h2>已购作品</h2>
+        <h2>{t("lib.bought")}</h2>
         <div className="cards">
-          {user.library.length === 0 && <div className="empty">库里还没有作品。</div>}
+          {user.library.length === 0 && <div className="empty">{t("lib.noneProduct")}</div>}
           {user.library.map((item) => {
             const product = productById(item.productId);
             if (!product) return null;
@@ -82,7 +88,7 @@ export function Library() {
                     className="btn btn-dark"
                     onClick={() => save(product.id, product.title)}
                   >
-                    下载
+                    {t("common.download")}
                   </button>
                 </div>
               </article>

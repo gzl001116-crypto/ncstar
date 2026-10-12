@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { isMessage, useI18n } from "./i18n";
 import type { Catalog, Category, Creator, Post, Product, Tier, User } from "./types";
 
 type Toast = { id: number; text: string };
@@ -68,14 +69,24 @@ async function call(path: string, body?: unknown) {
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const data = (await response.json().catch(() => ({}))) as Catalog & { error?: string; toast?: string };
+  const data = (await response.json().catch(() => ({}))) as Catalog & {
+    code?: string;
+    name?: string;
+    toast?: string;
+    error?: string;
+  };
   return { response, data };
 }
 
 export function StoreProvider({ children }: { children: ReactNode }) {
+  const { t } = useI18n();
   const [catalog, setCatalog] = useState<Catalog>(empty);
   const [ready, setReady] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const say = (code?: string, name?: string, legacy?: string) => {
+    if (code && isMessage(code)) return t(code, name ? { name } : undefined);
+    return legacy || code || t("err.generic");
+  };
 
   const toast = (text: string) => {
     const id = Date.now() + Math.random();
@@ -83,7 +94,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => setToasts((current) => current.filter((item) => item.id !== id)), 2800);
   };
 
-  const apply = (data: Catalog & { toast?: string }) => {
+  const apply = (data: Catalog & { code?: string; name?: string; toast?: string }) => {
     setCatalog({
       creators: data.creators ?? [],
       posts: data.posts ?? [],
@@ -92,25 +103,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       comments: data.comments ?? [],
       user: data.user ?? null,
     });
-    if (data.toast) toast(data.toast);
+    if (data.code || data.toast) toast(say(data.code, data.name, data.toast));
   };
 
   useEffect(() => {
+    let live = true;
     fetch("/api/state", { credentials: "same-origin" })
       .then((response) => response.json())
-      .then((data: Catalog) => apply(data))
-      .catch(() => toast("没有连上星页"))
-      .finally(() => setReady(true));
+      .then((data: Catalog) => {
+        if (live) apply(data);
+      })
+      .catch(() => {
+        if (live) toast(t("err.offline"));
+      })
+      .finally(() => {
+        if (live) setReady(true);
+      });
+    return () => {
+      live = false;
+    };
+    // Language is chosen once, before the first paint of this provider.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const mutate = async (path: string, body?: unknown) => {
     try {
       const { response, data } = await call(path, body ?? {});
-      if (!response.ok) return data.error || "没有完成";
+      if (!response.ok) return say(data.code, data.name, data.error);
       apply(data);
       return null;
     } catch {
-      return "网络异常，请稍后再试";
+      return t("err.network");
     }
   };
 

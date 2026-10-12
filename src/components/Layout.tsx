@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { Avatar } from "./Cover";
 
@@ -16,6 +17,7 @@ function Mark() {
 }
 
 export function Layout() {
+  const { t } = useI18n();
   const { user, logout, toasts } = useStore();
   const [open, setOpen] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -40,25 +42,25 @@ export function Layout() {
         <div className="topbar-inner">
           <Link to="/" className="brand">
             <Mark />
-            <span>星页</span>
+            <span>{t("brand")}</span>
           </Link>
           <nav className="nav-links">
-            <NavLink to="/explore">探索</NavLink>
-            <NavLink to="/studio">创作台</NavLink>
-            <NavLink to="/about">关于</NavLink>
+            <NavLink to="/explore">{t("nav.explore")}</NavLink>
+            <NavLink to="/studio">{t("nav.studio")}</NavLink>
+            <NavLink to="/about">{t("nav.about")}</NavLink>
           </nav>
           <form className="search" onSubmit={onSearch}>
             <input
               name="q"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索创作者、动态、作品"
-              aria-label="搜索"
+              placeholder={t("search.placeholder")}
+              aria-label={t("search.label")}
             />
           </form>
           <div className="nav-actions">
-            <Link to="/checkout" className="cart-link" aria-label="购物袋">
-              购物袋
+            <Link to="/checkout" className="cart-link" aria-label={t("cart")}>
+              {t("cart")}
               {cartCount > 0 && <span className="badge">{cartCount}</span>}
             </Link>
             {user ? (
@@ -69,21 +71,21 @@ export function Layout() {
                 </button>
                 {menu && (
                   <div className="menu-pop">
-                    <Link to="/library">我的库</Link>
-                    <Link to="/studio">创作台</Link>
-                    {user.isCreator && <Link to={`/c/${user.handle}`}>我的主页</Link>}
+                    <Link to="/library">{t("library")}</Link>
+                    <Link to="/studio">{t("nav.studio")}</Link>
+                    {user.isCreator && <Link to={`/c/${user.handle}`}>{t("my.page")}</Link>}
                     <button type="button" onClick={logout}>
-                      退出
+                      {t("logout")}
                     </button>
                   </div>
                 )}
               </div>
             ) : (
               <Link to="/login" className="btn btn-dark btn-small">
-                登录
+                {t("login")}
               </Link>
             )}
-            <button className="menu-btn" type="button" aria-label={open ? "关闭菜单" : "打开菜单"} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+            <button className="menu-btn" type="button" aria-label={open ? t("menu.close") : t("menu.open")} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
               <span />
               <span />
             </button>
@@ -95,15 +97,15 @@ export function Layout() {
               <input
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="搜索"
-                aria-label="搜索"
+                placeholder={t("search.short")}
+                aria-label={t("search.label")}
               />
             </form>
-            <NavLink to="/explore">探索</NavLink>
-            <NavLink to="/studio">创作台</NavLink>
-            <NavLink to="/about">关于</NavLink>
-            <NavLink to="/library">我的库</NavLink>
-            <NavLink to="/checkout">购物袋</NavLink>
+            <NavLink to="/explore">{t("nav.explore")}</NavLink>
+            <NavLink to="/studio">{t("nav.studio")}</NavLink>
+            <NavLink to="/about">{t("nav.about")}</NavLink>
+            <NavLink to="/library">{t("library")}</NavLink>
+            <NavLink to="/checkout">{t("cart")}</NavLink>
           </div>
         )}
       </header>
@@ -115,23 +117,23 @@ export function Layout() {
           <div>
             <Link to="/" className="brand">
               <Mark />
-              <span>星页</span>
+              <span>{t("brand")}</span>
             </Link>
-            <p>把作品交给真正喜欢它的人。动态、数字商店，以及 30 天、不自动续费的会员。</p>
+            <p>{t("footer.blurb")}</p>
           </div>
           <div>
-            <strong>逛一逛</strong>
-            <Link to="/explore">探索</Link>
-            <Link to="/about">关于星页</Link>
-            <Link to="/terms">使用条款</Link>
-            <Link to="/tokushoho">特定商取引法に基づく表記</Link>
+            <strong>{t("footer.browse")}</strong>
+            <Link to="/explore">{t("nav.explore")}</Link>
+            <Link to="/about">{t("footer.about")}</Link>
+            <Link to="/terms">{t("footer.terms")}</Link>
+            <Link to="/tokushoho">{t("footer.tokushoho")}</Link>
           </div>
           <div>
-            <strong>账号</strong>
-            <Link to="/register">注册</Link>
-            <Link to="/login">登录</Link>
-            <Link to="/library">我的库</Link>
-            <Link to="/studio">创作台</Link>
+            <strong>{t("footer.account")}</strong>
+            <Link to="/register">{t("register")}</Link>
+            <Link to="/login">{t("login")}</Link>
+            <Link to="/library">{t("library")}</Link>
+            <Link to="/studio">{t("nav.studio")}</Link>
           </div>
         </div>
       </footer>

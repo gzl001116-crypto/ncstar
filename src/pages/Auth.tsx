@@ -1,10 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useTitle } from "../hooks";
+import { isMessage, useI18n } from "../i18n";
 import { useStore } from "../store";
 
 export function Auth({ mode }: { mode: "login" | "register" }) {
-  useTitle(mode === "login" ? "登录 · 星页" : "注册 · 星页");
+  const { t, lang } = useI18n();
+  useTitle(mode === "login" ? t("auth.loginTitle") : t("auth.registerTitle"));
   const { login, register } = useStore();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -39,7 +41,7 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
     setError("");
     const email = form.email.trim();
     if (!email) {
-      setError("先填写邮箱");
+      setError(t("err.email.first"));
       return;
     }
     setSending(true);
@@ -47,18 +49,19 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
       const response = await fetch("/api/send-code", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, lang }),
       });
-      const data = (await response.json().catch(() => ({}))) as { error?: string; token?: string; expiresAt?: number };
+      const data = (await response.json().catch(() => ({}))) as { code?: string; error?: string; token?: string; expiresAt?: number };
       if (!response.ok || !data.token || !data.expiresAt) {
-        setError(data.error || "验证码没有发出");
+        const key = data.code || data.error || "";
+        setError(isMessage(key) ? t(key) : key || t("err.code.send"));
         return;
       }
       setTicket({ token: data.token, expiresAt: data.expiresAt });
       setCode("");
       setCooldown(60);
     } catch {
-      setError("网络异常，验证码没有发出");
+      setError(t("err.network.code"));
     } finally {
       setSending(false);
     }
@@ -69,11 +72,11 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
     setError("");
     if (mode === "register") {
       if (!ticket) {
-        setError("请先获取邮箱验证码");
+        setError(t("err.code.first"));
         return;
       }
       if (!/^\d{6}$/.test(code)) {
-        setError("请输入 6 位验证码");
+        setError(t("err.code.digits"));
         return;
       }
     }
@@ -94,7 +97,7 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
       }
       go();
     } catch {
-      setError("网络异常，请稍后再试");
+      setError(t("err.network"));
     } finally {
       setBusy(false);
     }
@@ -103,24 +106,20 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
   return (
     <div className="page auth-wrap">
       <form className="auth-card" onSubmit={onSubmit}>
-        <p className="kicker">{mode === "login" ? "欢迎回来" : "新的一页"}</p>
-        <h1>{mode === "login" ? "登录星页" : "创建账号"}</h1>
-        <p className="muted">
-          {mode === "register"
-            ? "注册前会向邮箱发送 6 位验证码。账号会保存在星页，换一台设备也能登录。"
-            : "使用注册时的邮箱和密码登录。"}
-        </p>
+        <p className="kicker">{mode === "login" ? t("auth.welcome") : t("auth.new")}</p>
+        <h1>{mode === "login" ? t("auth.loginH") : t("auth.registerH")}</h1>
+        <p className="muted">{mode === "register" ? t("auth.registerLead") : t("auth.loginLead")}</p>
         {mode === "register" && (
           <>
             <label>
-              名字
+              {t("auth.name")}
               <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} required />
             </label>
             <label>
-              主页地址
+              {t("auth.handle")}
               <input
                 value={form.handle}
-                placeholder="例如 heye"
+                placeholder={t("auth.handlePh")}
                 onChange={(event) => setForm({ ...form, handle: event.target.value })}
                 required
               />
@@ -128,7 +127,7 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
           </>
         )}
         <label>
-          邮箱
+          {t("auth.email")}
           <span className="code-row">
             <input
               type="email"
@@ -141,29 +140,29 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
             />
             {mode === "register" && (
               <button className="btn btn-line" type="button" onClick={sendCode} disabled={sending || cooldown > 0}>
-                {sending ? "发送中" : cooldown > 0 ? `${cooldown} 秒` : "获取验证码"}
+                {sending ? t("auth.sending") : cooldown > 0 ? t("auth.seconds", { n: cooldown }) : t("auth.getCode")}
               </button>
             )}
           </span>
         </label>
         {mode === "register" && (
           <label>
-            邮箱验证码
+            {t("auth.code")}
             <input
               inputMode="numeric"
               autoComplete="one-time-code"
               maxLength={6}
               pattern="\d{6}"
-              placeholder="6 位数字"
+              placeholder={t("auth.codePh")}
               value={code}
               onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
               required
             />
           </label>
         )}
-        {mode === "register" && ticket && <p className="banner-note">验证码已发到邮箱，10 分钟内有效。</p>}
+        {mode === "register" && ticket && <p className="banner-note">{t("auth.codeSent")}</p>}
         <label>
-          密码
+          {t("auth.password")}
           <input
             type="password"
             value={form.password}
@@ -178,20 +177,20 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
               checked={form.isCreator}
               onChange={(event) => setForm({ ...form, isCreator: event.target.checked })}
             />
-            我要开通创作页，发布动态和作品
+            {t("auth.creatorCheck")}
           </label>
         )}
         {error && <p className="error">{error}</p>}
         <button className="btn btn-dark btn-block" type="submit" disabled={busy}>
-          {busy ? "请稍候" : mode === "login" ? "登录" : "注册"}
+          {busy ? t("common.wait") : mode === "login" ? t("login") : t("register")}
         </button>
         {mode === "login" ? (
           <p>
-            还没有账号？ <Link to={`/register${next ? `?next=${encodeURIComponent(next)}` : ""}`}>注册</Link>
+            {t("auth.noAccount")} <Link to={`/register${next ? `?next=${encodeURIComponent(next)}` : ""}`}>{t("register")}</Link>
           </p>
         ) : (
           <p>
-            已有账号？ <Link to={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}>登录</Link>
+            {t("auth.hasAccount")} <Link to={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}>{t("login")}</Link>
           </p>
         )}
       </form>

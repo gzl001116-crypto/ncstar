@@ -1,12 +1,14 @@
 import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { CATEGORIES, type Category } from "../types";
 import { yuan } from "../utils";
 
 export function Studio() {
-  useTitle("创作台 · 星页");
+  const { t, phrase, rank, locale } = useI18n();
+  useTitle(t("studio.title"));
   const { ready, user, posts, products, tiers, creatorById, publishPost, publishProduct, updateProfile, openStudio, followerCount, supporterCount } =
     useStore();
   const navigate = useNavigate();
@@ -18,7 +20,7 @@ export function Studio() {
   if (!ready) {
     return (
       <div className="page narrow">
-        <p className="muted">正在载入</p>
+        <p className="muted">{t("common.loading")}</p>
       </div>
     );
   }
@@ -27,10 +29,10 @@ export function Studio() {
     return (
       <div className="page narrow">
         <div className="empty">
-          <h1>登录后使用创作台</h1>
-          <p>用你的邮箱登录，然后发布动态和上架作品。</p>
+          <h1>{t("studio.loginH")}</h1>
+          <p>{t("studio.loginP")}</p>
           <Link to="/login?next=/studio" className="btn btn-dark">
-            登录
+            {t("login")}
           </Link>
         </div>
       </div>
@@ -96,12 +98,12 @@ export function Studio() {
   return (
     <div className="page">
       <header className="page-intro">
-        <p className="kicker">创作台</p>
-        <h1>{user.isCreator ? `${user.name}的工作台` : "开通你的创作页"}</h1>
+        <p className="kicker">{t("nav.studio")}</p>
+        <h1>{user.isCreator ? t("studio.desk", { name: user.name }) : t("studio.openH")}</h1>
       </header>
       {!user.isCreator || !creator ? (
         <div className="empty">
-          <p>开通之后会出现主页、两档 30 天会员，以及发布动态和上架作品的表单。</p>
+          <p>{t("studio.openP")}</p>
           {openError && <p className="error">{openError}</p>}
           <button
             type="button"
@@ -112,135 +114,137 @@ export function Studio() {
               if (!result) navigate("/studio");
             }}
           >
-            开通创作页
+            {t("home.open")}
           </button>
         </div>
       ) : (
         <>
           <div className="studio-stats">
             <div>
-              <strong>{followerCount(creator).toLocaleString("zh-CN")}</strong>
-              <span>关注</span>
+              <strong>{followerCount(creator).toLocaleString(locale)}</strong>
+              <span>{t("common.followers")}</span>
             </div>
             <div>
-              <strong>{supporterCount(creator.id).toLocaleString("zh-CN")}</strong>
-              <span>支持中</span>
+              <strong>{supporterCount(creator.id).toLocaleString(locale)}</strong>
+              <span>{t("common.supporters")}</span>
             </div>
             <div>
               <strong>{minePosts.length}</strong>
-              <span>动态</span>
+              <span>{t("common.posts")}</span>
             </div>
             <div>
               <strong>{yuan(mineProducts.reduce((sum, item) => sum + item.price, 0))}</strong>
-              <span>在售标价合计</span>
+              <span>{t("studio.priceSum")}</span>
             </div>
             <Link to={`/c/${creator.handle}`} className="btn btn-line">
-              查看主页
+              {t("studio.viewPage")}
             </Link>
           </div>
 
           <div className="studio-grid">
             <form className="panel" onSubmit={onProfile}>
-              <h2>主页</h2>
+              <h2>{t("studio.profile")}</h2>
               <label>
-                名字
+                {t("auth.name")}
                 <input name="name" defaultValue={creator.name} />
               </label>
               <label>
-                所在地
+                {t("studio.location")}
                 <input name="location" defaultValue={creator.location} />
               </label>
               <label>
-                分类
+                {t("studio.category")}
                 <select name="category" defaultValue={creator.category}>
                   {CATEGORIES.map((item) => (
-                    <option key={item}>{item}</option>
+                    <option key={item} value={item}>
+                      {phrase(item)}
+                    </option>
                   ))}
                 </select>
               </label>
               <label>
-                简介
+                {t("studio.bio")}
                 <textarea name="bio" defaultValue={creator.bio} rows={4} />
               </label>
               {profileError && <p className="error">{profileError}</p>}
               <button className="btn btn-dark" type="submit">
-                保存
+                {t("common.save")}
               </button>
             </form>
 
             <form className="panel" onSubmit={onPost}>
-              <h2>发一条动态</h2>
+              <h2>{t("studio.newPost")}</h2>
               <label>
-                标题
+                {t("studio.postTitle")}
                 <input name="title" required />
               </label>
               <label>
-                摘要
+                {t("studio.excerpt")}
                 <input name="excerpt" />
               </label>
               <label>
-                正文
+                {t("studio.body")}
                 <textarea name="body" rows={5} required />
               </label>
               <label>
-                谁可以看
+                {t("studio.who")}
                 <select name="minRank" defaultValue="0">
-                  <option value="0">公开</option>
+                  <option value="0">{t("rank.public")}</option>
                   {plans.map((tier) => (
                     <option key={tier.id} value={tier.rank}>
-                      {tier.name}及以上
+                      {t("studio.andAbove", { name: phrase(tier.name) })}
                     </option>
                   ))}
                 </select>
               </label>
               {postError && <p className="error">{postError}</p>}
               <button className="btn btn-dark" type="submit">
-                发布
+                {t("studio.publish")}
               </button>
             </form>
 
             <form className="panel" onSubmit={onProduct}>
-              <h2>上架一件作品</h2>
+              <h2>{t("studio.newProduct")}</h2>
               <label>
-                名称
+                {t("studio.productName")}
                 <input name="title" required />
               </label>
               <label>
-                类型
-                <input name="kind" placeholder="壁纸、音源、模板…" />
+                {t("studio.kind")}
+                <input name="kind" placeholder={t("studio.kindPh")} />
               </label>
               <label>
-                价格（元）
+                {t("studio.price")}
                 <input name="price" type="number" min="1" max="9999" step="1" required />
               </label>
               <label>
-                包含内容
-                <input name="includes" placeholder="用逗号分开" />
+                {t("studio.includes")}
+                <input name="includes" placeholder={t("studio.includesPh")} />
               </label>
               <label>
-                介绍
+                {t("studio.desc")}
                 <textarea name="description" rows={4} />
               </label>
               <label>
-                购买后可下载的正文
-                <textarea name="fileBody" rows={5} required placeholder="买家下载到的就是这段文字" />
+                {t("studio.file")}
+                <textarea name="fileBody" rows={5} required placeholder={t("studio.filePh")} />
               </label>
               {shopError && <p className="error">{shopError}</p>}
               <button className="btn btn-dark" type="submit">
-                上架
+                {t("studio.newProduct")}
               </button>
             </form>
           </div>
 
           <section className="section">
-            <h2>已经放上去的</h2>
+            <h2>{t("studio.listed")}</h2>
             <div className="stack">
-              {minePosts.length === 0 && mineProducts.length === 0 && <div className="empty">还没有新的动态或作品。</div>}
+              {minePosts.length === 0 && mineProducts.length === 0 && <div className="empty">{t("studio.empty")}</div>}
               {minePosts.map((post) => (
                 <Link key={post.id} to={`/c/${user.handle}/posts/${post.id}`} className="line">
                   <div>
                     <strong>{post.title}</strong>
-                    <p className="muted">动态 · {post.minRank > 0 ? "会员" : "公开"}</p>
+                    <p className="muted">{t("studio.postMeta", { vis: rank(post.minRank) })}</p>
                   </div>
                 </Link>
               ))}
@@ -249,7 +253,7 @@ export function Studio() {
                   <div>
                     <strong>{product.title}</strong>
                     <p className="muted">
-                      {product.kind} · {yuan(product.price)}
+                      {phrase(product.kind)} · {yuan(product.price)}
                     </p>
                   </div>
                 </Link>
@@ -257,16 +261,16 @@ export function Studio() {
             </div>
           </section>
           <section className="section">
-            <h2>会员档</h2>
+            <h2>{t("studio.tiers")}</h2>
             <div className="tier-grid">
               {plans.map((tier) => (
                 <article key={tier.id} className="ticket">
-                  <h3>{tier.name}</h3>
+                  <h3>{phrase(tier.name)}</h3>
                   <div className="ticket-price">
                     <strong>{yuan(tier.price)}</strong>
-                    <span>/ 30 天</span>
+                    <span>{t("common.per30")}</span>
                   </div>
-                  <p>{tier.blurb}</p>
+                  <p>{phrase(tier.blurb)}</p>
                 </article>
               ))}
             </div>

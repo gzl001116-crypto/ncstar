@@ -11,11 +11,46 @@ export type Limiter = {
 const FROM = "星页 <noreply@fanstar.dev>";
 const TTL_MS = 10 * 60 * 1000;
 
+type MailLang = "zh" | "zh-Hant" | "ja" | "en";
+
 type Deliver = (
   apiKey: string,
   email: string,
   code: string,
+  lang: MailLang,
 ) => Promise<{ ok: true } | { ok: false; error: string }>;
+
+function mailLang(value: unknown): MailLang {
+  if (value === "ja" || value === "en" || value === "zh-Hant" || value === "zh") return value;
+  return "zh";
+}
+
+function mailHtml(lead: string, code: string, note: string) {
+  return `<div style="font-family:sans-serif;line-height:1.6;color:#111318"><p>${lead}</p><p style="font-size:32px;letter-spacing:8px;font-weight:700;margin:16px 0">${code}</p><p>${note}</p></div>`;
+}
+
+const MAIL: Record<MailLang, { subject: string; text: (code: string) => string; html: (code: string) => string }> = {
+  zh: {
+    subject: "星页注册验证码",
+    text: (code) => `你的星页注册验证码是 ${code}，10 分钟内有效。如果不是你本人操作，忽略这封邮件即可。`,
+    html: (code) => mailHtml("你好，正在注册星页。", code, "验证码 10 分钟内有效。如果不是你本人操作，忽略这封邮件即可。"),
+  },
+  "zh-Hant": {
+    subject: "星頁註冊驗證碼",
+    text: (code) => `你的星頁註冊驗證碼是 ${code}，10 分鐘內有效。如果不是你本人操作，忽略這封郵件即可。`,
+    html: (code) => mailHtml("你好，正在註冊星頁。", code, "驗證碼 10 分鐘內有效。如果不是你本人操作，忽略這封郵件即可。"),
+  },
+  ja: {
+    subject: "星页の登録確認コード",
+    text: (code) => `星页の登録確認コードは ${code} です。10分以内に入力してください。身に覚えがない場合は、このメールを無視してください。`,
+    html: (code) => mailHtml("星页の登録を進めています。", code, "コードは10分間有効です。身に覚えがない場合は、このメールを無視してください。"),
+  },
+  en: {
+    subject: "Your Fanstar verification code",
+    text: (code) => `Your Fanstar verification code is ${code}. It expires in 10 minutes. If you didn't try to register, you can ignore this email.`,
+    html: (code) => mailHtml("You're signing up for Fanstar.", code, "The code expires in 10 minutes. If you didn't try to register, you can ignore this email."),
+  },
+};
 
 export function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -131,7 +166,8 @@ async function readJson(request: Request): Promise<Record<string, unknown>> {
   return {};
 }
 
-const deliverMail: Deliver = async (apiKey, email, code) => {
+const deliverMail: Deliver = async (apiKey, email, code, lang) => {
+  const copy = MAIL[lang];
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
@@ -141,14 +177,14 @@ const deliverMail: Deliver = async (apiKey, email, code) => {
     body: JSON.stringify({
       from: FROM,
       to: [email],
-      subject: "星页注册验证码",
-      text: `你的星页注册验证码是 ${code}，10 分钟内有效。如果不是你本人操作，忽略这封邮件即可。`,
-      html: `<div style="font-family:sans-serif;line-height:1.6;color:#111318"><p>你好，正在注册星页。</p><p style="font-size:32px;letter-spacing:8px;font-weight:700;margin:16px 0">${code}</p><p>验证码 10 分钟内有效。如果不是你本人操作，忽略这封邮件即可。</p></div>`,
+      subject: copy.subject,
+      text: copy.text(code),
+      html: copy.html(code),
     }),
   });
   if (res.ok) return { ok: true };
   console.error("resend send failed", res.status);
-  return { ok: false, error: "验证码邮件没有发出，请稍后再试" };
+  return { ok: false, error: "err.mail.send" };
 };
 
 export async function handleSend(
@@ -159,23 +195,23 @@ export async function handleSend(
 ): Promise<Response> {
   const body = await readJson(request);
   const email = normalizeEmail(body.email);
-  if (!email) return json({ error: "请填写有效邮箱" }, 400);
+  if (!email) return json({ code: "err.email" }, 400);
 
   const ip = request.headers.get("cf-connecting-ip") ?? "local";
   if (!(await limiter.allowed(`send:ip:${ip}`, 8, 600))) {
-    return json({ error: "获取太频繁，请稍后再试" }, 429);
+    return json({ code: "err.send.limit" }, 429);
   }
   if (!(await limiter.allowed(`send:email:${email}`, 1, 60))) {
-    return json({ error: "验证码刚刚发过，请 60 秒后再试" }, 429);
+    return json({ code: "err.send.cooldown" }, 429);
   }
 
   const secret = await signingKey(env);
-  if (!secret || !env.RESEND_API_KEY) return json({ error: "邮件服务还没有配置" }, 503);
+  if (!secret || !env.RESEND_API_KEY) return json({ code: "err.mail.unconfigured" }, 503);
 
   const code = sixDigits();
   const expiresAt = Date.now() + TTL_MS;
-  const sent = await (deps.deliver ?? deliverMail)(env.RESEND_API_KEY, email, code);
-  if (!sent.ok) return json({ error: sent.error }, 502);
+  const sent = await (deps.deliver ?? deliverMail)(env.RESEND_API_KEY, email, code, mailLang(body.lang));
+  if (!sent.ok) return json({ code: sent.error }, 502);
 
   await limiter.record(`send:ip:${ip}`, 600);
   await limiter.record(`send:email:${email}`, 60);
@@ -185,13 +221,13 @@ export async function handleSend(
 
 export async function matchCode(env: MailEnv, email: string, code: string, token: string, expiresAt: number) {
   if (!email || !/^\d{6}$/.test(code) || !/^[0-9a-f]{64}$/.test(token) || !Number.isFinite(expiresAt)) {
-    return "请输入 6 位验证码";
+    return "err.code.digits";
   }
-  if (Date.now() > expiresAt) return "验证码已过期，请重新获取";
+  if (Date.now() > expiresAt) return "err.code.expired";
   const secret = await signingKey(env);
-  if (!secret) return "邮件服务还没有配置";
+  if (!secret) return "err.mail.unconfigured";
   const expected = await sign(secret, payload(email, expiresAt, code));
-  if (!safeEqual(expected, token)) return "验证码不正确";
+  if (!safeEqual(expected, token)) return "err.code.wrong";
   return null;
 }
 
@@ -203,11 +239,11 @@ export async function handleVerify(request: Request, env: MailEnv, limiter: Limi
   const expiresAt = typeof body.expiresAt === "number" ? body.expiresAt : Number(body.expiresAt);
   const ip = request.headers.get("cf-connecting-ip") ?? "local";
   if (!(await limiter.allowed(`verify:ip:${ip}`, 20, 600)) || !(await limiter.allowed(`verify:${token}`, 5, 600))) {
-    return json({ error: "验证次数过多，请重新获取验证码" }, 429);
+    return json({ code: "err.code.limit" }, 429);
   }
   await limiter.record(`verify:ip:${ip}`, 600);
   await limiter.record(`verify:${token}`, 600);
   const error = await matchCode(env, email, code, token, expiresAt);
-  if (error) return json({ error }, error === "邮件服务还没有配置" ? 503 : 400);
+  if (error) return json({ code: error }, error === "err.mail.unconfigured" ? 503 : 400);
   return json({ ok: true });
 }

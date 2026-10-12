@@ -1,22 +1,24 @@
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 
 export function Terms() {
-  useTitle("使用条款 · 星页");
+  const { t } = useI18n();
+  useTitle(t("terms.title"));
   return (
     <article className="page reading prose-page">
-      <p className="kicker">条款</p>
-      <h1>使用星页的约定</h1>
-      <p>继续使用星页，表示你理解下面几件事。</p>
-      <h2>账号</h2>
-      <p>请使用你自己的邮箱注册。我们会发送 6 位验证码确认这个邮箱属于你。密码只以摘要形式保存在服务器上，不要使用你在其他网站使用的密码。</p>
-      <h2>创作者与支持者</h2>
-      <p>创作者对自己发布的文字、价格和档位说明负责。支持者在开通会员或购买前，应看清那一页写了什么。确认后的订单记在账号上，对应的会员或作品立即生效。</p>
-      <h2>数字作品与会员</h2>
-      <p>可下载的内容是创作者写入的正文。会员有效期为 30 天，从开通当天计算，不自动续费。更换档位时，30 天从新的开通日重新计算。</p>
-      <h2>平台服务费</h2>
-      <p>服务费为标价的 8%，由创作者承担。支持者确认的是标价。</p>
-      <h2>不欢迎的内容</h2>
-      <p>不要发布侵犯他人权利的作品，也不要发布违法内容。星页不承接定制服务。</p>
+      <p className="kicker">{t("terms.kicker")}</p>
+      <h1>{t("terms.h1")}</h1>
+      <p>{t("terms.lead")}</p>
+      <h2>{t("terms.hAccount")}</h2>
+      <p>{t("terms.pAccount")}</p>
+      <h2>{t("terms.hRoles")}</h2>
+      <p>{t("terms.pRoles")}</p>
+      <h2>{t("terms.hDigital")}</h2>
+      <p>{t("terms.pDigital")}</p>
+      <h2>{t("terms.hFee")}</h2>
+      <p>{t("terms.pFee")}</p>
+      <h2>{t("terms.hBad")}</h2>
+      <p>{t("terms.pBad")}</p>
     </article>
   );
 }

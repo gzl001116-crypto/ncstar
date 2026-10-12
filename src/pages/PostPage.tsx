@@ -2,26 +2,28 @@ import { FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Avatar, Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
+import { useI18n } from "../i18n";
 import { useStore } from "../store";
-import { downloadText, formatDate, fromNow, visibilityLabel } from "../utils";
+import { downloadText, formatDate } from "../utils";
 import { NotFound } from "./NotFound";
 
 export function PostPage() {
   const { handle = "", postId = "" } = useParams();
   const navigate = useNavigate();
+  const { t, phrase, rel, rank } = useI18n();
   const { ready, posts, comments, creatorById, tiers, canRead, liked, toggleLike, user, addComment, activeMembership, tierById } = useStore();
   const post = posts.find((item) => item.id === postId && item.creatorId === handle);
   const creator = creatorById(handle);
-  useTitle(post ? `${post.title} · 星页` : "未找到 · 星页");
+  useTitle(post ? `${post.title} · ${t("brand")}` : t("nf.title"));
   const [text, setText] = useState("");
   const [error, setError] = useState("");
-  if (!ready) return <div className="page"><p className="muted">正在载入</p></div>;
+  if (!ready) return <div className="page"><p className="muted">{t("common.loading")}</p></div>;
   if (!post || !creator) return <NotFound />;
 
   const open = canRead(post);
   const thread = comments.filter((item) => item.postId === post.id);
   const membership = activeMembership(creator.id);
-  const rank = user?.handle === creator.id ? 99 : (tierById(membership?.tierId ?? "")?.rank ?? 0);
+  const viewerRank = user?.handle === creator.id ? 99 : (tierById(membership?.tierId ?? "")?.rank ?? 0);
   const needed = tiers
     .filter((tier) => tier.creatorId === creator.id && tier.rank >= post.minRank)
     .sort((a, b) => a.price - b.price)[0];
@@ -44,7 +46,7 @@ export function PostPage() {
   const saveFile = async (name: string) => {
     const response = await fetch(`/api/download?postId=${encodeURIComponent(post.id)}`, { credentials: "same-origin" });
     if (!response.ok) {
-      setError("现在还不能下载这份附件");
+      setError(t("err.download.now"));
       return;
     }
     downloadText(name, await response.text());
@@ -53,11 +55,11 @@ export function PostPage() {
   return (
     <article className="page reading">
       <Link to={`/c/${creator.handle}`} className="back">
-        ← {creator.name}的主页
+        {t("post.home", { name: creator.name })}
       </Link>
       <Cover id={post.coverKey} ratio="16 / 8" className="banner" />
       <div className="meta">
-        <span className="pill">{open ? visibilityLabel(post.minRank) : "会员可见"}</span>
+        <span className="pill">{open ? rank(post.minRank) : t("rank.locked")}</span>
         <span className="muted">{formatDate(post.createdAt)}</span>
       </div>
       <h1>{post.title}</h1>
@@ -66,7 +68,7 @@ export function PostPage() {
           <Avatar name={creator.name} id={creator.id} size={36} />
           <span>
             {creator.name}
-            <small className="muted"> {fromNow(post.createdAt)}</small>
+            <small className="muted"> {rel(post.createdAt)}</small>
           </span>
         </Link>
         <button
@@ -75,7 +77,7 @@ export function PostPage() {
           aria-pressed={liked(post.id)}
           onClick={() => (user ? toggleLike(post.id) : navigate(`/login?next=/c/${handle}/posts/${post.id}`))}
         >
-          {liked(post.id) ? "已喜欢" : "喜欢"} · {post.likes}
+          {liked(post.id) ? t("post.liked") : t("post.like")} · {post.likes}
         </button>
       </div>
 
@@ -88,10 +90,10 @@ export function PostPage() {
           </div>
           {post.attachments.length > 0 && (
             <div className="files">
-              <h2>附件</h2>
+              <h2>{t("post.files")}</h2>
               {post.attachments.map((file) => {
                 const need = file.minRank ?? post.minRank;
-                const unlocked = rank >= need;
+                const unlocked = viewerRank >= need;
                 const gate = tiers.find((tier) => tier.creatorId === creator.id && tier.rank === need);
                 return (
                   <div key={file.name} className="file">
@@ -99,16 +101,16 @@ export function PostPage() {
                       <strong>{file.name}</strong>
                       <p className="muted">
                         {file.size}
-                        {need > 0 ? ` · ${gate?.name ?? "会员"}` : ""}
+                        {need > 0 ? ` · ${phrase(gate?.name ?? "") || t("common.member")}` : ""}
                       </p>
                     </div>
                     {unlocked ? (
                       <button type="button" className="btn btn-line" onClick={() => saveFile(file.name)}>
-                        下载
+                        {t("common.download")}
                       </button>
                     ) : (
                       <Link to={gate ? `/checkout?tier=${gate.id}` : `/c/${creator.handle}?tab=member`} className="btn btn-dark">
-                        解锁
+                        {t("common.unlock")}
                       </Link>
                     )}
                   </div>
@@ -119,29 +121,29 @@ export function PostPage() {
         </>
       ) : (
         <div className="lockbox">
-          <p className="kicker">这一页锁着</p>
-          <h2>开通{needed ? `「${needed.name}」` : "会员"}后可以阅读</h2>
+          <p className="kicker">{t("post.locked")}</p>
+          <h2>{needed ? t("post.lockTitle", { name: phrase(needed.name) }) : t("post.lockMember")}</h2>
           <p>{post.excerpt}</p>
           <div className="hero-actions">
             {needed && (
               <Link to={`/checkout?tier=${needed.id}`} className="btn btn-dark">
-                开通 30 天
+                {t("creator.open30")}
               </Link>
             )}
             <Link to={`/c/${creator.handle}?tab=member`} className="btn btn-line">
-              比较档位
+              {t("post.compare")}
             </Link>
           </div>
         </div>
       )}
 
       <section className="comments">
-        <h2>评论 {thread.length}</h2>
+        <h2>{t("post.comments", { n: thread.length })}</h2>
         <form onSubmit={onComment} className="composer">
-          <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={user ? "写一句你看到的" : "登录后才能评论"} rows={3} />
+          <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder={user ? t("post.placeholder") : t("post.placeholderLogin")} rows={3} />
           {error && <p className="error">{error}</p>}
           <button className="btn btn-dark" type="submit">
-            发送
+            {t("common.send")}
           </button>
         </form>
         <div className="stack">
@@ -150,12 +152,12 @@ export function PostPage() {
               <Avatar name={item.author} id={item.author} size={32} />
               <div>
                 <strong>{item.author}</strong>
-                <span className="muted"> {fromNow(item.createdAt)}</span>
+                <span className="muted"> {rel(item.createdAt)}</span>
                 <p>{item.text}</p>
               </div>
             </div>
           ))}
-          {thread.length === 0 && <p className="muted">还没有评论。</p>}
+          {thread.length === 0 && <p className="muted">{t("post.none")}</p>}
         </div>
       </section>
     </article>
