@@ -45,7 +45,7 @@ export function PlayHome() {
   const visible = owned.filter((product) => {
     if (format !== "all" && product.playFormat !== format) return false;
     const creator = creatorById(product.creatorId);
-    const haystack = `${product.title} ${product.description} ${creator?.name ?? ""}`.toLowerCase();
+    const haystack = `${product.title} ${product.description} ${product.tags.join(" ")} ${creator?.name ?? ""}`.toLowerCase();
     return haystack.includes(query.trim().toLowerCase());
   });
 

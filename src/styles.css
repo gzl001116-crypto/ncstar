@@ -324,6 +324,7 @@ main { flex: 1; min-height: 60vh; }
   flex: none;
   font-weight: 700;
 }
+img.avatar { object-fit: cover; display: block; }
 .feature { display: grid; grid-template-columns: 1.35fr 0.9fr; gap: 16px; }
 .feature-side { display: grid; gap: 16px; }
 
@@ -579,6 +580,14 @@ main { flex: 1; min-height: 60vh; }
 .studio-nav a { text-decoration: none; padding: 8px 14px; border-radius: 999px; background: white; border: 1px solid var(--line); color: inherit; }
 .studio-nav a.active { background: var(--ink); color: white; border-color: var(--ink); }
 .studio-form { max-width: 640px; }
+.avatar-panel { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; max-width: 640px; }
+.avatar-panel > div { display: grid; gap: 8px; justify-items: start; }
+.danger-zone { border-color: #e7c4bc; background: #fff8f6; max-width: 640px; }
+.btn-danger { background: #9c3b2e; color: white; border-color: #9c3b2e; }
+.btn-danger:hover { background: #7f2e24; }
+.work-edit { display: grid; gap: 10px; }
+.work-edit form { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.work-edit form input { flex: 1; min-width: 180px; }
 .studio-form input[type="file"] { padding: 10px; }
 .studio-lead { max-width: 680px; }
 .desk-note { color: var(--muted); margin: 10px 0 0; }

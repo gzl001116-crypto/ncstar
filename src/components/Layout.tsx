@@ -67,7 +67,7 @@ export function Layout() {
             {user ? (
               <div className="account">
                 <button className="account-btn" type="button" onClick={() => setMenu((value) => !value)} aria-expanded={menu}>
-                  <Avatar name={user.name} id={user.handle} size={32} />
+                  <Avatar name={user.name} id={user.handle} size={32} stamp={user.avatarAt} />
                   <span>{user.name}</span>
                 </button>
                 {menu && (

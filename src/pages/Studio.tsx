@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Avatar } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
@@ -163,12 +164,122 @@ export function StudioHome() {
   );
 }
 
+function AccountAvatar() {
+  const { t } = useI18n();
+  const { user, uploadAvatar } = useStore();
+  const [error, setError] = useState("");
+  if (!user) return null;
+  return (
+    <form
+      className="panel avatar-panel"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const file = new FormData(event.currentTarget).get("file");
+        if (!(file instanceof File) || file.size < 1) {
+          setError(t("err.avatar"));
+          return;
+        }
+        const result = await uploadAvatar(file);
+        setError(result ?? "");
+        if (!result) event.currentTarget.reset();
+      }}
+    >
+      <Avatar name={user.name} id={user.handle} size={72} stamp={user.avatarAt} />
+      <div>
+        <h2>{t("page.avatar")}</h2>
+        <p className="fineprint">{t("page.avatarHint")}</p>
+        <input name="file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+        {error && <p className="error">{error}</p>}
+        <button className="btn btn-dark" type="submit">
+          {t("page.change")}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ApplyCreator() {
+  const { t, phrase } = useI18n();
+  const { openStudio } = useStore();
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
+  const onApply = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const result = await openStudio({
+      category: String(data.get("category") ?? ""),
+      location: String(data.get("location") ?? ""),
+      bio: String(data.get("bio") ?? ""),
+    });
+    setError(result ?? "");
+    if (!result) navigate("/studio");
+  };
+  return (
+    <form className="panel studio-form" onSubmit={onApply}>
+      <h2>{t("page.apply")}</h2>
+      <p className="muted">{t("page.applyLead")}</p>
+      <label>
+        {t("studio.category")}
+        <select name="category" defaultValue="写作">
+          {CATEGORIES.map((item) => (
+            <option key={item} value={item}>
+              {phrase(item)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        {t("studio.location")}
+        <input name="location" />
+      </label>
+      <label>
+        {t("page.note")}
+        <textarea name="bio" rows={4} required placeholder={t("page.notePh")} />
+      </label>
+      {error && <p className="error">{error}</p>}
+      <button className="btn btn-dark" type="submit">
+        {t("page.apply")}
+      </button>
+    </form>
+  );
+}
+
+function DeleteAccount() {
+  const { t } = useI18n();
+  const { deleteAccount } = useStore();
+  const navigate = useNavigate();
+  const [error, setError] = useState("");
+  return (
+    <form
+      className="panel danger-zone"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const result = await deleteAccount(String(new FormData(event.currentTarget).get("password") ?? ""));
+        if (result) {
+          setError(result);
+          return;
+        }
+        navigate("/");
+      }}
+    >
+      <h2>{t("page.deleteH")}</h2>
+      <p className="muted">{t("page.deleteP")}</p>
+      <label>
+        {t("page.password")}
+        <input name="password" type="password" autoComplete="current-password" required />
+      </label>
+      {error && <p className="error">{error}</p>}
+      <button className="btn btn-danger" type="submit">
+        {t("page.deleteH")}
+      </button>
+    </form>
+  );
+}
+
 export function MyPage() {
   const { t } = useI18n();
   useTitle(t("my.page"));
-  const { ready, user, creatorById, openStudio } = useStore();
-  const navigate = useNavigate();
-  const [openError, setOpenError] = useState("");
+  const { ready, user, creatorById } = useStore();
 
   if (!ready) {
     return (
@@ -191,41 +302,23 @@ export function MyPage() {
     );
   }
   const creator = creatorById(user.handle);
-  if (!user.isCreator || !creator) {
-    return (
-      <div className="page">
-        <header className="page-intro">
-          <p className="kicker">{t("studio.navProfile")}</p>
-          <h1>{t("studio.openH")}</h1>
-        </header>
-        <div className="empty">
-          <p>{t("studio.openP")}</p>
-          {openError && <p className="error">{openError}</p>}
-          <button
-            type="button"
-            className="btn btn-dark"
-            onClick={async () => {
-              const result = await openStudio();
-              setOpenError(result ?? "");
-              if (!result) navigate("/studio");
-            }}
-          >
-            {t("home.open")}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const opened = Boolean(user.isCreator && creator);
   return (
     <div className="page">
       <header className="page-intro">
         <p className="kicker">{t("studio.navProfile")}</p>
-        <h1>{t("my.page")}</h1>
-        <Link to={`/c/${creator.handle}`} className="btn btn-line">
-          {t("studio.viewPage")}
-        </Link>
+        <h1>{opened ? t("my.page") : t("page.apply")}</h1>
+        {opened && (
+          <Link to={`/c/${creator!.handle}`} className="btn btn-line">
+            {t("studio.viewPage")}
+          </Link>
+        )}
       </header>
-      <StudioProfile />
+      <div className="stack">
+        <AccountAvatar />
+        {opened ? <StudioProfile /> : <ApplyCreator />}
+        <DeleteAccount />
+      </div>
     </div>
   );
 }
@@ -367,9 +460,11 @@ export function StudioPosts() {
 
 export function StudioWorks() {
   const { t, phrase } = useI18n();
-  const { user, products, publishProduct, desk } = useStore();
+  const { user, products, publishProduct, updateProductTags, desk } = useStore();
   const [error, setError] = useState("");
   const [filename, setFilename] = useState("");
+  const [tagError, setTagError] = useState("");
+  const [tagFor, setTagFor] = useState("");
   if (!user) return null;
   const mineProducts = products.filter((product) => product.creatorId === user.handle);
   const onProduct = async (event: FormEvent<HTMLFormElement>) => {
@@ -389,6 +484,7 @@ export function StudioWorks() {
         .split(/[,，]/)
         .map((item) => item.trim())
         .filter(Boolean),
+      tags: String(data.get("tags") ?? ""),
       file,
     });
     if (result) {
@@ -426,6 +522,10 @@ export function StudioWorks() {
           <input name="includes" placeholder={t("studio.includesPh")} />
         </label>
         <label>
+          {t("studio.workTags")}
+          <input name="tags" placeholder={t("studio.workTagsPh")} />
+        </label>
+        <label>
           {t("studio.desc")}
           <textarea name="description" rows={4} />
         </label>
@@ -451,14 +551,37 @@ export function StudioWorks() {
           {mineProducts.map((product) => {
             const sold = desk?.orders.filter((order) => order.kind === "product" && order.targetId === product.id).length ?? 0;
             return (
-              <Link key={product.id} to={`/c/${user.handle}/shop/${product.id}`} className="line">
-                <div>
+              <div key={product.id} className="panel work-edit">
+                <Link to={`/c/${user.handle}/shop/${product.id}`}>
                   <strong>{product.title}</strong>
                   <p className="muted">
                     {phrase(product.kind)} · {yuan(product.price)} · {t("studio.sold", { n: sold })}
                   </p>
-                </div>
-              </Link>
+                </Link>
+                {product.tags.length > 0 && (
+                  <div className="tag-row">
+                    {product.tags.map((tag) => (
+                      <span key={tag} className="pill">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <form
+                  onSubmit={async (event) => {
+                    event.preventDefault();
+                    const result = await updateProductTags(product.id, String(new FormData(event.currentTarget).get("tags") ?? ""));
+                    setTagFor(product.id);
+                    setTagError(result ?? "");
+                  }}
+                >
+                  <input key={product.tags.join("，")} name="tags" defaultValue={product.tags.join("，")} placeholder={t("studio.workTagsPh")} />
+                  <button className="btn btn-line" type="submit">
+                    {t("studio.saveTags")}
+                  </button>
+                </form>
+                {tagFor === product.id && tagError && <p className="error">{tagError}</p>}
+              </div>
             );
           })}
         </div>

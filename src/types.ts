@@ -10,6 +10,7 @@ export type Creator = {
   location: string;
   bio: string;
   tags: string[];
+  avatarAt: string;
   followers: number;
   supporters: number;
   since: string;
@@ -44,6 +45,7 @@ export type Product = {
   includes: string[];
   coverKey: string;
   playFormat: string;
+  tags: string[];
 };
 
 export type Tier = {
@@ -81,6 +83,7 @@ export type User = {
   email: string;
   handle: string;
   bio: string;
+  avatarAt: string;
   isCreator: boolean;
   follows: string[];
   likes: string[];

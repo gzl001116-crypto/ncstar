@@ -65,7 +65,7 @@ export function PostPage() {
       <h1>{post.title}</h1>
       <div className="byline">
         <Link to={`/c/${creator.handle}`} className="person-row">
-          <Avatar name={creator.name} id={creator.id} size={36} />
+          <Avatar name={creator.name} id={creator.id} size={36} stamp={creator.avatarAt} />
           <span>
             {creator.name}
             <small className="muted"> {rel(post.createdAt)}</small>

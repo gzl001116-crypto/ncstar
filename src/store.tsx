@@ -43,6 +43,7 @@ type StoreValue = {
     price: number;
     kind: string;
     includes: string[];
+    tags?: string;
     file?: File;
     fileBody?: string;
     playFormat?: string;
@@ -52,7 +53,10 @@ type StoreValue = {
   savePlayProgress: (productId: string, cursor: string) => Promise<void>;
   updateProfile: (input: { name: string; bio: string; location?: string; category?: Category; tags?: string }) => Promise<string | null>;
   updateTier: (input: { id: string; name: string; price: number; blurb: string; perks: string[] }) => Promise<string | null>;
-  openStudio: () => Promise<string | null>;
+  openStudio: (input?: { category: string; location: string; bio: string }) => Promise<string | null>;
+  uploadAvatar: (file: File) => Promise<string | null>;
+  deleteAccount: (password: string) => Promise<string | null>;
+  updateProductTags: (productId: string, tags: string) => Promise<string | null>;
   desk: Desk | null;
   loadDesk: () => Promise<string | null>;
   creatorById: (id: string) => Creator | undefined;
@@ -105,14 +109,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const apply = (data: Catalog & { code?: string; name?: string; toast?: string }) => {
     setCatalog({
-      creators: data.creators ?? [],
+      creators: (data.creators ?? []).map((creator) => ({ ...creator, avatarAt: creator.avatarAt ?? "" })),
       posts: data.posts ?? [],
-      products: data.products ?? [],
+      products: (data.products ?? []).map((product) => ({ ...product, tags: product.tags ?? [] })),
       tiers: data.tiers ?? [],
       comments: data.comments ?? [],
       user: data.user
         ? {
             ...data.user,
+            avatarAt: data.user.avatarAt ?? "",
             playList: data.user.playList ?? [],
             playProgress: data.user.playProgress ?? [],
           }
@@ -226,6 +231,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       form.set("price", String(input.price));
       form.set("kind", input.kind);
       form.set("includes", input.includes.join(","));
+      form.set("tags", input.tags ?? "");
       form.set("file", input.file);
       try {
         const response = await fetch("/api/products", { method: "POST", credentials: "same-origin", body: form });
@@ -248,7 +254,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (!error) await loadDesk();
       return error;
     },
-    openStudio: () => mutate("/api/studio", {}),
+    openStudio: (input) => mutate("/api/studio", input ?? {}),
+    uploadAvatar: async (file) => {
+      const form = new FormData();
+      form.set("file", file);
+      try {
+        const response = await fetch("/api/avatar", { method: "POST", credentials: "same-origin", body: form });
+        const data = (await response.json().catch(() => ({}))) as Catalog & { code?: string; name?: string; toast?: string; error?: string };
+        if (!response.ok) return say(data.code, data.name, data.error);
+        apply(data);
+        return null;
+      } catch {
+        return t("err.network");
+      }
+    },
+    deleteAccount: (password) => mutate("/api/account", { password }),
+    updateProductTags: (productId, tags) => mutate("/api/product-tags", { productId, tags }),
     desk,
     loadDesk,
     creatorById,

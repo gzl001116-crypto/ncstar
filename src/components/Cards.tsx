@@ -13,7 +13,7 @@ export function CreatorCard({ creator }: { creator: Creator }) {
       <Cover id={`${creator.id}-banner`} ratio="16 / 10" />
       <div className="card-body">
         <div className="person-row">
-          <Avatar name={creator.name} id={creator.id} />
+          <Avatar name={creator.name} id={creator.id} stamp={creator.avatarAt} />
           <div>
             <strong>{creator.name}</strong>
             <p className="muted">@{creator.handle}</p>
@@ -48,7 +48,7 @@ export function PostCard({ post, large = false, ratio }: { post: Post; large?: b
         <p className="clamp">{post.excerpt}</p>
         {creator && (
           <div className="person-row compact">
-            <Avatar name={creator.name} id={creator.id} size={28} />
+            <Avatar name={creator.name} id={creator.id} size={28} stamp={creator.avatarAt} />
             <span>{creator.name}</span>
           </div>
         )}
@@ -71,6 +71,15 @@ export function ProductCard({ product }: { product: Product }) {
         </div>
         <h3>{product.title}</h3>
         <p className="clamp">{phrase(product.description)}</p>
+        {product.tags.length > 0 && (
+          <div className="tag-row">
+            {product.tags.map((tag) => (
+              <span key={tag} className="pill">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
         {creator && <p className="muted">{creator.name}</p>}
       </div>
     </Link>

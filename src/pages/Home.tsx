@@ -51,7 +51,7 @@ export function Home() {
               <Cover id={lead.coverKey} ratio="16 / 10" />
               <div className="stage-copy">
                 <div className="person-row">
-                  <Avatar name={spotlight.name} id={spotlight.id} size={36} />
+                  <Avatar name={spotlight.name} id={spotlight.id} size={36} stamp={spotlight.avatarAt} />
                   <div>
                     <strong>{spotlight.name}</strong>
                     <p className="muted">

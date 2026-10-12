@@ -131,6 +131,10 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE products ADD COLUMN play_body TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN file_name TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN file_type TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'",
+    "ALTER TABLE users ADD COLUMN avatar TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN avatar_type TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN avatar_at TEXT NOT NULL DEFAULT ''",
   ]) {
     try {
       sql.exec(statement);
@@ -182,6 +186,51 @@ function base64ToBytes(value: string) {
 }
 
 const MAX_UPLOAD = 8 * 1024 * 1024;
+const MAX_AVATAR = 1024 * 1024;
+const CREATOR_CATEGORIES = ["插画", "音乐", "设计", "摄影", "写作", "图案"];
+
+function imageType(bytes: Uint8Array) {
+  if (bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return "image/png";
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
+  if (bytes.length >= 6 && bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x38) return "image/gif";
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 &&
+    bytes[1] === 0x49 &&
+    bytes[2] === 0x46 &&
+    bytes[3] === 0x46 &&
+    bytes[8] === 0x57 &&
+    bytes[9] === 0x45 &&
+    bytes[10] === 0x42 &&
+    bytes[11] === 0x50
+  ) {
+    return "image/webp";
+  }
+  return "";
+}
+
+function tagsOf(value: unknown) {
+  try {
+    const parsed = JSON.parse(String(value ?? "[]"));
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [] as string[];
+  }
+}
+
+function parseWorkTags(value: unknown): { ok: true; tags: string[] } | { ok: false; code: string } {
+  const raw = typeof value === "string" ? value.split(/[,，]/) : Array.isArray(value) ? value : [];
+  const tags: string[] = [];
+  for (const item of raw) {
+    if (typeof item !== "string") continue;
+    const tag = item.trim();
+    if (!tag) continue;
+    if (Array.from(tag).length > 5) return { ok: false, code: "err.tag.length" };
+    if (!tags.includes(tag)) tags.push(tag);
+  }
+  if (tags.length > 10) return { ok: false, code: "err.tag.count" };
+  return { ok: true, tags };
+}
 
 function inferPlay(productId: string, filename: string, mime: string, bytes: Uint8Array) {
   const name = filename.toLowerCase();
@@ -326,6 +375,9 @@ function canRead(sql: Sql, viewer: string, creatorId: string, minRank: number, v
 function snapshot(sql: Sql, viewer: string) {
   const viewerRow = viewer ? sql.get("SELECT * FROM users WHERE id = ?", viewer) : undefined;
   const viewerHandle = viewerRow ? String(viewerRow.handle) : "";
+  const avatarByHandle = new Map(
+    sql.all("SELECT handle, avatar_at FROM users").map((row) => [String(row.handle), String(row.avatar_at ?? "")]),
+  );
   const creators = sql.all("SELECT * FROM creators ORDER BY since DESC, name").map((row) => ({
     id: String(row.id),
     handle: String(row.handle),
@@ -334,6 +386,7 @@ function snapshot(sql: Sql, viewer: string) {
     location: String(row.location),
     bio: String(row.bio),
     tags: JSON.parse(String(row.tags)) as string[],
+    avatarAt: avatarByHandle.get(String(row.handle)) ?? "",
     followers: sql.all("SELECT user_id FROM follows WHERE creator_id = ?", String(row.id)).length,
     supporters: sql.all(
       "SELECT user_id FROM memberships WHERE creator_id = ? AND expires_at > ?",
@@ -374,6 +427,7 @@ function snapshot(sql: Sql, viewer: string) {
     includes: JSON.parse(String(row.includes)) as string[],
     coverKey: String(row.cover_key),
     playFormat: String(row.play_format ?? ""),
+    tags: tagsOf(row.tags),
   }));
   const tiers = sql.all("SELECT * FROM tiers ORDER BY rank").map((row) => ({
     id: String(row.id),
@@ -398,6 +452,7 @@ function snapshot(sql: Sql, viewer: string) {
         email: String(viewerRow.email),
         handle: String(viewerRow.handle),
         bio: String(viewerRow.bio),
+        avatarAt: String(viewerRow.avatar_at ?? ""),
         isCreator: Number(viewerRow.is_creator) === 1,
         follows: sql.all("SELECT creator_id FROM follows WHERE user_id = ?", viewer).map((row) => String(row.creator_id)),
         likes: sql.all("SELECT post_id FROM likes WHERE user_id = ?", viewer).map((row) => String(row.post_id)),
@@ -436,18 +491,21 @@ function requireUser(sql: Sql, request: Request) {
   return { viewer, response: null as Response | null };
 }
 
-function openCreator(sql: Sql, user: Row) {
+function openCreator(sql: Sql, user: Row, extra?: { category: string; location: string; bio: string }) {
   const handle = String(user.handle);
+  const category = extra?.category || "写作";
+  const location = extra?.location || "未填写";
+  const bio = extra?.bio || String(user.bio);
   if (!sql.get("SELECT id FROM creators WHERE id = ?", handle)) {
     sql.run(
       "INSERT INTO creators (id, handle, name, category, location, bio, tags, since) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       handle,
       handle,
       String(user.name),
-      "写作",
-      "未填写",
-      String(user.bio),
-      JSON.stringify(["写作"]),
+      category,
+      location,
+      bio,
+      JSON.stringify([category]),
       sinceNow(),
     );
   }
@@ -705,8 +763,10 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   if (playFormat && !isPlayFormat(playFormat)) return fail("err.play.format");
   const parsed = parsePlay(playFormat, playSource);
   if (!parsed.ok) return fail(parsed.code);
+  const workTags = parseWorkTags(body.tags);
+  if (!workTags.ok) return fail(workTags.code);
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, play_format, play_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, play_format, play_body, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     id(),
     String(mine.handle),
     title,
@@ -718,6 +778,7 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
     fileBody,
     playFormat,
     playFormat ? JSON.stringify(parsed.body) : "",
+    JSON.stringify(workTags.tags),
   );
   return withState(sql, viewer, "toast.product");
 }
@@ -748,13 +809,15 @@ async function publishUpload(sql: Sql, request: Request) {
   if (uploaded.size > MAX_UPLOAD) return fail("err.file.size");
   if (title.length < 2) return fail("err.product.title");
   if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
+  const workTags = parseWorkTags(form.get("tags"));
+  if (!workTags.ok) return fail(workTags.code);
   const bytes = new Uint8Array(await uploaded.arrayBuffer());
   const productId = id();
   const filename = uploaded.name.replace(/[\\/:*?"<>|]+/g, "_").slice(0, 120) || "file";
   const mime = (uploaded.type || "application/octet-stream").slice(0, 120);
   const play = inferPlay(productId, filename, mime, bytes);
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     productId,
     String(mine.handle),
     title,
@@ -768,6 +831,7 @@ async function publishUpload(sql: Sql, request: Request) {
     mime,
     play.format,
     play.body,
+    JSON.stringify(workTags.tags),
   );
   return withState(sql, viewer, "toast.product");
 }
@@ -781,7 +845,7 @@ function profile(sql: Sql, request: Request, body: Record<string, unknown>) {
   const bio = textOf(body.bio, 400) || String(mine.bio);
   const location = textOf(body.location, 40);
   const category = textOf(body.category, 20);
-  const allowed = ["插画", "音乐", "设计", "摄影", "写作", "图案"];
+  const allowed = CREATOR_CATEGORIES;
   sql.run("UPDATE users SET name = ?, bio = ? WHERE id = ?", name, bio, viewer);
   if (Number(mine.is_creator) === 1) {
     const sets: string[] = ["name = ?", "bio = ?"];
@@ -887,7 +951,7 @@ function desk(sql: Sql, request: Request) {
   });
 }
 
-function studio(sql: Sql, request: Request) {
+function studio(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
@@ -895,8 +959,117 @@ function studio(sql: Sql, request: Request) {
   if (Number(mine.is_creator) === 1 && sql.get("SELECT id FROM creators WHERE id = ?", String(mine.handle))) {
     return withState(sql, viewer, "toast.studio.exists");
   }
-  openCreator(sql, mine);
-  return withState(sql, viewer, "toast.creatorReady");
+  const bio = textOf(body.bio, 400);
+  const location = textOf(body.location, 40) || "未填写";
+  const category = textOf(body.category, 20);
+  if (Array.from(bio).length < 8) return fail("err.apply");
+  if (!CREATOR_CATEGORIES.includes(category)) return fail("err.category");
+  sql.run("UPDATE users SET bio = ? WHERE id = ?", bio, viewer);
+  openCreator(sql, mine, { category, location, bio });
+  return withState(sql, viewer, "toast.apply");
+}
+
+function productTags(sql: Sql, request: Request, body: Record<string, unknown>) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
+  const product = sql.get("SELECT * FROM products WHERE id = ?", textOf(body.productId, 80));
+  if (!product || String(product.creator_id) !== String(mine.handle)) return fail("err.product.missing", 404);
+  const workTags = parseWorkTags(body.tags);
+  if (!workTags.ok) return fail(workTags.code);
+  sql.run("UPDATE products SET tags = ? WHERE id = ?", JSON.stringify(workTags.tags), String(product.id));
+  return withState(sql, viewer, "toast.workTags");
+}
+
+async function uploadAvatar(sql: Sql, request: Request) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT id FROM users WHERE id = ?", viewer);
+  if (!mine) return fail("err.loginRequired", 401);
+  let form: FormData;
+  try {
+    form = await request.formData();
+  } catch {
+    return fail("err.avatar");
+  }
+  const uploaded = form.get("file");
+  if (!(uploaded instanceof File) || uploaded.size < 1) return fail("err.avatar");
+  if (uploaded.size > MAX_AVATAR) return fail("err.avatar.size");
+  const bytes = new Uint8Array(await uploaded.arrayBuffer());
+  const type = imageType(bytes);
+  if (!type) return fail("err.avatar.type");
+  sql.run(
+    "UPDATE users SET avatar = ?, avatar_type = ?, avatar_at = ? WHERE id = ?",
+    bytesToBase64(bytes),
+    type,
+    new Date().toISOString(),
+    viewer,
+  );
+  return withState(sql, viewer, "toast.avatar");
+}
+
+function readAvatar(sql: Sql, request: Request) {
+  const handle = handleOf(new URL(request.url).searchParams.get("id") ?? "");
+  if (!handle) return fail("err.avatar", 404);
+  const row = sql.get("SELECT avatar, avatar_type FROM users WHERE handle = ?", handle);
+  const type = row ? String(row.avatar_type ?? "") : "";
+  if (!row || !String(row.avatar ?? "") || !["image/png", "image/jpeg", "image/gif", "image/webp"].includes(type)) {
+    return fail("err.avatar", 404);
+  }
+  return new Response(base64ToBytes(String(row.avatar)), {
+    status: 200,
+    headers: {
+      "content-type": type,
+      "cache-control": "public, max-age=86400",
+      "x-content-type-options": "nosniff",
+    },
+  });
+}
+
+async function deleteAccount(sql: Sql, request: Request, body: Record<string, unknown>) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine) return fail("err.loginRequired", 401);
+  const password = typeof body.password === "string" ? body.password : "";
+  const hashed = await hashPassword(password, String(mine.password_salt));
+  if (hashed !== String(mine.password_hash)) return fail("err.login", 401);
+  const handle = String(mine.handle);
+  const productIds = sql.all("SELECT id FROM products WHERE creator_id = ?", handle).map((row) => String(row.id));
+  const postIds = sql.all("SELECT id FROM posts WHERE creator_id = ?", handle).map((row) => String(row.id));
+  const tierIds = sql.all("SELECT id FROM tiers WHERE creator_id = ?", handle).map((row) => String(row.id));
+  for (const productId of productIds) {
+    sql.run("DELETE FROM play_saved WHERE product_id = ?", productId);
+    sql.run("DELETE FROM play_progress WHERE product_id = ?", productId);
+    sql.run("DELETE FROM purchases WHERE product_id = ?", productId);
+    sql.run("DELETE FROM cart_items WHERE product_id = ?", productId);
+    sql.run("DELETE FROM orders WHERE kind = 'product' AND target_id = ?", productId);
+  }
+  for (const postId of postIds) {
+    sql.run("DELETE FROM comments WHERE post_id = ?", postId);
+    sql.run("DELETE FROM likes WHERE post_id = ?", postId);
+  }
+  for (const tierId of tierIds) {
+    sql.run("DELETE FROM orders WHERE kind = 'membership' AND target_id = ?", tierId);
+    sql.run("DELETE FROM memberships WHERE tier_id = ?", tierId);
+  }
+  sql.run("DELETE FROM play_saved WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM play_progress WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM purchases WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM cart_items WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM orders WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM comments WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM likes WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM follows WHERE user_id = ? OR creator_id = ?", viewer, handle);
+  sql.run("DELETE FROM memberships WHERE user_id = ? OR creator_id = ?", viewer, handle);
+  sql.run("DELETE FROM posts WHERE creator_id = ?", handle);
+  sql.run("DELETE FROM products WHERE creator_id = ?", handle);
+  sql.run("DELETE FROM tiers WHERE creator_id = ?", handle);
+  sql.run("DELETE FROM creators WHERE id = ?", handle);
+  sql.run("DELETE FROM sessions WHERE user_id = ?", viewer);
+  sql.run("DELETE FROM users WHERE id = ?", viewer);
+  return withState(sql, "", "toast.deleted", sessionCookie(request, "", 0));
 }
 
 function download(sql: Sql, request: Request) {
@@ -1010,11 +1183,12 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (request.method === "GET" && url.pathname === "/api/media") return media(sql, request);
   if (request.method === "GET" && url.pathname === "/api/play") return playRead(sql, request);
   if (request.method === "GET" && url.pathname === "/api/desk") return desk(sql, request);
+  if (request.method === "GET" && url.pathname === "/api/avatar") return readAvatar(sql, request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (request.method !== "POST") return fail("err.method", 405);
-  if (url.pathname === "/api/products" && (request.headers.get("content-type") ?? "").includes("multipart/form-data")) {
-    return publishUpload(sql, request);
-  }
+  const multipart = (request.headers.get("content-type") ?? "").includes("multipart/form-data");
+  if (url.pathname === "/api/products" && multipart) return publishUpload(sql, request);
+  if (url.pathname === "/api/avatar" && multipart) return uploadAvatar(sql, request);
   const body = await readJson(request);
   if (url.pathname === "/api/register") return register(sql, request, body, env, limiter);
   if (url.pathname === "/api/login") return login(sql, request, body, limiter);
@@ -1026,9 +1200,11 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (url.pathname === "/api/checkout") return checkout(sql, request, body);
   if (url.pathname === "/api/posts") return publishPost(sql, request, body);
   if (url.pathname === "/api/products") return publishProduct(sql, request, body);
+  if (url.pathname === "/api/product-tags") return productTags(sql, request, body);
   if (url.pathname === "/api/play") return playWrite(sql, request, body);
   if (url.pathname === "/api/profile") return profile(sql, request, body);
   if (url.pathname === "/api/tiers") return updateTier(sql, request, body);
-  if (url.pathname === "/api/studio") return studio(sql, request);
+  if (url.pathname === "/api/studio") return studio(sql, request, body);
+  if (url.pathname === "/api/account") return deleteAccount(sql, request, body);
   return fail("err.route", 404);
 }

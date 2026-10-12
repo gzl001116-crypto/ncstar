@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { hash } from "../utils";
 
 const PALETTES = [
@@ -77,8 +78,26 @@ export function Cover({ id, ratio = "4 / 5", className = "" }: { id: string; rat
   );
 }
 
-export function Avatar({ name, id, size = 44 }: { name: string; id: string; size?: number }) {
+export function Avatar({ name, id, size = 44, stamp = "" }: { name: string; id: string; size?: number; stamp?: string }) {
+  return <AvatarFace key={stamp} name={name} id={id} size={size} stamp={stamp} />;
+}
+
+function AvatarFace({ name, id, size, stamp }: { name: string; id: string; size: number; stamp: string }) {
+  const [failed, setFailed] = useState(false);
   const [ink, , mist] = palette(id);
+  if (stamp && !failed) {
+    return (
+      <img
+        className="avatar"
+        alt=""
+        src={`/api/avatar?id=${encodeURIComponent(id)}&v=${encodeURIComponent(stamp)}`}
+        width={size}
+        height={size}
+        style={{ width: size, height: size }}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
   return (
     <span className="avatar" style={{ width: size, height: size, background: ink, color: mist, fontSize: size * 0.42 }}>
       {name.slice(0, 1)}

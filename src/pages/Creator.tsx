@@ -36,7 +36,7 @@ export function CreatorPage() {
     <div className="page narrow">
       <Cover id={`${creator.id}-hero`} ratio="16 / 5.2" className="banner" />
       <header className="profile">
-        <Avatar name={creator.name} id={creator.id} size={88} />
+        <Avatar name={creator.name} id={creator.id} size={88} stamp={creator.avatarAt} />
         <div className="profile-copy">
           <p className="kicker">
             {phrase(creator.category)} · {phrase(creator.location)}
@@ -123,6 +123,15 @@ export function CreatorPage() {
                 </div>
                 <h3>{product.title}</h3>
                 <p className="clamp">{phrase(product.description)}</p>
+                {product.tags.length > 0 && (
+                  <div className="tag-row">
+                    {product.tags.map((tag) => (
+                      <span key={tag} className="pill">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </Link>
           ))}

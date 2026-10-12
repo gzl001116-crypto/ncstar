@@ -26,12 +26,21 @@ export function ProductPage() {
       <Cover id={product.coverKey} ratio="1 / 1" />
       <div className="buybox">
         <Link to={`/c/${creator.handle}`} className="person-row">
-          <Avatar name={creator.name} id={creator.id} size={36} />
+          <Avatar name={creator.name} id={creator.id} size={36} stamp={creator.avatarAt} />
           <span>{creator.name}</span>
         </Link>
         <p className="meta">
           <span className="pill">{phrase(product.kind)}</span>
         </p>
+        {product.tags.length > 0 && (
+          <div className="tag-row">
+            {product.tags.map((tag) => (
+              <span key={tag} className="pill">
+                {tag}
+              </span>
+            ))}
+          </div>
+        )}
         <h1>{product.title}</h1>
         <p className="price price-lg">{yuan(product.price)}</p>
         <p>{phrase(product.description)}</p>

@@ -50,7 +50,7 @@ function client() {
       if (setCookie) cookie = setCookie.split(";")[0] ?? "";
       const raw = await response.text();
       const data = raw.startsWith("{") || raw.startsWith("[") ? JSON.parse(raw) : raw;
-      return { status: response.status, data, raw };
+      return { status: response.status, data, raw, type: response.headers.get("content-type") ?? "" };
     },
     async sendForm(path: string, form: FormData) {
       const response = await handleApp(
@@ -67,7 +67,7 @@ function client() {
       if (setCookie) cookie = setCookie.split(";")[0] ?? "";
       const raw = await response.text();
       const data = raw.startsWith("{") || raw.startsWith("[") ? JSON.parse(raw) : raw;
-      return { status: response.status, data, raw };
+      return { status: response.status, data, raw, type: response.headers.get("content-type") ?? "" };
     },
   };
 }
@@ -226,5 +226,91 @@ const tagged = await creator.send("/api/profile", { name: "阿实", bio: "刚来
 if (tagged.status !== 200 || !tagged.data.creators.find((item: { handle: string }) => item.handle === "ashi").tags.includes("夜间")) {
   throw new Error(`tags were not saved ${tagged.raw}`);
 }
+
+const longTag = await creator.send("/api/products", {
+  title: "标签过长",
+  description: "这个标签超过五个字",
+  price: 3,
+  kind: "文本",
+  includes: ["标签.txt"],
+  fileBody: "标签作品的正文内容。",
+  tags: ["一二三四五六"],
+});
+if (longTag.status !== 400 || longTag.data.code !== "err.tag.length") throw new Error(`long tag ${longTag.status} ${longTag.raw}`);
+const manyTags = await creator.send("/api/products", {
+  title: "标签过多",
+  description: "这个标签数量超过十个",
+  price: 3,
+  kind: "文本",
+  includes: ["标签.txt"],
+  fileBody: "标签作品的正文内容。",
+  tags: ["一", "二", "三", "四", "五", "六", "七", "八", "九", "十", "多"],
+});
+if (manyTags.status !== 400 || manyTags.data.code !== "err.tag.count") throw new Error(`tag count ${manyTags.status} ${manyTags.raw}`);
+const withTags = await creator.send("/api/products", {
+  title: "带标签",
+  description: "有两个短标签",
+  price: 3,
+  kind: "文本",
+  includes: ["标签.txt"],
+  fileBody: "标签作品的正文内容。",
+  tags: ["短篇", "夜", "短篇"],
+});
+if (withTags.status !== 200) throw new Error(`tagged work ${withTags.status} ${withTags.raw}`);
+const taggedWork = withTags.data.products.find((item: { title: string }) => item.title === "带标签");
+if (!taggedWork?.tags.includes("短篇") || !taggedWork.tags.includes("夜") || taggedWork.tags.length !== 2) {
+  throw new Error(`work tags ${JSON.stringify(taggedWork?.tags)}`);
+}
+const retag = await creator.send("/api/product-tags", { productId: taggedWork.id, tags: "夜，窗" });
+const retagged = retag.data.products?.find((item: { id: string }) => item.id === taggedWork.id);
+if (retag.status !== 200 || retagged?.tags.join(",") !== "夜,窗") throw new Error(`retag ${retag.status} ${retag.raw}`);
+const stolen = await fan.send("/api/product-tags", { productId: taggedWork.id, tags: "别人" });
+if (stolen.status === 200) throw new Error("reader should not edit work tags");
+
+const png = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+const avatar = new FormData();
+avatar.set("file", new File([png], "face.png", { type: "image/png" }));
+const savedAvatar = await creator.sendForm("/api/avatar", avatar);
+if (savedAvatar.status !== 200 || !savedAvatar.data.user?.avatarAt) throw new Error(`avatar upload ${savedAvatar.status} ${savedAvatar.raw}`);
+if (!savedAvatar.data.creators.find((item: { handle: string }) => item.handle === "ashi").avatarAt) throw new Error("creator stamp missing");
+const fetched = await creator.send("/api/avatar?id=ashi", undefined, "GET");
+if (fetched.status !== 200 || !fetched.type.includes("image/png")) throw new Error(`avatar read ${fetched.status} ${fetched.type}`);
+const svg = new FormData();
+svg.set("file", new File(["<svg xmlns='http://www.w3.org/2000/svg'></svg>"], "face.svg", { type: "image/svg+xml" }));
+const rejectedAvatar = await creator.sendForm("/api/avatar", svg);
+if (rejectedAvatar.status !== 400 || rejectedAvatar.data.code !== "err.avatar.type") throw new Error(`svg avatar ${rejectedAvatar.status} ${rejectedAvatar.raw}`);
+const huge = new FormData();
+huge.set("file", new File([new Uint8Array(1024 * 1024 + 1)], "big.png", { type: "image/png" }));
+const hugeAvatar = await creator.sendForm("/api/avatar", huge);
+if (hugeAvatar.status !== 400 || hugeAvatar.data.code !== "err.avatar.size") throw new Error(`huge avatar ${hugeAvatar.status} ${hugeAvatar.raw}`);
+
+const gone = client();
+const goneCode = await ticket("gone@example.com");
+const made = await gone.send("/api/register", {
+  name: "离开",
+  email: "gone@example.com",
+  password: "secret12",
+  handle: "goneuser",
+  isCreator: false,
+  ...goneCode,
+});
+if (made.status !== 200) throw new Error(`gone register ${made.status} ${made.raw}`);
+const shortApply = await gone.send("/api/studio", { category: "写作", location: "京都", bio: "太短" });
+if (shortApply.status !== 400 || shortApply.data.code !== "err.apply") throw new Error(`short apply ${shortApply.status} ${shortApply.raw}`);
+const badCategory = await gone.send("/api/studio", { category: "其他", location: "京都", bio: "我想发布摄影作品和短文。" });
+if (badCategory.status !== 400 || badCategory.data.code !== "err.category") throw new Error(`bad category ${badCategory.status} ${badCategory.raw}`);
+const applied = await gone.send("/api/studio", { category: "摄影", location: "京都", bio: "我想发布摄影作品和短文。" });
+const appliedPage = applied.data.creators?.find((item: { handle: string }) => item.handle === "goneuser");
+if (applied.status !== 200 || !applied.data.user?.isCreator || appliedPage?.category !== "摄影" || appliedPage?.location !== "京都") {
+  throw new Error(`apply ${applied.status} ${applied.raw}`);
+}
+const wrongPassword = await gone.send("/api/account", { password: "nope" });
+if (wrongPassword.status !== 401) throw new Error(`wrong delete password ${wrongPassword.status}`);
+const removed = await gone.send("/api/account", { password: "secret12" });
+if (removed.status !== 200 || removed.data.user || removed.data.creators?.some((item: { handle: string }) => item.handle === "goneuser")) {
+  throw new Error(`delete account ${removed.status} ${removed.raw}`);
+}
+const again = await gone.send("/api/login", { email: "gone@example.com", password: "secret12" });
+if (again.status !== 401) throw new Error("deleted account should not log in");
 
 console.log("platform checks passed");

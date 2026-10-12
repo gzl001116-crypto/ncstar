@@ -40,7 +40,7 @@ export function Explore() {
           .join(" ");
         const sold = products
           .filter((product) => product.creatorId === creator.id)
-          .map((product) => `${product.title} ${product.description}`)
+          .map((product) => `${product.title} ${product.description} ${product.tags.join(" ")}`)
           .join(" ");
         return includesQuery(
           `${creator.name} ${creator.handle} ${creator.bio} ${creator.tags.join(" ")} ${creator.location} ${written} ${sold}`,
@@ -58,7 +58,7 @@ export function Explore() {
   const productHits = products.filter((product) => {
     const creator = creators.find((item) => item.id === product.creatorId);
     if (cat !== "全部" && creator?.category !== cat) return false;
-    return includesQuery(`${product.title} ${product.description} ${product.kind} ${creator?.name ?? ""}`, q);
+    return includesQuery(`${product.title} ${product.description} ${product.kind} ${product.tags.join(" ")} ${creator?.name ?? ""}`, q);
   });
 
   const showCreators = kind === "all" || kind === "creators";
