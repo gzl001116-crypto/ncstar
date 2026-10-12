@@ -16,7 +16,7 @@ const transfers: { id: string; amount: number; currency: string; destination: st
 let stripePaid = true;
 let stripeAmount: number | null = null;
 let connectReady = false;
-let payoutBank = false;
+let savedBank: { bank_name: string; last4: string } | null = null;
 
 function headerValue(headers: HeadersInit | undefined, name: string) {
   if (!headers) return "";
@@ -42,16 +42,24 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
   if (method === "POST" && url.includes("/v2/core/account_links")) {
     return Response.json({ url: "https://connect.stripe.test/onboard" });
   }
+  if (method === "POST" && url.includes("/external_accounts")) {
+    const params = new URLSearchParams(String(init?.body ?? ""));
+    const number = params.get("external_account[account_number]") ?? "";
+    const holder = params.get("external_account[account_holder_name]") ?? "";
+    if (!holder || number.length < 4) return Response.json({ error: { code: "account_number_invalid" } }, { status: 400 });
+    savedBank = { bank_name: "TEST BANK", last4: number.slice(-4) };
+    return Response.json({ id: "ba_test", object: "bank_account", bank_name: "TEST BANK", last4: savedBank.last4, default_for_currency: true });
+  }
   if (method === "GET" && url.includes("/external_accounts")) {
     return Response.json({
-      data: payoutBank
-        ? [{ object: "bank_account", bank_name: "TEST BANK", last4: "2345", currency: "gbp", default_for_currency: true }]
-        : [],
+      data: savedBank ? [{ object: "bank_account", bank_name: savedBank.bank_name, last4: savedBank.last4, currency: "gbp", default_for_currency: true }] : [],
     });
   }
   if (method === "GET" && url.includes("/v2/core/accounts/")) {
     return Response.json({
       id: "acct_creator_test",
+      dashboard: "none",
+      identity: { country: "gb" },
       configuration: {
         recipient: { capabilities: { stripe_balance: { stripe_transfers: { status: connectReady ? "active" : "pending" } } } },
       },
@@ -1065,15 +1073,16 @@ if (sneaky.status !== 200 || sneakHandle === "sneaky" || !/^u[a-f0-9]{12}$/.test
   throw new Error(`ignored handle ${sneaky.status} ${sneaky.raw}`);
 }
 
-const readerPayout = await readerNow.send("/api/payout/link", { country: "JP" });
-const badCountry = await creator.send("/api/payout/link", { country: "CN" });
-const linked = await creator.send("/api/payout/link", { country: "gb" });
+const readerPayout = await readerNow.send("/api/payout/method", { country: "JP", holder: "ヤマダ", accountNumber: "0001234", bankCode: "1100", branchCode: "000" });
+const badCountry = await creator.send("/api/payout/method", { country: "CN", holder: "无名", accountNumber: "00012345" });
+const badBank = await creator.send("/api/payout/method", { country: "GB", holder: "A", accountNumber: "12", routing: "108800" });
+const saved = await creator.send("/api/payout/method", { country: "GB", holder: "Ada Lovelace", accountNumber: "00012345", routing: "10-88-00" });
 const deskPending = await creator.send("/api/desk", undefined, "GET");
+const changedBank = await creator.send("/api/payout/method", { country: "GB", holder: "Ada Lovelace", accountNumber: "00099999", routing: "108800" });
 const wednesday = await creator.send("/api/payout/run", { now: "2026-10-14T00:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
 const fridayEarly = await creator.send("/api/payout/run", { now: "2026-10-16T00:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
 const beforeReady = transfers.length;
 connectReady = true;
-payoutBank = true;
 const deskReady = await creator.send("/api/desk", undefined, "GET");
 const fridayHour = await creator.send("/api/payout/run", { now: "2026-10-16T01:00:00.000Z" }, "POST", { "x-fanstar-task": "test-secret" });
 const openRun = await creator.send("/api/payout/run", { now: "2026-10-16T00:00:00.000Z" });
@@ -1086,17 +1095,22 @@ if (
   readerPayout.data.code !== "err.studio" ||
   badCountry.status !== 400 ||
   badCountry.data.code !== "err.payout.country" ||
-  linked.status !== 200 ||
-  linked.data.url !== "https://connect.stripe.test/onboard" ||
+  badBank.status !== 400 ||
+  badBank.data.code !== "err.payout.bank" ||
+  saved.status !== 200 ||
+  saved.data.method !== "TEST BANK ····2345" ||
+  saved.raw.includes("00012345") ||
   deskPending.data.payoutReady !== false ||
-  deskPending.data.payoutMethod !== "" ||
+  deskPending.data.payoutMethod !== "TEST BANK ····2345" ||
   deskPending.data.payoutStarted !== true ||
+  changedBank.status !== 200 ||
+  changedBank.data.method !== "TEST BANK ····9999" ||
   !(deskPending.data.pending > 0) ||
   wednesday.data.transferred !== 0 ||
   fridayEarly.data.transferred !== 0 ||
   beforeReady !== 0 ||
   deskReady.data.payoutReady !== true ||
-  deskReady.data.payoutMethod !== "TEST BANK ····2345" ||
+  deskReady.data.payoutMethod !== "TEST BANK ····9999" ||
   fridayHour.data.transferred !== 0 ||
   openRun.status !== 404 ||
   friday.status !== 200 ||
@@ -1112,7 +1126,7 @@ if (
   nextPayout.getUTCDay() !== 5 ||
   nextPayout.getUTCHours() !== 0
 ) {
-  throw new Error(`payout ${readerPayout.raw} ${badCountry.raw} ${linked.raw} ${JSON.stringify(deskPending.data)} ${JSON.stringify(friday.data)} ${JSON.stringify(transfers)} ${deskAfter.raw}`);
+  throw new Error(`payout ${readerPayout.raw} ${badCountry.raw} ${badBank.raw} ${saved.raw} ${changedBank.raw} ${JSON.stringify(deskPending.data)} ${JSON.stringify(friday.data)} ${JSON.stringify(transfers)} ${deskAfter.raw}`);
 }
 
 console.log("platform checks passed");

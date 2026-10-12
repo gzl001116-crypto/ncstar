@@ -79,6 +79,42 @@ export function sessionFields(input: {
   return fields;
 }
 
+function payoutStripeCode(stripeCode: string) {
+  if (stripeCode === "amount_too_small") return "err.pay.small";
+  if (stripeCode === "non_connect_platform_accounts_v2_access_blocked" || stripeCode.includes("liability_unacknowledged") || stripeCode.includes("requirement_collection_unacknowledged")) {
+    return "err.payout.platform";
+  }
+  if (stripeCode === "capability_not_available_without_other_capability") return "err.payout.capability";
+  if (stripeCode.startsWith("capability_not_available")) return "err.payout.country";
+  if (/account_number|routing_number|bank_account|sort_code|iban/i.test(stripeCode)) return "err.payout.bank";
+  return "err.pay.stripe";
+}
+
+export async function stripeForm(
+  env: PayEnv,
+  path: string,
+  fields: Record<string, string>,
+  fetchImpl: typeof fetch,
+): Promise<{ ok: true; data: Record<string, unknown> } | { ok: false; code: string }> {
+  if (!stripeKey(env)) return { ok: false, code: "err.pay.unconfigured" };
+  let response: Response;
+  try {
+    response = await fetchImpl(`https://api.stripe.com${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${stripeKey(env)}`,
+        "content-type": "application/x-www-form-urlencoded",
+      },
+      body: bodyOf(fields),
+    });
+  } catch {
+    return { ok: false, code: "err.pay.stripe" };
+  }
+  const data = (await response.json().catch(() => ({}))) as Record<string, unknown> & { error?: { code?: string } };
+  if (!response.ok) return { ok: false, code: payoutStripeCode(data.error?.code ?? "") };
+  return { ok: true, data };
+}
+
 function bodyOf(fields: Record<string, string>) {
   return Object.entries(fields)
     .map(([key, value]) => `${encodeURIComponent(key)}=${key === "success_url" ? value : encodeURIComponent(value)}`)
@@ -112,11 +148,7 @@ export async function stripeSend(
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown> & { error?: { code?: string } };
   if (!response.ok) {
     const stripeCode = data.error?.code ?? "";
-    if (stripeCode === "amount_too_small") return { ok: false, code: "err.pay.small" };
-    if (stripeCode === "non_connect_platform_accounts_v2_access_blocked" || stripeCode.includes("liability_unacknowledged")) {
-      return { ok: false, code: "err.payout.platform" };
-    }
-    return { ok: false, code: "err.pay.stripe" };
+    return { ok: false, code: payoutStripeCode(stripeCode) };
   }
   return { ok: true, data };
 }

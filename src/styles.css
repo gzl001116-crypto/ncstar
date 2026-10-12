@@ -307,6 +307,7 @@ main { flex: 1; min-height: 60vh; }
   white-space: nowrap;
 }
 .payout-panel { display: grid; gap: 10px; margin: 16px 0; }
+.payout-panel form { display: grid; gap: 10px; }
 .payout-panel select { max-width: 320px; }
 .card h3 { font-size: 18px; }
 .card-large h3 { font-size: 26px; }

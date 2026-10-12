@@ -2,7 +2,7 @@ import { matchCode, type Limiter, type MailEnv } from "./codes.ts";
 import { sessionCookieHeaders } from "./hosts.ts";
 import { isPlayFormat, parsePlay } from "./play.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
-import { sessionFields, signatureMatches, stripeGet, stripeKey, stripeRequest, stripeSend, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
+import { sessionFields, signatureMatches, stripeForm, stripeGet, stripeKey, stripeRequest, stripeSend, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
 
 const COOKIE = "fanstar_session";
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -1544,6 +1544,120 @@ async function refreshPayout(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof
   return { ready, method: nextMethod };
 }
 
+const BANK_CURRENCY: Record<string, string> = {
+  AT: "eur", AU: "aud", BE: "eur", CA: "cad", CH: "chf", DE: "eur", DK: "dkk", ES: "eur", FI: "eur", FR: "eur", GB: "gbp",
+  HK: "hkd", IE: "eur", IT: "eur", JP: "jpy", LU: "eur", NL: "eur", NO: "nok", NZ: "nzd", PL: "pln", PT: "eur", SE: "sek", SG: "sgd", US: "usd",
+};
+const IBAN_COUNTRIES = new Set(["AT", "BE", "CH", "DE", "DK", "ES", "FI", "FR", "IE", "IT", "LU", "NL", "NO", "PL", "PT", "SE"]);
+
+function digitsOf(value: unknown, max: number) {
+  return textOf(value, max).replace(/[\s-]/g, "");
+}
+
+function bankFields(body: Record<string, unknown>) {
+  const country = textOf(body.country, 2).toUpperCase();
+  const currency = BANK_CURRENCY[country];
+  if (!currency || !PAYOUT_COUNTRIES.has(country)) return { error: "err.payout.country" };
+  const holder = textOf(body.holder, 80);
+  const account = textOf(body.accountNumber, 42).replace(/\s+/g, "").toUpperCase();
+  if (holder.length < 2) return { error: "err.payout.bank" };
+  const fields: Record<string, string> = {
+    "external_account[object]": "bank_account",
+    "external_account[country]": country,
+    "external_account[currency]": currency,
+    "external_account[account_holder_name]": holder,
+    "external_account[account_holder_type]": "individual",
+    default_for_currency: "true",
+  };
+  if (IBAN_COUNTRIES.has(country)) {
+    if (!account.startsWith(country) || !/^[A-Z]{2}[0-9A-Z]{13,32}$/.test(account)) return { error: "err.payout.bank" };
+    fields["external_account[account_number]"] = account;
+    return { fields, country };
+  }
+  const number = account.replace(/-/g, "");
+  if (!/^\d{4,34}$/.test(number)) return { error: "err.payout.bank" };
+  fields["external_account[account_number]"] = number;
+  if (country === "NZ") return /^\d{15,16}$/.test(number) ? { fields, country } : { error: "err.payout.bank" };
+  const routing = digitsOf(body.routing, 12);
+  const bank = digitsOf(body.bankCode, 8);
+  const branch = digitsOf(body.branchCode, 8);
+  const transit = digitsOf(body.transit, 8);
+  const institution = digitsOf(body.institution, 8);
+  const route =
+    country === "GB" || country === "AU" ? (routing.length === 6 ? routing : "") :
+    country === "US" ? (routing.length === 9 ? routing : "") :
+    country === "CA" ? (transit.length === 5 && institution.length === 3 ? `${transit}${institution}` : "") :
+    country === "HK" ? (bank.length === 3 && branch.length === 3 ? `${bank}-${branch}` : "") :
+    country === "JP" ? (bank.length === 4 && branch.length === 3 ? `${bank}${branch}` : "") :
+    country === "SG" ? (bank.length === 4 && branch.length === 3 ? `${bank}-${branch}` : "") :
+    "";
+  if (!route) return { error: "err.payout.bank" };
+  fields["external_account[routing_number]"] = route;
+  return { fields, country };
+}
+
+function payoutAccountBody(mine: Row, country: string, withMerchant: boolean) {
+  const configuration: Record<string, unknown> = {
+    recipient: { capabilities: { stripe_balance: { stripe_transfers: { requested: true } } } },
+  };
+  if (withMerchant) configuration.merchant = { capabilities: { card_payments: { requested: true } } };
+  return {
+    contact_email: String(mine.email),
+    display_name: String(mine.name).slice(0, 100) || "fanstar",
+    dashboard: "none",
+    identity: { country: country.toLowerCase(), entity_type: "individual" },
+    defaults: { responsibilities: { fees_collector: "application", losses_collector: "application" } },
+    configuration,
+    include: ["configuration.recipient", "identity", "defaults"],
+  };
+}
+
+async function openPayoutAccount(sql: Sql, mine: Row, country: string, env: PayEnv, fetchImpl: typeof fetch) {
+  const wanted = country.toUpperCase();
+  let accountId = String(mine.stripe_account_id ?? "");
+  let reusable = false;
+  if (accountId) {
+    const loaded = await stripeSend(env, `/v2/core/accounts/${encodeURIComponent(accountId)}?include=identity`, "GET", undefined, fetchImpl);
+    const identity = loaded.ok ? (loaded.data.identity as { country?: string } | undefined) : undefined;
+    reusable = loaded.ok && loaded.data.dashboard === "none" && String(identity?.country ?? "").toUpperCase() === wanted;
+  }
+  if (reusable) return { accountId };
+  let created = await stripeSend(env, "/v2/core/accounts", "POST", payoutAccountBody(mine, wanted, false), fetchImpl);
+  if (!created.ok && created.code === "err.payout.capability") {
+    created = await stripeSend(env, "/v2/core/accounts", "POST", payoutAccountBody(mine, wanted, true), fetchImpl);
+  }
+  if (!created.ok || typeof created.data.id !== "string") {
+    return { error: created.ok ? "err.payout" : created.code === "err.payout.capability" ? "err.payout.country" : created.code };
+  }
+  accountId = created.data.id;
+  sql.run("UPDATE users SET stripe_account_id = ?, payout_ready = 0, payout_method = '' WHERE id = ?", accountId, String(mine.id));
+  mine.stripe_account_id = accountId;
+  mine.payout_ready = 0;
+  mine.payout_method = "";
+  return { accountId };
+}
+
+async function savePayout(sql: Sql, request: Request, body: Record<string, unknown>, env: PayEnv, fetchImpl: typeof fetch) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
+  if (!mine || Number(mine.is_creator) !== 1) return fail("err.studio");
+  if (!stripeKey(env)) return fail("err.pay.unconfigured");
+  const bank = bankFields(body);
+  if ("error" in bank) return fail(bank.error);
+  const opened = await openPayoutAccount(sql, mine, bank.country, env, fetchImpl);
+  if ("error" in opened || !opened.accountId) return fail("error" in opened ? opened.error : "err.payout");
+  const added = await stripeForm(env, `/v1/accounts/${encodeURIComponent(opened.accountId)}/external_accounts`, bank.fields, fetchImpl);
+  if (!added.ok) return fail(added.code === "err.payout.capability" ? "err.payout.country" : added.code);
+  const label = payoutMethodLabel(added.data);
+  if (label) {
+    mine.payout_method = label;
+    sql.run("UPDATE users SET payout_method = ? WHERE id = ?", label, String(mine.id));
+  }
+  const payout = await refreshPayout(sql, mine, env, fetchImpl);
+  return json({ method: payout.method });
+}
+
 async function payoutLink(sql: Sql, request: Request, body: Record<string, unknown>, env: PayEnv, fetchImpl: typeof fetch) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
@@ -2075,6 +2189,7 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/profile") return profile(sql, request, body);
   if (url.pathname === "/api/tiers") return updateTier(sql, request, body);
   if (url.pathname === "/api/studio") return studio(sql, request, body);
+  if (url.pathname === "/api/payout/method") return savePayout(sql, request, body, env, stripeFetch);
   if (url.pathname === "/api/payout/link") return payoutLink(sql, request, body, env, stripeFetch);
   if (url.pathname === "/api/account") return deleteAccount(sql, request, body);
   return fail("err.route", 404);

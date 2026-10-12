@@ -68,7 +68,7 @@ type StoreValue = {
   updateTier: (input: { id: string; name: string; price: number; blurb: string; perks: string[] }) => Promise<string | null>;
   openStudio: (input: { handle: string; category: string; location: string; bio: string }) => Promise<string | null>;
   checkoutProduct: (productId: string, locale: string) => Promise<{ error: string | null; url?: string }>;
-  payoutLink: (country: string) => Promise<{ error: string | null; url?: string }>;
+  savePayout: (input: { country: string; holder: string; accountNumber: string; routing?: string; bankCode?: string; branchCode?: string; transit?: string; institution?: string }) => Promise<{ error: string | null; method?: string }>;
   uploadAvatar: (file: File) => Promise<string | null>;
   deleteAccount: (password: string) => Promise<string | null>;
   updateProductTags: (productId: string, tags: string) => Promise<string | null>;
@@ -123,6 +123,7 @@ async function call(path: string, body?: unknown) {
     playlistId?: string;
     url?: string;
     sessionId?: string;
+    method?: string;
   };
   return { response, data };
 }
@@ -289,11 +290,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     checkoutCart: (locale) => startCheckout({ locale }),
     checkoutTier: (tierId, locale) => startCheckout({ tierId, locale }),
     checkoutProduct: (productId, locale) => startCheckout({ productId, locale }),
-    payoutLink: async (country) => {
+    savePayout: async (input) => {
       try {
-        const { response, data } = await call("/api/payout/link", { country });
+        const { response, data } = await call("/api/payout/method", input);
         if (!response.ok) return { error: say(data.code, data.name, data.error) };
-        return { error: null, url: data.url };
+        await loadDesk();
+        return { error: null, method: data.method };
       } catch {
         return { error: t("err.network") };
       }

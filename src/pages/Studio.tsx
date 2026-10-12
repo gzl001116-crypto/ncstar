@@ -1056,29 +1056,43 @@ export function StudioTiers() {
 }
 
 const PAYOUT_COUNTRIES = ["AT", "AU", "BE", "CA", "CH", "DE", "DK", "ES", "FI", "FR", "GB", "HK", "IE", "IT", "JP", "LU", "NL", "NO", "NZ", "PL", "PT", "SE", "SG", "US"];
+const IBAN_COUNTRIES = new Set(["AT", "BE", "CH", "DE", "DK", "ES", "FI", "FR", "IE", "IT", "LU", "NL", "NO", "PL", "PT", "SE"]);
 
 function PayoutPanel() {
   const { t, lang } = useI18n();
-  const { desk, payoutLink } = useStore();
+  const { desk, savePayout } = useStore();
   const [params] = useSearchParams();
   const [country, setCountry] = useState("");
+  const [holder, setHolder] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
+  const [routing, setRouting] = useState("");
+  const [bankCode, setBankCode] = useState("");
+  const [branchCode, setBranchCode] = useState("");
+  const [transit, setTransit] = useState("");
+  const [institution, setInstitution] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const region = new Intl.DisplayNames([lang === "zh" ? "zh-CN" : lang === "zh-Hant" ? "zh-TW" : lang], { type: "region" });
   const next = desk?.nextPayout ? utcStamp(new Date(desk.nextPayout)) : "";
   const method = desk?.payoutMethod ?? "";
   const started = Boolean(desk?.payoutStarted);
-  const start = async (event: FormEvent<HTMLFormElement>) => {
+  const kind = IBAN_COUNTRIES.has(country) ? "iban" : country;
+  const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true);
     setError("");
-    const result = await payoutLink(country);
-    if (result.error || !result.url) {
-      setBusy(false);
-      setError(result.error || t("err.payout"));
+    const result = await savePayout({ country, holder, accountNumber, routing, bankCode, branchCode, transit, institution });
+    setBusy(false);
+    if (result.error) {
+      setError(result.error);
       return;
     }
-    window.location.assign(result.url);
+    setAccountNumber("");
+    setRouting("");
+    setBankCode("");
+    setBranchCode("");
+    setTransit("");
+    setInstitution("");
   };
   return (
     <section className="panel payout-panel">
@@ -1090,24 +1104,60 @@ function PayoutPanel() {
       {next && <p>{t("studio.payoutFriday", { time: next })}</p>}
       {params.get("payout") === "return" && <p className="muted">{t("studio.payoutReturn")}</p>}
       {params.get("payout") === "error" && <p className="error">{t("studio.payoutError")}</p>}
-      <form onSubmit={start}>
-        {!started && (
-          <label>
-            {t("studio.payoutCountry")}
-            <select value={country} required onChange={(event) => setCountry(event.target.value)}>
-              <option value="" disabled>
-                {t("studio.payoutCountry")}
+      <form onSubmit={save}>
+        <label>
+          {t("studio.payoutCountry")}
+          <select value={country} required onChange={(event) => setCountry(event.target.value)}>
+            <option value="" disabled>
+              {t("studio.payoutCountry")}
+            </option>
+            {PAYOUT_COUNTRIES.map((code) => (
+              <option key={code} value={code}>
+                {region.of(code)}
               </option>
-              {PAYOUT_COUNTRIES.map((code) => (
-                <option key={code} value={code}>
-                  {region.of(code)}
-                </option>
-              ))}
-            </select>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t("studio.payoutHolder")}
+          <input value={holder} required autoComplete="off" onChange={(event) => setHolder(event.target.value)} />
+        </label>
+        <label>
+          {t(kind === "iban" ? "studio.payoutIban" : "studio.payoutAccount")}
+          <input value={accountNumber} required autoComplete="off" spellCheck={false} onChange={(event) => setAccountNumber(event.target.value)} />
+        </label>
+        {(kind === "GB" || kind === "AU" || kind === "US") && (
+          <label>
+            {t(kind === "GB" ? "studio.payoutSort" : kind === "AU" ? "studio.payoutBsb" : "studio.payoutRouting")}
+            <input value={routing} required autoComplete="off" spellCheck={false} inputMode="numeric" onChange={(event) => setRouting(event.target.value)} />
           </label>
         )}
+        {(kind === "HK" || kind === "JP" || kind === "SG") && (
+          <>
+            <label>
+              {t("studio.payoutBankCode")}
+              <input value={bankCode} required autoComplete="off" spellCheck={false} inputMode="numeric" onChange={(event) => setBankCode(event.target.value)} />
+            </label>
+            <label>
+              {t("studio.payoutBranch")}
+              <input value={branchCode} required autoComplete="off" spellCheck={false} inputMode="numeric" onChange={(event) => setBranchCode(event.target.value)} />
+            </label>
+          </>
+        )}
+        {kind === "CA" && (
+          <>
+            <label>
+              {t("studio.payoutTransit")}
+              <input value={transit} required autoComplete="off" spellCheck={false} inputMode="numeric" onChange={(event) => setTransit(event.target.value)} />
+            </label>
+            <label>
+              {t("studio.payoutInstitution")}
+              <input value={institution} required autoComplete="off" spellCheck={false} inputMode="numeric" onChange={(event) => setInstitution(event.target.value)} />
+            </label>
+          </>
+        )}
         <button className="btn btn-dark" type="submit" disabled={busy}>
-          {busy ? t("common.wait") : t(method ? "studio.payoutUpdate" : started ? "studio.payoutContinue" : "studio.payoutStart")}
+          {busy ? t("common.wait") : t(method ? "studio.payoutUpdate" : "studio.payoutStart")}
         </button>
       </form>
       {error && <p className="error">{error}</p>}
