@@ -16,6 +16,7 @@ export function Studio() {
   const [postError, setPostError] = useState("");
   const [shopError, setShopError] = useState("");
   const [openError, setOpenError] = useState("");
+  const [playFormat, setPlayFormat] = useState("");
 
   if (!ready) {
     return (
@@ -86,12 +87,15 @@ export function Studio() {
         .map((item) => item.trim())
         .filter(Boolean),
       fileBody: String(data.get("fileBody") ?? ""),
+      playFormat,
+      playBody: String(data.get("playBody") ?? ""),
     });
     if (result) {
       setShopError(result);
       return;
     }
     event.currentTarget.reset();
+    setPlayFormat("");
     setShopError("");
   };
 
@@ -229,6 +233,23 @@ export function Studio() {
                 {t("studio.file")}
                 <textarea name="fileBody" rows={5} required placeholder={t("studio.filePh")} />
               </label>
+              <label>
+                {t("play.studioFormat")}
+                <select name="playFormat" value={playFormat} onChange={(event) => setPlayFormat(event.target.value)}>
+                  <option value="">{t("play.studioNone")}</option>
+                  <option value="comic">{t("play.format.comic")}</option>
+                  <option value="voice">{t("play.format.voice")}</option>
+                  <option value="video">{t("play.format.video")}</option>
+                  <option value="novel">{t("play.format.novel")}</option>
+                  <option value="game">{t("play.format.game")}</option>
+                </select>
+              </label>
+              {playFormat && (
+                <label>
+                  {t("play.studioBody")}
+                  <textarea name="playBody" rows={6} required placeholder={t(`play.studioHint.${playFormat}`)} />
+                </label>
+              )}
               {shopError && <p className="error">{shopError}</p>}
               <button className="btn btn-dark" type="submit">
                 {t("studio.newProduct")}

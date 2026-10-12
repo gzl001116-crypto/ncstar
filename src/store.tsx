@@ -44,7 +44,11 @@ type StoreValue = {
     kind: string;
     includes: string[];
     fileBody: string;
+    playFormat?: string;
+    playBody?: string;
   }) => Promise<string | null>;
+  togglePlayList: (productId: string) => Promise<void>;
+  savePlayProgress: (productId: string, cursor: string) => Promise<void>;
   updateProfile: (input: { name: string; bio: string; location?: string; category?: Category }) => Promise<string | null>;
   openStudio: () => Promise<string | null>;
   creatorById: (id: string) => Creator | undefined;
@@ -101,7 +105,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       products: data.products ?? [],
       tiers: data.tiers ?? [],
       comments: data.comments ?? [],
-      user: data.user ?? null,
+      user: data.user
+        ? {
+            ...data.user,
+            playList: data.user.playList ?? [],
+            playProgress: data.user.playProgress ?? [],
+          }
+        : null,
     });
     if (data.code || data.toast) toast(say(data.code, data.name, data.toast));
   };
@@ -186,6 +196,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     checkoutTier: (tierId) => mutate("/api/checkout", { tierId }),
     publishPost: (input) => mutate("/api/posts", input),
     publishProduct: (input) => mutate("/api/products", input),
+    togglePlayList: async (productId) => {
+      const error = await mutate("/api/play", { productId, op: "list" });
+      if (error) toast(error);
+    },
+    savePlayProgress: (productId, cursor) => mutate("/api/play", { productId, op: "progress", cursor }).then(() => undefined),
     updateProfile: (input) => mutate("/api/profile", input),
     openStudio: () => mutate("/api/studio", {}),
     creatorById,

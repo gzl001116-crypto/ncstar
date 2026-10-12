@@ -116,6 +116,53 @@ if (bought.status !== 200 || !bought.data.user.library.some((item: { productId: 
 const file = await fan.send(`/api/download?productId=${productId}`, undefined, "GET");
 if (!String(file.raw).includes("册子里的原句")) throw new Error(`download failed ${file.status} ${file.raw}`);
 
+const plainPlay = await fan.send(`/api/play?productId=${productId}`, undefined, "GET");
+if (plainPlay.status !== 404) throw new Error(`download-only work should not open in play ${plainPlay.status}`);
+
+const comic = await creator.send("/api/products", {
+  title: "连载",
+  description: "可以翻页的漫画",
+  price: 6,
+  kind: "漫画",
+  includes: ["第一话"],
+  fileBody: "下载到的是同一段文字。",
+  playFormat: "comic",
+  playBody: "第一页的对白，买下就能翻。\n---\n第二页的对白，翻到这里。",
+});
+if (comic.status !== 200) throw new Error(`comic failed ${comic.raw}`);
+const comicId = comic.data.products.find((item: { title: string }) => item.title === "连载").id as string;
+if (comic.data.products.find((item: { id: string }) => item.id === comicId).playFormat !== "comic") {
+  throw new Error("play format missing from catalog");
+}
+const preview = await creator.send(`/api/play?productId=${comicId}`, undefined, "GET");
+if (preview.status !== 200 || preview.data.pages?.length !== 2) throw new Error(`creator preview ${preview.status}`);
+const lockedPlay = await fan.send(`/api/play?productId=${comicId}`, undefined, "GET");
+if (lockedPlay.status !== 403) throw new Error(`play should stay locked ${lockedPlay.status} ${lockedPlay.raw}`);
+const carted = await fan.send("/api/cart", { productId: comicId, op: "add" });
+if (carted.status !== 200) throw new Error(`second cart ${carted.raw}`);
+const boughtPlay = await fan.send("/api/checkout", {});
+if (boughtPlay.status !== 200) throw new Error(`play checkout ${boughtPlay.raw}`);
+const openedPlay = await fan.send(`/api/play?productId=${comicId}`, undefined, "GET");
+if (openedPlay.status !== 200 || openedPlay.data.pages?.[1]?.text !== "第二页的对白，翻到这里。") {
+  throw new Error(`play read ${openedPlay.status} ${JSON.stringify(openedPlay.data)}`);
+}
+const marked = await fan.send("/api/play", { productId: comicId, op: "progress", cursor: "1" });
+if (!marked.data.user.playProgress.some((item: { productId: string; cursor: string }) => item.productId === comicId && item.cursor === "1")) {
+  throw new Error("progress was not saved");
+}
+const listed = await fan.send("/api/play", { productId: comicId, op: "list" });
+if (!listed.data.user.playList.includes(comicId)) throw new Error("my list was not saved");
+const badVideo = await creator.send("/api/products", {
+  title: "坏视频",
+  description: "地址不对",
+  price: 3,
+  kind: "视频",
+  fileBody: "这段是下载用的说明文字。",
+  playFormat: "video",
+  playBody: "http://example.com/nope.mp4",
+});
+if (badVideo.status !== 400) throw new Error(`bad video should fail ${badVideo.status}`);
+
 const tierId = bought.data.tiers.find((item: { creatorId: string }) => item.creatorId === "ashi").id as string;
 const member = await fan.send("/api/checkout", { tierId });
 if (member.status !== 200) throw new Error(`membership failed ${member.raw}`);

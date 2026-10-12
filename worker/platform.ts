@@ -1,4 +1,5 @@
 import { matchCode, type Limiter, type MailEnv } from "./codes.ts";
+import { isPlayFormat, parsePlay } from "./play.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
 
 const COOKIE = "fanstar_session";
@@ -107,10 +108,33 @@ const STATEMENTS = [
     fee REAL NOT NULL,
     created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS play_saved (
+    user_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, product_id)
+  )`,
+  `CREATE TABLE IF NOT EXISTS play_progress (
+    user_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    cursor TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, product_id)
+  )`,
 ];
 
 function ensureSchema(sql: Sql) {
   for (const statement of STATEMENTS) sql.exec(statement);
+  for (const statement of [
+    "ALTER TABLE products ADD COLUMN play_format TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE products ADD COLUMN play_body TEXT NOT NULL DEFAULT ''",
+  ]) {
+    try {
+      sql.exec(statement);
+    } catch {
+      /* The column is already there after the first request. */
+    }
+  }
 }
 
 function json(body: unknown, status = 200, cookie?: string) {
@@ -301,6 +325,7 @@ function snapshot(sql: Sql, viewer: string) {
     kind: String(row.kind),
     includes: JSON.parse(String(row.includes)) as string[],
     coverKey: String(row.cover_key),
+    playFormat: String(row.play_format ?? ""),
   }));
   const tiers = sql.all("SELECT * FROM tiers ORDER BY rank").map((row) => ({
     id: String(row.id),
@@ -338,6 +363,12 @@ function snapshot(sql: Sql, viewer: string) {
           purchasedAt: String(row.purchased_at),
         })),
         cart: sql.all("SELECT product_id FROM cart_items WHERE user_id = ?", viewer).map((row) => String(row.product_id)),
+        playList: sql.all("SELECT product_id FROM play_saved WHERE user_id = ? ORDER BY created_at DESC", viewer).map((row) => String(row.product_id)),
+        playProgress: sql.all("SELECT * FROM play_progress WHERE user_id = ? ORDER BY updated_at DESC", viewer).map((row) => ({
+          productId: String(row.product_id),
+          cursor: String(row.cursor),
+          updatedAt: String(row.updated_at),
+        })),
       }
     : null;
   return { creators, posts, products, tiers, comments, user };
@@ -615,14 +646,19 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   const fileBody = textOf(body.fileBody, 20000);
   const price = Number(body.price);
   const kind = textOf(body.kind, 40) || "数字作品";
+  const playFormat = textOf(body.playFormat, 20);
+  const playSource = typeof body.playBody === "string" ? body.playBody.trim().slice(0, 100_000) : "";
   const includes = Array.isArray(body.includes)
     ? body.includes.map((item) => textOf(item, 40)).filter(Boolean).slice(0, 8)
     : [];
   if (title.length < 2) return fail("err.product.title");
   if (fileBody.length < 8) return fail("err.file");
   if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
+  if (playFormat && !isPlayFormat(playFormat)) return fail("err.play.format");
+  const parsed = parsePlay(playFormat, playSource);
+  if (!parsed.ok) return fail(parsed.code);
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, play_format, play_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     id(),
     String(mine.handle),
     title,
@@ -632,6 +668,8 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
     JSON.stringify(includes.length ? includes : [fileName(title)]),
     id(),
     fileBody,
+    playFormat,
+    playFormat ? JSON.stringify(parsed.body) : "",
   );
   return withState(sql, viewer, "toast.product");
 }
@@ -700,11 +738,67 @@ function download(sql: Sql, request: Request) {
   return fail("err.file.missing", 404);
 }
 
+function canPlay(sql: Sql, viewer: string, product: Row) {
+  if (!viewer) return false;
+  const mine = sql.get("SELECT handle FROM users WHERE id = ?", viewer);
+  if (mine && String(mine.handle) === String(product.creator_id)) return true;
+  return Boolean(sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, String(product.id)));
+}
+
+function playRead(sql: Sql, request: Request) {
+  const viewer = userId(sql, request);
+  if (!viewer) return fail("err.loginRequired", 401);
+  const productId = new URL(request.url).searchParams.get("productId") ?? "";
+  const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
+  if (!product || !String(product.play_format)) return fail("err.play.missing", 404);
+  if (!canPlay(sql, viewer, product)) return fail("err.play.forbidden", 403);
+  let body: unknown = {};
+  try {
+    body = JSON.parse(String(product.play_body || "{}"));
+  } catch {
+    body = {};
+  }
+  return json({
+    id: String(product.id),
+    format: String(product.play_format),
+    title: String(product.title),
+    creatorId: String(product.creator_id),
+    ...(body as object),
+  });
+}
+
+function playWrite(sql: Sql, request: Request, body: Record<string, unknown>) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const productId = textOf(body.productId, 80);
+  const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
+  if (!product || !String(product.play_format)) return fail("err.play.missing", 404);
+  if (!canPlay(sql, viewer, product)) return fail("err.play.forbidden", 403);
+  if (body.op === "progress") {
+    const cursor = textOf(body.cursor, 40);
+    const now = new Date().toISOString();
+    sql.run("DELETE FROM play_progress WHERE user_id = ? AND product_id = ?", viewer, productId);
+    sql.run(
+      "INSERT INTO play_progress (user_id, product_id, cursor, updated_at) VALUES (?, ?, ?, ?)",
+      viewer,
+      productId,
+      cursor,
+      now,
+    );
+    return json(snapshot(sql, viewer));
+  }
+  const existing = sql.get("SELECT product_id FROM play_saved WHERE user_id = ? AND product_id = ?", viewer, productId);
+  if (existing) sql.run("DELETE FROM play_saved WHERE user_id = ? AND product_id = ?", viewer, productId);
+  else sql.run("INSERT INTO play_saved (user_id, product_id, created_at) VALUES (?, ?, ?)", viewer, productId, new Date().toISOString());
+  return withState(sql, viewer, existing ? "toast.play.unsave" : "toast.play.save");
+}
+
 export async function handleApp(request: Request, sql: Sql, env: MailEnv, limiter: Limiter): Promise<Response> {
   ensureSchema(sql);
   const url = new URL(request.url);
   if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request)));
   if (request.method === "GET" && url.pathname === "/api/download") return download(sql, request);
+  if (request.method === "GET" && url.pathname === "/api/play") return playRead(sql, request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
   if (request.method !== "POST") return fail("err.method", 405);
   const body = await readJson(request);
@@ -718,6 +812,7 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   if (url.pathname === "/api/checkout") return checkout(sql, request, body);
   if (url.pathname === "/api/posts") return publishPost(sql, request, body);
   if (url.pathname === "/api/products") return publishProduct(sql, request, body);
+  if (url.pathname === "/api/play") return playWrite(sql, request, body);
   if (url.pathname === "/api/profile") return profile(sql, request, body);
   if (url.pathname === "/api/studio") return studio(sql, request);
   return fail("err.route", 404);

@@ -83,13 +83,16 @@ export function Library() {
                   <p className="muted">
                     {creator?.name} · {formatDate(item.purchasedAt)}
                   </p>
-                  <button
-                    type="button"
-                    className="btn btn-dark"
-                    onClick={() => save(product.id, product.title)}
-                  >
-                    {t("common.download")}
-                  </button>
+                  <div className="hero-actions">
+                    {product.playFormat && (
+                      <Link to={`/play/${product.id}`} className="btn btn-dark">
+                        {t("play.open")}
+                      </Link>
+                    )}
+                    <button type="button" className="btn btn-line" onClick={() => save(product.id, product.title)}>
+                      {t("common.download")}
+                    </button>
+                  </div>
                 </div>
               </article>
             );

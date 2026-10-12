@@ -7,7 +7,9 @@ import { Checkout } from "./pages/Checkout";
 import { CreatorPage } from "./pages/Creator";
 import { Explore } from "./pages/Explore";
 import { Home } from "./pages/Home";
+import { PlayLayout } from "./components/PlayLayout";
 import { Library } from "./pages/Library";
+import { PlayHome, PlayViewer } from "./pages/Play";
 import { NotFound } from "./pages/NotFound";
 import { PostPage } from "./pages/PostPage";
 import { ProductPage } from "./pages/ProductPage";
@@ -28,6 +30,10 @@ export function App() {
     <>
       <ScrollToTop />
       <Routes>
+        <Route path="play" element={<PlayLayout />}>
+          <Route index element={<PlayHome />} />
+          <Route path=":productId" element={<PlayViewer />} />
+        </Route>
         <Route element={<Layout />}>
           <Route index element={<Home />} />
           <Route path="explore" element={<Explore />} />

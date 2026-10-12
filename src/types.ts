@@ -43,6 +43,7 @@ export type Product = {
   kind: string;
   includes: string[];
   coverKey: string;
+  playFormat: string;
 };
 
 export type Tier = {
@@ -86,6 +87,8 @@ export type User = {
   memberships: Membership[];
   library: Purchase[];
   cart: string[];
+  playList: string[];
+  playProgress: { productId: string; cursor: string; updatedAt: string }[];
 };
 
 export type Catalog = {

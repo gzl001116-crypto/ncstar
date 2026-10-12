@@ -29,7 +29,10 @@ export function ProductPage() {
           <Avatar name={creator.name} id={creator.id} size={36} />
           <span>{creator.name}</span>
         </Link>
-        <p className="pill">{phrase(product.kind)}</p>
+        <p className="meta">
+          <span className="pill">{phrase(product.kind)}</span>
+          {product.playFormat ? <span className="pill">play.fanstar</span> : null}
+        </p>
         <h1>{product.title}</h1>
         <p className="price price-lg">{yuan(product.price)}</p>
         <p>{phrase(product.description)}</p>
@@ -39,10 +42,20 @@ export function ProductPage() {
           ))}
         </ul>
         <p className="fineprint">{t("product.share", { amount: yuan(creatorShare(product.price)) })}</p>
-        {owned ? (
-          <Link to="/library" className="btn btn-pine btn-block">
-            {t("product.inLibrary")}
-          </Link>
+        {owned || (mine && product.playFormat) ? (
+          <div className="hero-actions">
+            {product.playFormat && (
+              <Link to={`/play/${product.id}`} className="btn btn-dark">
+                {t("play.open")}
+              </Link>
+            )}
+            {owned && (
+              <Link to="/library" className="btn btn-pine">
+                {t("product.inLibrary")}
+              </Link>
+            )}
+            {mine && !owned && <p className="muted">{t("product.mine")}</p>}
+          </div>
         ) : mine ? (
           <p className="muted">{t("product.mine")}</p>
         ) : (
