@@ -16,7 +16,7 @@ import { NotFound } from "./pages/NotFound";
 import { PostPage } from "./pages/PostPage";
 import { ProductPage } from "./pages/ProductPage";
 import { Privacy } from "./pages/Privacy";
-import { MyPage, StudioGuide, StudioHome, StudioLayout, StudioOrders, StudioPosts, StudioTiers, StudioWorks } from "./pages/Studio";
+import { MyPage, StudioGuide, StudioHome, StudioLayout, StudioOrders, StudioPayout, StudioPosts, StudioTiers, StudioWorks } from "./pages/Studio";
 import { Terms } from "./pages/Terms";
 import { Tokushoho } from "./pages/Tokushoho";
 
@@ -80,6 +80,7 @@ export function App() {
             <Route path="profile" element={<Navigate to="/page" replace />} />
             <Route path="tiers" element={<StudioTiers />} />
             <Route path="orders" element={<StudioOrders />} />
+            <Route path="payout" element={<StudioPayout />} />
             <Route path="guide" element={<StudioGuide />} />
           </Route>
           <Route path="about" element={<About />} />

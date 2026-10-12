@@ -1546,7 +1546,7 @@ async function payoutLink(sql: Sql, request: Request, body: Record<string, unkno
       type: "account_onboarding",
       account_onboarding: {
         refresh_url: `${origin}/api/payout/refresh`,
-        return_url: `${origin}/studio/orders?payout=return`,
+        return_url: `${origin}/studio/payout?payout=return`,
       },
     },
   }, fetchImpl);
@@ -1559,7 +1559,7 @@ async function payoutRefresh(sql: Sql, request: Request, env: PayEnv, fetchImpl:
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
-  if (!mine || !String(mine.stripe_account_id ?? "")) return Response.redirect(`${new URL(request.url).origin}/studio/orders`, 302);
+  if (!mine || !String(mine.stripe_account_id ?? "")) return Response.redirect(`${new URL(request.url).origin}/studio/payout`, 302);
   const origin = new URL(request.url).origin;
   const linked = await stripeSend(env, "/v2/core/account_links", "POST", {
     account: String(mine.stripe_account_id),
@@ -1567,12 +1567,12 @@ async function payoutRefresh(sql: Sql, request: Request, env: PayEnv, fetchImpl:
       type: "account_onboarding",
       account_onboarding: {
         refresh_url: `${origin}/api/payout/refresh`,
-        return_url: `${origin}/studio/orders?payout=return`,
+        return_url: `${origin}/studio/payout?payout=return`,
       },
     },
   }, fetchImpl);
   const url = linked.ok ? linked.data.url : "";
-  if (!linked.ok || typeof url !== "string" || !url) return Response.redirect(`${origin}/studio/orders?payout=error`, 302);
+  if (!linked.ok || typeof url !== "string" || !url) return Response.redirect(`${origin}/studio/payout?payout=error`, 302);
   return Response.redirect(url, 302);
 }
 

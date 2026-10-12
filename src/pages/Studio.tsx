@@ -116,6 +116,7 @@ function StudioGate({ children }: { children: ReactNode }) {
         <NavLink to="/studio/works">{t("studio.navWorks")}</NavLink>
         <NavLink to="/studio/tiers">{t("studio.tiers")}</NavLink>
         <NavLink to="/studio/orders">{t("studio.orders")}</NavLink>
+        <NavLink to="/studio/payout">{t("studio.navPayout")}</NavLink>
         <NavLink to="/studio/guide">{t("studio.navGuide")}</NavLink>
       </nav>
       {children}
@@ -143,6 +144,7 @@ export function StudioHome() {
     ["/studio/works", t("studio.openWorks"), t("studio.shortcutWorks")],
     ["/studio/tiers", t("studio.openTiers"), t("studio.shortcutTiers")],
     ["/studio/orders", t("studio.openOrders"), t("studio.shortcutOrders")],
+    ["/studio/payout", t("studio.openPayout"), t("studio.shortcutPayout")],
     ["/studio/guide", t("studio.openGuide"), t("studio.shortcutGuide")],
   ] as const;
   return (
@@ -1110,6 +1112,10 @@ function PayoutPanel() {
   );
 }
 
+export function StudioPayout() {
+  return <PayoutPanel />;
+}
+
 export function StudioOrders() {
   const { t, phrase } = useI18n();
   const { desk } = useStore();
@@ -1117,7 +1123,11 @@ export function StudioOrders() {
   const members = desk?.members ?? [];
   return (
     <>
-      <PayoutPanel />
+      <p className="desk-note">
+        <Link to="/studio/payout" className="btn btn-line">
+          {t("studio.payoutGo")}
+        </Link>
+      </p>
       <div className="studio-stats">
         <div>
           <strong>{orders.length}</strong>
