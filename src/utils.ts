@@ -1,0 +1,73 @@
+export const PLATFORM_FEE = 0.08;
+
+export function hash(value: string) {
+  let h = 0;
+  for (let i = 0; i < value.length; i += 1) {
+    h = (h * 31 + value.charCodeAt(i)) >>> 0;
+  }
+  return h;
+}
+
+export function yuan(amount: number) {
+  const digits = Number.isInteger(amount) ? 0 : 2;
+  return `¥${amount.toFixed(digits)}`;
+}
+
+export function creatorShare(amount: number) {
+  return Math.round(amount * (1 - PLATFORM_FEE) * 100) / 100;
+}
+
+export function formatDate(iso: string) {
+  const date = new Date(iso);
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${date.getFullYear()}.${month}.${day}`;
+}
+
+export function fromNow(iso: string) {
+  const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000);
+  if (days <= 0) return "今天";
+  if (days === 1) return "昨天";
+  if (days < 30) return `${days} 天前`;
+  return formatDate(iso);
+}
+
+export function addDays(days: number, from = new Date()) {
+  const next = new Date(from);
+  next.setDate(next.getDate() + days);
+  return next.toISOString();
+}
+
+export function daysLeft(iso: string) {
+  const ms = new Date(iso).getTime() - Date.now();
+  return Math.max(0, Math.ceil(ms / 86_400_000));
+}
+
+export function uid(prefix: string) {
+  return `${prefix}_${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36).slice(-4)}`;
+}
+
+export function includesQuery(haystack: string, query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return haystack.toLowerCase().includes(q);
+}
+
+export function visibilityLabel(rank: number) {
+  if (rank <= 0) return "公开";
+  if (rank === 1) return "会员";
+  return "更高档位";
+}
+
+export function downloadText(filename: string, lines: string[]) {
+  const blob = new Blob([`${lines.join("\n")}\n`], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  const base = filename.replace(/[\\/:*?"<>|]+/g, "_");
+  link.download = base.endsWith(".txt") ? base : `${base}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
