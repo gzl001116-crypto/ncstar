@@ -20,10 +20,10 @@ function loadDevVars(): MailEnv {
 }
 
 function readBody(req: IncomingMessage) {
-  return new Promise<string>((resolve, reject) => {
+  return new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
     req.on("data", (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)));
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
     req.on("error", reject);
   });
 }
@@ -42,17 +42,18 @@ function api() {
             next();
             return;
           }
-          const raw = req.method === "GET" || req.method === "HEAD" ? "" : await readBody(req);
+          const raw = req.method === "GET" || req.method === "HEAD" ? null : await readBody(req);
           const headers = new Headers();
           if (req.headers.cookie) headers.set("cookie", req.headers.cookie);
           if (req.headers["content-type"]) headers.set("content-type", String(req.headers["content-type"]));
           headers.set("cf-connecting-ip", req.socket.remoteAddress ?? "local");
           const authority = String(req.headers[":authority"] || req.headers.host || "127.0.0.1");
           const encrypted = Boolean((req.socket as { encrypted?: boolean } | undefined)?.encrypted);
+          const contentType = String(req.headers["content-type"] ?? "");
           const request = new Request(`${encrypted ? "https" : "http"}://${authority}${req.url}`, {
             method: req.method,
             headers,
-            body: req.method === "GET" || req.method === "HEAD" ? undefined : raw,
+            body: raw === null ? undefined : contentType.includes("multipart/form-data") ? raw : raw.toString("utf8"),
           });
           const response =
             path === "/api/send-code"
@@ -61,8 +62,8 @@ function api() {
                 ? await handleVerify(request, env, limiter)
                 : await handleApp(request, sql, env, limiter);
           res.statusCode = response.status;
-          const type = response.headers.get("content-type");
-          if (type) res.setHeader("content-type", type);
+          const responseType = response.headers.get("content-type");
+          if (responseType) res.setHeader("content-type", responseType);
           const cookies = response.headers.getSetCookie?.() ?? [];
           if (cookies.length > 0) res.setHeader("set-cookie", cookies);
           else {
