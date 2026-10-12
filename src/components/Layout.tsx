@@ -124,6 +124,7 @@ export function Layout() {
             <Link to="/explore">探索</Link>
             <Link to="/about">关于星页</Link>
             <Link to="/terms">使用条款</Link>
+            <Link to="/tokushoho">特定商取引法に基づく表記</Link>
           </div>
           <div>
             <strong>账号</strong>

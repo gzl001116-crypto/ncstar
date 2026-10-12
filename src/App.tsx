@@ -13,6 +13,7 @@ import { PostPage } from "./pages/PostPage";
 import { ProductPage } from "./pages/ProductPage";
 import { Studio } from "./pages/Studio";
 import { Terms } from "./pages/Terms";
+import { Tokushoho } from "./pages/Tokushoho";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -40,6 +41,7 @@ export function App() {
           <Route path="studio" element={<Studio />} />
           <Route path="about" element={<About />} />
           <Route path="terms" element={<Terms />} />
+          <Route path="tokushoho" element={<Tokushoho />} />
           <Route path="*" element={<NotFound />} />
         </Route>
       </Routes>

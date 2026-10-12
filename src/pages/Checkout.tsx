@@ -55,7 +55,10 @@ export function Checkout() {
       <div>
         <p className="kicker">订单</p>
         <h1>{tier ? "开通会员" : "购物袋"}</h1>
-        <p className="fineprint">确认后订单记在你的账号上，会员或作品立即生效。会员 30 天，不自动续费。</p>
+        <p className="fineprint">
+          确认后订单记在你的账号上，会员或作品立即生效。会员 30 天，不自动续费。
+          <Link to="/tokushoho"> 特定商取引法に基づく表記</Link>
+        </p>
         {tier && creator ? (
           <article className="line">
             <div>
