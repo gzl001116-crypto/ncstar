@@ -198,9 +198,14 @@ export function Auth({ mode }: { mode: "login" | "register" }) {
           {busy ? t("common.wait") : mode === "login" ? t("login") : t("register")}
         </button>
         {mode === "login" ? (
-          <p>
-            {t("auth.noAccount")} <Link to={`/register${next ? `?next=${encodeURIComponent(next)}` : ""}`}>{t("register")}</Link>
-          </p>
+          <>
+            <p>
+              <Link to={`/reset${next ? `?next=${encodeURIComponent(next)}` : ""}`}>{t("auth.forgot")}</Link>
+            </p>
+            <p>
+              {t("auth.noAccount")} <Link to={`/register${next ? `?next=${encodeURIComponent(next)}` : ""}`}>{t("register")}</Link>
+            </p>
+          </>
         ) : (
           <p>
             {t("auth.hasAccount")} <Link to={`/login${next ? `?next=${encodeURIComponent(next)}` : ""}`}>{t("login")}</Link>

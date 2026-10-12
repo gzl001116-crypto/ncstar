@@ -97,6 +97,7 @@ export type User = {
   cart: string[];
   playList: string[];
   playProgress: { productId: string; cursor: string; updatedAt: string }[];
+  playlists: { id: string; name: string; items: { productId: string; trackIndex: number }[] }[];
 };
 
 export type DeskOrder = {

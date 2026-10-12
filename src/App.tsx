@@ -10,7 +10,8 @@ import { Explore } from "./pages/Explore";
 import { Home } from "./pages/Home";
 import { PlayLayout } from "./components/PlayLayout";
 import { Library } from "./pages/Library";
-import { PlayHome, PlayViewer } from "./pages/Play";
+import { PlayHistory, PlayHome, PlayLists, PlayViewer } from "./pages/Play";
+import { ResetPassword } from "./pages/Password";
 import { NotFound } from "./pages/NotFound";
 import { PostPage } from "./pages/PostPage";
 import { ProductPage } from "./pages/ProductPage";
@@ -47,12 +48,16 @@ export function App() {
         {play && (
           <Route element={<PlayLayout />}>
             <Route index element={<PlayHome />} />
+            <Route path="lists" element={<PlayLists />} />
+            <Route path="history" element={<PlayHistory />} />
             <Route path=":productId" element={<PlayViewer />} />
           </Route>
         )}
         {!play && !shop && (
           <Route path="play" element={<PlayLayout />}>
             <Route index element={<PlayHome />} />
+            <Route path="lists" element={<PlayLists />} />
+            <Route path="history" element={<PlayHistory />} />
             <Route path=":productId" element={<PlayViewer />} />
           </Route>
         )}
@@ -65,6 +70,7 @@ export function App() {
           <Route path="checkout" element={<Checkout />} />
           <Route path="login" element={<Auth mode="login" />} />
           <Route path="register" element={<Auth mode="register" />} />
+          <Route path="reset" element={<ResetPassword />} />
           <Route path="library" element={<Library />} />
           <Route path="page" element={<MyPage />} />
           <Route path="studio" element={<StudioLayout />}>

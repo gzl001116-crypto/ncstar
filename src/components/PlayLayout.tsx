@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { useI18n } from "../i18n";
-import { isAbsolute, playPath, shopHref } from "../site";
+import { isAbsolute, playPath, playSection, shopHref } from "../site";
 import { useStore } from "../store";
 
 function Jump({ to, className, children, end, nav }: { to: string; className?: string; children: ReactNode; end?: boolean; nav?: boolean }) {
@@ -45,8 +45,14 @@ export function PlayLayout() {
             <span>play.fanstar</span>
           </Jump>
           <nav className="nav-links">
-            <Jump to={playPath()} end nav>
-              {t("play.library")}
+            <Jump to={playSection()} end nav>
+              {t("play.works")}
+            </Jump>
+            <Jump to={playSection("lists")} nav>
+              {t("play.lists")}
+            </Jump>
+            <Jump to={playSection("history")} nav>
+              {t("play.history")}
             </Jump>
             <Jump to={shopHref("/explore")} nav>
               {t("play.shopLink")}
@@ -70,8 +76,14 @@ export function PlayLayout() {
         </div>
         {open && (
           <div className="mobile-panel">
-            <Jump to={playPath()} end nav>
-              {t("play.library")}
+            <Jump to={playSection()} end nav>
+              {t("play.works")}
+            </Jump>
+            <Jump to={playSection("lists")} nav>
+              {t("play.lists")}
+            </Jump>
+            <Jump to={playSection("history")} nav>
+              {t("play.history")}
             </Jump>
             <Jump to={shopHref("/explore")} nav>
               {t("play.shopLink")}

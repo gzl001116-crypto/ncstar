@@ -7,7 +7,7 @@ const limiter = memoryLimiter();
 const env: MailEnv = { RESEND_API_KEY: "test-key", CODE_SECRET: "test-secret" };
 const codes = new Map<string, string>();
 
-async function ticket(email: string) {
+async function ticket(email: string, fresh = false) {
   const response = await handleSend(
     new Request("http://127.0.0.1/api/send-code", {
       method: "POST",
@@ -15,7 +15,7 @@ async function ticket(email: string) {
       body: JSON.stringify({ email }),
     }),
     env,
-    limiter,
+    fresh ? memoryLimiter() : limiter,
     {
       deliver: async (_apiKey, to, code) => {
         codes.set(to, code);
@@ -404,5 +404,85 @@ if (customRead.data.novel !== "这里是单独写的预览。" || String(customR
 }
 const customFile = await fan.send(`/api/download?productId=${customWork.id}`, undefined, "GET");
 if (customFile.status !== 403) throw new Error(`preview must not download ${customFile.status}`);
+
+const voice = await creator.send("/api/products", {
+  title: "两轨音声",
+  description: "播放列表用",
+  price: 6,
+  kind: "音乐",
+  fileBody: "这是音声作品的说明文件。",
+  playFormat: "voice",
+  playBody: "第一轨\n夜里的第一段。\n---\n第二轨\n夜里的第二段。",
+  includes: ["音声"],
+});
+const voiceWork = voice.data.products?.find((item: { title: string }) => item.title === "两轨音声");
+if (voice.status !== 200 || voiceWork?.playFormat !== "voice") throw new Error(`voice upload ${voice.status} ${voice.raw}`);
+const blankList = await creator.send("/api/play", { op: "playlist", name: "   " });
+if (blankList.status !== 400 || blankList.data.code !== "err.playlist.name") throw new Error(`blank playlist ${blankList.status} ${blankList.raw}`);
+const playlistMade = await creator.send("/api/play", { op: "playlist", name: "夜里" });
+const playlistId = playlistMade.data.playlistId as string;
+if (playlistMade.status !== 200 || !playlistId || playlistMade.data.user.playlists[0]?.name !== "夜里") {
+  throw new Error(`create playlist ${playlistMade.status} ${playlistMade.raw}`);
+}
+const addedTrack = await creator.send("/api/play", { op: "playlist-add", playlistId, productId: voiceWork.id, trackIndex: 0 });
+const addedNext = await creator.send("/api/play", { op: "playlist-add", playlistId, productId: voiceWork.id, trackIndex: 1 });
+const againTrack = await creator.send("/api/play", { op: "playlist-add", playlistId, productId: voiceWork.id, trackIndex: 0 });
+const tracks = againTrack.data.user?.playlists?.find((item: { id: string }) => item.id === playlistId)?.items ?? [];
+if (addedTrack.status !== 200 || addedNext.status !== 200 || tracks.length !== 2 || tracks[1]?.trackIndex !== 1) {
+  throw new Error(`playlist tracks ${addedTrack.status} ${againTrack.raw}`);
+}
+const fanList = await fan.send("/api/play", { op: "playlist", name: "读者列表" });
+const fanDenied = await fan.send("/api/play", {
+  op: "playlist-add",
+  playlistId: fanList.data.playlistId,
+  productId: voiceWork.id,
+  trackIndex: 0,
+});
+if (fanDenied.status !== 403) throw new Error(`fan cannot add an unowned track ${fanDenied.status} ${fanDenied.raw}`);
+const guest = client();
+const noSession = await guest.send("/api/play", { op: "playlist", name: "无" });
+if (noSession.status !== 401) throw new Error(`guest playlist ${noSession.status}`);
+const removedTrack = await creator.send("/api/play", { op: "playlist-remove", playlistId, productId: voiceWork.id, trackIndex: 1 });
+const left = removedTrack.data.user?.playlists?.find((item: { id: string }) => item.id === playlistId)?.items ?? [];
+if (removedTrack.status !== 200 || left.length !== 1) throw new Error(`remove track ${removedTrack.status} ${removedTrack.raw}`);
+const deletedList = await creator.send("/api/play", { op: "playlist-delete", playlistId });
+if (deletedList.status !== 200 || deletedList.data.user?.playlists?.some((item: { id: string }) => item.id === playlistId)) {
+  throw new Error(`delete playlist ${deletedList.status} ${deletedList.raw}`);
+}
+
+const shortPassword = await creator.send("/api/password", { code: "000000", token: "a".repeat(64), expiresAt: Date.now() + 1000, password: "short" });
+if (shortPassword.status !== 400 || shortPassword.data.code !== "err.password") throw new Error(`short password ${shortPassword.status} ${shortPassword.raw}`);
+const passTicket = await ticket("creator@example.com", true);
+const wrongCode = await creator.send("/api/password", {
+  code: passTicket.code === "000000" ? "111111" : "000000",
+  token: passTicket.token,
+  expiresAt: passTicket.expiresAt,
+  password: "secret99",
+});
+if (wrongCode.status !== 400 || wrongCode.data.code !== "err.code.wrong") throw new Error(`wrong password code ${wrongCode.status} ${wrongCode.raw}`);
+const changed = await creator.send("/api/password", {
+  email: "other@example.com",
+  code: passTicket.code,
+  token: passTicket.token,
+  expiresAt: passTicket.expiresAt,
+  password: "secret99",
+});
+if (changed.status !== 200 || changed.data.code !== "toast.password" || changed.data.user?.email !== "creator@example.com") {
+  throw new Error(`change password ${changed.status} ${changed.raw}`);
+}
+const oldLogin = await client().send("/api/login", { email: "creator@example.com", password: "secret12" });
+if (oldLogin.status !== 401) throw new Error("old password should fail");
+const newLogin = await client().send("/api/login", { email: "creator@example.com", password: "secret99" });
+if (newLogin.status !== 200) throw new Error(`new password login ${newLogin.status} ${newLogin.raw}`);
+const missingTicket = await ticket("nobody@example.com");
+const missing = await client().send("/api/password", { email: "nobody@example.com", ...missingTicket, password: "secret99" });
+if (missing.status !== 401 || missing.data.code !== "err.login") throw new Error(`unknown email reset ${missing.status} ${missing.raw}`);
+const fanTicket = await ticket("fan@example.com", true);
+const reset = await client().send("/api/password", { email: "fan@example.com", ...fanTicket, password: "secret34" });
+if (reset.status !== 200 || reset.data.user?.handle !== "reader") throw new Error(`reset password ${reset.status} ${reset.raw}`);
+const fanOld = await fan.send("/api/state", undefined, "GET");
+if (fanOld.status !== 200 || fanOld.data.user) throw new Error("old fan session should be gone");
+const fanNew = await client().send("/api/login", { email: "fan@example.com", password: "secret34" });
+if (fanNew.status !== 200) throw new Error(`reset login ${fanNew.status} ${fanNew.raw}`);
 
 console.log("platform checks passed");

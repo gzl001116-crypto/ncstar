@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Avatar } from "../components/Cover";
 import { useTitle } from "../hooks";
+import { PasswordForm } from "./Password";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { CATEGORIES, type Category } from "../types";
@@ -317,6 +318,7 @@ export function MyPage() {
       <div className="stack">
         <AccountAvatar />
         {opened ? <StudioProfile /> : <ApplyCreator />}
+        <PasswordForm lockedEmail={user.email} />
         <DeleteAccount />
       </div>
     </div>

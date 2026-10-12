@@ -21,6 +21,9 @@ const studio = playRedirect(new URL("https://play.fanstar.dev/studio/works"));
 expect(studio === "https://fanstar.dev/studio/works", `play studio → ${studio}`);
 
 expect(playRedirect(new URL("https://play.fanstar.dev/page")) === "https://fanstar.dev/page", "play page returns to the shop");
+expect(playRedirect(new URL("https://play.fanstar.dev/reset")) === "https://fanstar.dev/reset", "play reset returns to the shop");
+expect(playRedirect(new URL("https://play.fanstar.dev/lists")) === null, "play lists stay");
+expect(playRedirect(new URL("https://play.fanstar.dev/history")) === null, "play history stays");
 
 const creator = playRedirect(new URL("https://play.fanstar.dev/c/ashi"));
 expect(creator === "https://fanstar.dev/c/ashi", `play creator → ${creator}`);
@@ -37,6 +40,9 @@ expect(clientRedirect("https://fanstar.dev/play") === "https://play.fanstar.dev/
 expect(clientRedirect("https://www.fanstar.dev/play/abc?from=shop") === "https://play.fanstar.dev/abc?from=shop", "client shop work");
 expect(clientRedirect("https://play.fanstar.dev/play/abc") === "https://play.fanstar.dev/abc", "client legacy play path");
 expect(clientRedirect("https://play.fanstar.dev/terms") === "https://fanstar.dev/terms", "client terms");
+expect(clientRedirect("https://play.fanstar.dev/reset") === "https://fanstar.dev/reset", "client reset");
+expect(clientRedirect("https://play.fanstar.dev/lists") === null, "client lists stay");
+expect(clientRedirect("https://play.fanstar.dev/history") === null, "client history stays");
 expect(clientRedirect("https://play.fanstar.dev/c/ashi/shop/1") === "https://fanstar.dev/c/ashi/shop/1", "client creator");
 expect(clientRedirect("https://play.fanstar.dev/") === null, "client play root stays");
 expect(clientRedirect("http://127.0.0.1:5173/play") === null, "client local stays");

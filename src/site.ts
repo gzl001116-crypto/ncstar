@@ -13,6 +13,7 @@ const SHOP_ROOTS = new Set([
   "studio",
   "library",
   "checkout",
+  "reset",
   "c",
 ]);
 
@@ -44,6 +45,12 @@ function originFor(url: URL, kind: "shop" | "play") {
 export function playPath(id?: string) {
   if (isPlayHost()) return id ? `/${id}` : "/";
   return id ? `/play/${id}` : "/play";
+}
+
+/** Library, playlists, or history on the current host. */
+export function playSection(section?: "lists" | "history") {
+  if (isPlayHost()) return section ? `/${section}` : "/";
+  return section ? `/play/${section}` : "/play";
 }
 
 /** Where a play link should go from this page. */

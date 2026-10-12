@@ -57,6 +57,11 @@ type StoreValue = {
   }) => Promise<string | null>;
   togglePlayList: (productId: string) => Promise<void>;
   savePlayProgress: (productId: string, cursor: string) => Promise<void>;
+  createPlaylist: (name: string) => Promise<{ error: string | null; id?: string }>;
+  deletePlaylist: (playlistId: string) => Promise<string | null>;
+  addPlaylistItem: (playlistId: string, productId: string, trackIndex: number) => Promise<string | null>;
+  removePlaylistItem: (playlistId: string, productId: string, trackIndex: number) => Promise<string | null>;
+  changePassword: (input: { email?: string; code: string; token: string; expiresAt: number; password: string }) => Promise<string | null>;
   updateProfile: (input: { name: string; bio: string; location?: string; category?: Category; tags?: string }) => Promise<string | null>;
   updateTier: (input: { id: string; name: string; price: number; blurb: string; perks: string[] }) => Promise<string | null>;
   openStudio: (input?: { category: string; location: string; bio: string }) => Promise<string | null>;
@@ -92,6 +97,7 @@ async function call(path: string, body?: unknown) {
     name?: string;
     toast?: string;
     error?: string;
+    playlistId?: string;
   };
   return { response, data };
 }
@@ -134,6 +140,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             avatarAt: data.user.avatarAt ?? "",
             playList: data.user.playList ?? [],
             playProgress: data.user.playProgress ?? [],
+            playlists: data.user.playlists ?? [],
           }
         : null,
     });
@@ -270,6 +277,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (error) toast(error);
     },
     savePlayProgress: (productId, cursor) => mutate("/api/play", { productId, op: "progress", cursor }).then(() => undefined),
+    createPlaylist: async (name) => {
+      try {
+        const { response, data } = await call("/api/play", { op: "playlist", name });
+        if (!response.ok) return { error: say(data.code, data.name, data.error) };
+        apply(data);
+        return { error: null, id: data.playlistId };
+      } catch {
+        return { error: t("err.network") };
+      }
+    },
+    deletePlaylist: (playlistId) => mutate("/api/play", { op: "playlist-delete", playlistId }),
+    addPlaylistItem: (playlistId, productId, trackIndex) => mutate("/api/play", { op: "playlist-add", playlistId, productId, trackIndex }),
+    removePlaylistItem: (playlistId, productId, trackIndex) =>
+      mutate("/api/play", { op: "playlist-remove", playlistId, productId, trackIndex }),
+    changePassword: (input) => mutate("/api/password", input),
     updateProfile: (input) => mutate("/api/profile", input),
     updateTier: async (input) => {
       const error = await mutate("/api/tiers", input);

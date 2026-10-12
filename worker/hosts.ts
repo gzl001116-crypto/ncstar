@@ -13,6 +13,7 @@ const SHOP_ROOTS = new Set([
   "studio",
   "library",
   "checkout",
+  "reset",
   "c",
 ]);
 

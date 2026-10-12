@@ -122,6 +122,19 @@ const STATEMENTS = [
     updated_at TEXT NOT NULL,
     PRIMARY KEY (user_id, product_id)
   )`,
+  `CREATE TABLE IF NOT EXISTS playlists (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS playlist_items (
+    playlist_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    track_index INTEGER NOT NULL,
+    position INTEGER NOT NULL,
+    PRIMARY KEY (playlist_id, product_id, track_index)
+  )`,
 ];
 
 function ensureSchema(sql: Sql) {
@@ -572,9 +585,20 @@ function snapshot(sql: Sql, viewer: string) {
           cursor: String(row.cursor),
           updatedAt: String(row.updated_at),
         })),
+        playlists: playlistsOf(sql, viewer),
       }
     : null;
   return { creators, posts, products, tiers, comments, user };
+}
+
+function playlistsOf(sql: Sql, viewer: string) {
+  return sql.all("SELECT * FROM playlists WHERE user_id = ? ORDER BY created_at DESC", viewer).map((row) => ({
+    id: String(row.id),
+    name: String(row.name),
+    items: sql
+      .all("SELECT product_id, track_index FROM playlist_items WHERE playlist_id = ? ORDER BY position", String(row.id))
+      .map((item) => ({ productId: String(item.product_id), trackIndex: Number(item.track_index) })),
+  }));
 }
 
 function withState(sql: Sql, viewer: string, code: string, cookie?: string | string[], name?: string) {
@@ -688,6 +712,37 @@ async function login(sql: Sql, request: Request, body: Record<string, unknown>, 
   const session = token();
   sql.run("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)", session, String(row.id), Date.now() + SESSION_MS);
   return withState(sql, String(row.id), "toast.welcome", sessionCookie(request, session, SESSION_MS / 1000), String(row.name));
+}
+
+async function changePassword(sql: Sql, request: Request, body: Record<string, unknown>, env: MailEnv, limiter: Limiter) {
+  const viewer = userId(sql, request);
+  const password = typeof body.password === "string" ? body.password : "";
+  const code = typeof body.code === "string" ? body.code.trim() : "";
+  const ticket = typeof body.token === "string" ? body.token : "";
+  const expiresAt = typeof body.expiresAt === "number" ? body.expiresAt : Number(body.expiresAt);
+  if (password.length < 6) return fail("err.password");
+  const mine = viewer ? sql.get("SELECT * FROM users WHERE id = ?", viewer) : undefined;
+  if (viewer && !mine) return fail("err.loginRequired", 401);
+  const email = mine ? String(mine.email) : emailOf(body.email);
+  if (!email) return fail("err.email");
+  const ip = request.headers.get("cf-connecting-ip") ?? "local";
+  if (!(await limiter.allowed(`verify:ip:${ip}`, 20, 600)) || !(await limiter.allowed(`verify:${ticket}`, 5, 600))) {
+    return fail("err.code.limit", 429);
+  }
+  await limiter.record(`verify:ip:${ip}`, 600);
+  await limiter.record(`verify:${ticket}`, 600);
+  const codeError = await matchCode(env, email, code, ticket, expiresAt);
+  if (codeError) return fail(codeError, codeError === "err.mail.unconfigured" ? 503 : 400);
+  const row = sql.get("SELECT * FROM users WHERE email = ?", email);
+  if (!row) return fail("err.login", 401);
+  const user = String(row.id);
+  const passwordSalt = salt();
+  const passwordHash = await hashPassword(password, passwordSalt);
+  sql.run("UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?", passwordHash, passwordSalt, user);
+  sql.run("DELETE FROM sessions WHERE user_id = ?", user);
+  const session = token();
+  sql.run("INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)", session, user, Date.now() + SESSION_MS);
+  return withState(sql, user, "toast.password", sessionCookie(request, session, SESSION_MS / 1000));
 }
 
 function logout(sql: Sql, request: Request) {
@@ -1173,6 +1228,7 @@ async function deleteAccount(sql: Sql, request: Request, body: Record<string, un
   for (const productId of productIds) {
     sql.run("DELETE FROM play_saved WHERE product_id = ?", productId);
     sql.run("DELETE FROM play_progress WHERE product_id = ?", productId);
+    sql.run("DELETE FROM playlist_items WHERE product_id = ?", productId);
     sql.run("DELETE FROM purchases WHERE product_id = ?", productId);
     sql.run("DELETE FROM cart_items WHERE product_id = ?", productId);
     sql.run("DELETE FROM orders WHERE kind = 'product' AND target_id = ?", productId);
@@ -1187,6 +1243,10 @@ async function deleteAccount(sql: Sql, request: Request, body: Record<string, un
   }
   sql.run("DELETE FROM play_saved WHERE user_id = ?", viewer);
   sql.run("DELETE FROM play_progress WHERE user_id = ?", viewer);
+  for (const row of sql.all("SELECT id FROM playlists WHERE user_id = ?", viewer)) {
+    sql.run("DELETE FROM playlist_items WHERE playlist_id = ?", String(row.id));
+  }
+  sql.run("DELETE FROM playlists WHERE user_id = ?", viewer);
   sql.run("DELETE FROM purchases WHERE user_id = ?", viewer);
   sql.run("DELETE FROM cart_items WHERE user_id = ?", viewer);
   sql.run("DELETE FROM orders WHERE user_id = ?", viewer);
@@ -1301,9 +1361,71 @@ function playRead(sql: Sql, request: Request) {
   });
 }
 
+function playlistWrite(sql: Sql, viewer: string, body: Record<string, unknown>, op: string) {
+  if (op === "playlist") {
+    const name = textOf(body.name, 40);
+    if (Array.from(name).length < 1) return fail("err.playlist.name");
+    if (sql.all("SELECT id FROM playlists WHERE user_id = ?", viewer).length >= 30) return fail("err.playlist.count");
+    const playlistId = id();
+    sql.run(
+      "INSERT INTO playlists (id, user_id, name, created_at) VALUES (?, ?, ?, ?)",
+      playlistId,
+      viewer,
+      name,
+      new Date().toISOString(),
+    );
+    return json({ ...snapshot(sql, viewer), code: "toast.playlist", playlistId });
+  }
+  const playlistId = textOf(body.playlistId, 80);
+  const list = sql.get("SELECT id FROM playlists WHERE id = ? AND user_id = ?", playlistId, viewer);
+  if (!list) return fail("err.playlist.missing", 404);
+  if (op === "playlist-delete") {
+    sql.run("DELETE FROM playlist_items WHERE playlist_id = ?", playlistId);
+    sql.run("DELETE FROM playlists WHERE id = ?", playlistId);
+    return withState(sql, viewer, "toast.playlist.delete");
+  }
+  const productId = textOf(body.productId, 80);
+  const trackIndex = Number(body.trackIndex);
+  if (!Number.isInteger(trackIndex) || trackIndex < 0 || trackIndex > 199) return fail("err.playlist.track");
+  const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
+  if (!product || !String(product.play_format)) return fail("err.play.missing", 404);
+  if (accessLevel(sql, viewer, product) !== "full") return fail("err.play.forbidden", 403);
+  if (op === "playlist-remove") {
+    sql.run(
+      "DELETE FROM playlist_items WHERE playlist_id = ? AND product_id = ? AND track_index = ?",
+      playlistId,
+      productId,
+      trackIndex,
+    );
+    return withState(sql, viewer, "toast.playlist.remove");
+  }
+  const existing = sql.get(
+    "SELECT playlist_id FROM playlist_items WHERE playlist_id = ? AND product_id = ? AND track_index = ?",
+    playlistId,
+    productId,
+    trackIndex,
+  );
+  if (!existing) {
+    const last = sql.get("SELECT MAX(position) AS pos FROM playlist_items WHERE playlist_id = ?", playlistId);
+    const position = Number(last?.pos ?? -1) + 1;
+    sql.run(
+      "INSERT INTO playlist_items (playlist_id, product_id, track_index, position) VALUES (?, ?, ?, ?)",
+      playlistId,
+      productId,
+      trackIndex,
+      position,
+    );
+  }
+  return withState(sql, viewer, "toast.playlist.add");
+}
+
 function playWrite(sql: Sql, request: Request, body: Record<string, unknown>) {
   const { viewer, response } = requireUser(sql, request);
   if (response) return response;
+  const op = typeof body.op === "string" ? body.op : "";
+  if (op === "playlist" || op === "playlist-delete" || op === "playlist-add" || op === "playlist-remove") {
+    return playlistWrite(sql, viewer, body, op);
+  }
   const productId = textOf(body.productId, 80);
   const product = sql.get("SELECT * FROM products WHERE id = ?", productId);
   if (!product || !String(product.play_format)) return fail("err.play.missing", 404);
@@ -1346,6 +1468,7 @@ export async function handleApp(request: Request, sql: Sql, env: MailEnv, limite
   const body = await readJson(request);
   if (url.pathname === "/api/register") return register(sql, request, body, env, limiter);
   if (url.pathname === "/api/login") return login(sql, request, body, limiter);
+  if (url.pathname === "/api/password") return changePassword(sql, request, body, env, limiter);
   if (url.pathname === "/api/logout") return logout(sql, request);
   if (url.pathname === "/api/follow") return follow(sql, request, body);
   if (url.pathname === "/api/like") return like(sql, request, body);
