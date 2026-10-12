@@ -13,7 +13,7 @@ npm run dev
 
 ## Cloudflare Pages
 
-构建命令用 `npm run build`，输出目录用 `dist`。仓库里的 `.npmrc` 会在 Cloudflare 的生产环境安装里带上 Vite 和 TypeScript，否则构建会因为找不到 `vite` 或 `tsc` 失败。`public/_redirects` 让刷新子页面时仍回到站点。
+构建命令用 `npm run build`，部署命令用 `npx wrangler deploy`。`.npmrc` 会在生产环境安装里带上 Vite 和 TypeScript。单页路由由 `wrangler.jsonc` 的 `not_found_handling` 处理，不要再加指向 `/index.html` 的 `_redirects`，否则 Cloudflare 会报无限重定向。
 
 ## 演示账号
 
