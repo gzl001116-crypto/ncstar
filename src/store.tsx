@@ -111,6 +111,7 @@ type StoreValue = {
 const empty: Catalog = { creators: [], posts: [], products: [], tiers: [], comments: [], user: null };
 const StoreContext = createContext<StoreValue | null>(null);
 const checkoutKeys = new Map<string, string>();
+const supportKeys = new Map<string, string>();
 
 async function call(path: string, body?: unknown) {
   const response = await fetch(path, {
@@ -371,7 +372,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     changePassword: (input) => mutate("/api/password", input),
     updateProfile: (input) => mutate("/api/profile", input),
     supportCreator: async (input) => {
-      const error = await mutate("/api/support", { ...input, idempotencyKey: crypto.randomUUID() });
+      const intent = `${input.creatorId}:${input.currency}:${input.amount.toFixed(2)}`;
+      const idempotencyKey = supportKeys.get(intent) ?? crypto.randomUUID();
+      supportKeys.set(intent, idempotencyKey);
+      const error = await mutate("/api/support", { ...input, idempotencyKey });
+      if (!error) supportKeys.delete(intent);
       return error;
     },
     updateTier: async (input) => {
