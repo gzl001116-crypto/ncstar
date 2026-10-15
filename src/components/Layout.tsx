@@ -76,6 +76,9 @@ export function Layout() {
           </form>
           <UtcClock />
           <div className="nav-actions">
+            <a href="https://coin.starchose.org" className="cart-link" aria-label="硬币余额与充值">
+              🪙 {user ? (user.coins ?? 0).toFixed(2) : "硬币充值"}
+            </a>
             <Link to="/checkout" className="cart-link" aria-label={t("cart")}>
               {t("cart")}
               {cartCount > 0 && <span className="badge">{cartCount}</span>}
