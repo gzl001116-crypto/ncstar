@@ -115,6 +115,8 @@ export type DeskOrder = {
   title: string;
   buyer: string;
   amount: number;
+  currency: string;
+  coinAmount: number;
   fee: number;
   createdAt: string;
 };
