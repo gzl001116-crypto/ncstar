@@ -16,7 +16,8 @@ const STATEMENTS = [
     handle TEXT NOT NULL UNIQUE,
     bio TEXT NOT NULL,
     is_creator INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    coins REAL NOT NULL DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
@@ -38,6 +39,7 @@ const STATEMENTS = [
     creator_id TEXT NOT NULL,
     name TEXT NOT NULL,
     price REAL NOT NULL,
+    price_currency TEXT NOT NULL DEFAULT 'cny',
     rank INTEGER NOT NULL,
     blurb TEXT NOT NULL,
     perks TEXT NOT NULL
@@ -58,6 +60,7 @@ const STATEMENTS = [
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     price REAL NOT NULL,
+    price_currency TEXT NOT NULL DEFAULT 'cny',
     kind TEXT NOT NULL,
     includes TEXT NOT NULL,
     cover_key TEXT NOT NULL,
@@ -136,6 +139,34 @@ const STATEMENTS = [
     position INTEGER NOT NULL,
     PRIMARY KEY (playlist_id, product_id, track_index)
   )`,
+  `CREATE TABLE IF NOT EXISTS coin_transactions (
+    id TEXT PRIMARY KEY,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    coins REAL NOT NULL,
+    fiat_amount REAL NOT NULL,
+    fiat_currency TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS coin_ledger (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    transaction_id TEXT NOT NULL UNIQUE,
+    amount REAL NOT NULL,
+    balance_after REAL NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS creator_supports (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    creator_id TEXT NOT NULL,
+    amount REAL NOT NULL,
+    currency TEXT NOT NULL,
+    coins REAL NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -152,6 +183,9 @@ const STATEMENTS = [
 function ensureSchema(sql: Sql) {
   for (const statement of STATEMENTS) sql.exec(statement);
   for (const statement of [
+    "ALTER TABLE products ADD COLUMN price_currency TEXT NOT NULL DEFAULT 'cny'",
+    "ALTER TABLE tiers ADD COLUMN price_currency TEXT NOT NULL DEFAULT 'cny'",
+    "ALTER TABLE users ADD COLUMN coins REAL NOT NULL DEFAULT 0",
     "ALTER TABLE products ADD COLUMN play_format TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN play_body TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN file_name TEXT NOT NULL DEFAULT ''",
@@ -588,6 +622,7 @@ function snapshot(sql: Sql, viewer: string) {
     title: String(row.title),
     description: String(row.description),
     price: Number(row.price),
+    priceCurrency: String(row.price_currency ?? "cny").toLowerCase(),
     kind: String(row.kind),
     includes: JSON.parse(String(row.includes)) as string[],
     coverKey: String(row.cover_key),
@@ -607,6 +642,7 @@ function snapshot(sql: Sql, viewer: string) {
     creatorId: String(row.creator_id),
     name: String(row.name),
     price: Number(row.price),
+    priceCurrency: String(row.price_currency ?? "cny").toLowerCase(),
     rank: Number(row.rank),
     blurb: String(row.blurb),
     perks: JSON.parse(String(row.perks)) as string[],
@@ -627,6 +663,7 @@ function snapshot(sql: Sql, viewer: string) {
         bio: String(viewerRow.bio),
         avatarAt: String(viewerRow.avatar_at ?? ""),
         isCreator: Number(viewerRow.is_creator) === 1,
+        coins: Number(viewerRow.coins ?? 0),
         follows: sql.all("SELECT creator_id FROM follows WHERE user_id = ?", viewer).map((row) => String(row.creator_id)),
         likes: sql.all("SELECT post_id FROM likes WHERE user_id = ?", viewer).map((row) => String(row.post_id)),
         memberships: sql.all("SELECT * FROM memberships WHERE user_id = ?", viewer).map((row) => ({
