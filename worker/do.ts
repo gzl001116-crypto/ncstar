@@ -1,4 +1,4 @@
-import { cacheLimiter, type MailEnv } from "./codes.ts";
+import { cacheLimiter } from "./codes.ts";
 import { handleApp } from "./platform.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
 import type { PayEnv } from "./stripe.ts";
