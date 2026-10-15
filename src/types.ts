@@ -41,6 +41,8 @@ export type Product = {
   title: string;
   description: string;
   price: number;
+  priceCurrency: string;
+  coinPrice?: number;
   kind: string;
   includes: string[];
   coverKey: string;
@@ -61,6 +63,8 @@ export type Tier = {
   creatorId: string;
   name: string;
   price: number;
+  priceCurrency: string;
+  coinPrice?: number;
   rank: number;
   blurb: string;
   perks: string[];
@@ -93,6 +97,7 @@ export type User = {
   bio: string;
   avatarAt: string;
   isCreator: boolean;
+  coins: number;
   follows: string[];
   likes: string[];
   memberships: Membership[];
