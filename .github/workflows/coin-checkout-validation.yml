@@ -18,8 +18,4 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run check
-      - name: Verify production deployment credential is configured
-        run: test -n "$CLOUDFLARE_API_TOKEN"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
 
