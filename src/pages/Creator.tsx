@@ -167,7 +167,8 @@ export function CreatorPage() {
                 <p className="kicker">{current ? t("creator.current") : tier.rank === 1 ? t("creator.entry") : t("creator.fuller")}</p>
                 <h2>{phrase(tier.name)}</h2>
                 <div className="ticket-price">
-                  <strong>{fiat(tier.price, tier.priceCurrency)}</strong>\n                  <span>{coinText(tier.coinPrice)}</span>
+                  <strong>{fiat(tier.price, tier.priceCurrency)}</strong>
+                  <span>{coinText(tier.coinPrice)}</span>
                   <span>{t("common.per30")}</span>
                 </div>
                 <p>{phrase(tier.blurb)}</p>
