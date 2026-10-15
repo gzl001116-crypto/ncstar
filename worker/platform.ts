@@ -2014,15 +2014,16 @@ function desk(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) 
 async function deskBody(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetch) {
   const handle = String(mine.handle);
   const orders = sql.all(
-    `SELECT orders.id, orders.kind, orders.target_id, orders.amount, orders.fee, orders.created_at, users.name AS buyer,
-            CASE WHEN orders.kind = 'product' THEN products.title ELSE tiers.name END AS title
+    `SELECT orders.id, orders.kind, orders.target_id, orders.amount, orders.fee, orders.created_at, orders.fiat_amount, orders.fiat_currency, orders.coin_amount, users.name AS buyer,
+            CASE WHEN orders.kind = 'product' THEN products.title WHEN orders.kind = 'membership' THEN tiers.name ELSE '创作者支持' END AS title
      FROM orders
      JOIN users ON users.id = orders.user_id
      LEFT JOIN products ON orders.kind = 'product' AND products.id = orders.target_id
      LEFT JOIN tiers ON orders.kind = 'membership' AND tiers.id = orders.target_id
-     WHERE products.creator_id = ? OR tiers.creator_id = ?
+     WHERE products.creator_id = ? OR tiers.creator_id = ? OR orders.creator_id = ?
      ORDER BY orders.created_at DESC
      LIMIT 40`,
+    handle,
     handle,
     handle,
   );
@@ -2047,7 +2048,9 @@ async function deskBody(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetc
       targetId: String(row.target_id),
       title: String(row.title ?? ""),
       buyer: String(row.buyer),
-      amount: Number(row.amount),
+      amount: Number(row.fiat_amount ?? 0) > 0 ? Number(row.fiat_amount) : Number(row.amount),
+      currency: String(row.fiat_currency ?? "cny"),
+      coinAmount: Number(row.coin_amount ?? 0),
       fee: Number(row.fee),
       createdAt: String(row.created_at),
     })),
