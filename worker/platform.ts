@@ -1634,26 +1634,12 @@ async function stripeWebhook(sql: Sql, request: Request, env: PayEnv, fetchImpl:
   const payload = await request.text();
   const confirmed = await confirmedEvent(env, payload, request.headers.get("stripe-signature") ?? "", fetchImpl);
   if (!confirmed.ok) return fail(confirmed.code);
-  const type = confirmed.event.type ?? "";
   const sessionId = textOf(confirmed.event.data?.object?.id, 120);
   if (!sessionId.startsWith("cs_")) return json({ received: true });
   const payment = sql.get("SELECT * FROM payments WHERE session_id = ?", sessionId);
   if (!payment || String(payment.status) === "paid") return json({ received: true });
-  // Content purchases are coin-only; legacy Stripe sessions must not grant paid content.
+  // Stripe is reserved for coin top-ups. Legacy content checkout sessions never unlock content.
   sql.run("UPDATE payments SET status = 'cancelled' WHERE id = ?", String(payment.id));
-  return json({ received: true });
-  const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
-  if (!loaded.ok) return fail(loaded.code);
-  const viewer = String(payment.user_id);
-  if (type === "checkout.session.async_payment_failed") {
-    if (loaded.session.payment_status !== "paid") sql.run("UPDATE payments SET status = 'failed' WHERE id = ?", String(payment.id));
-    else if (sessionMatches(loaded.session, payment, viewer)) fulfillPayment(sql, viewer, payment);
-    return json({ received: true });
-  }
-  if (type !== "checkout.session.completed" && type !== "checkout.session.async_payment_succeeded") return json({ received: true });
-  if (loaded.session.payment_status !== "paid") return json({ received: true });
-  if (!sessionMatches(loaded.session, payment, viewer)) return fail("err.pay.amount");
-  fulfillPayment(sql, viewer, payment);
   return json({ received: true });
 }
 
