@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useI18n } from "../i18n";
 import type { Creator, Post, Product } from "../types";
 import { useStore } from "../store";
-import { yuan } from "../utils";
+import { coinText, fiat } from "../utils";
 import { Avatar, Cover, coverSrc } from "./Cover";
 
 export function CreatorCard({ creator }: { creator: Creator }) {
@@ -79,9 +79,9 @@ export function ProductCard({ product }: { product: Product }) {
         <div className="card-body">
           <div className="meta">
             <span className="pill">{phrase(product.kind)}</span>
-            <span className="price">{yuan(product.price)}</span>
+            <span className="price">{fiat(product.price, product.priceCurrency)}</span>
           </div>
-          <h3>{product.title}</h3>
+          <h3>{product.title}</h3>\n          <p className="muted">{coinText(product.coinPrice)}</p>
           {product.description && <p className="clamp">{phrase(product.description)}</p>}
           {product.tags.length > 0 && (
             <div className="tag-row">
