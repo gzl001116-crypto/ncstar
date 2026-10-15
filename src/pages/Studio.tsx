@@ -1062,7 +1062,21 @@ export function StudioTiers() {
           </label>
           <label>
             {t("studio.tierPrice")}
-            <input name="price" type="number" min="1" max="9999" step="1" defaultValue={tier.price} required />
+            <input name="price" type="number" min="0.01" max="9999" step="0.01" defaultValue={tier.price} required />
+          </label>
+          <label>
+            价格货币 / Price currency
+            <select name="priceCurrency" defaultValue={tier.priceCurrency || "cny"}>
+              <option value="usd">USD — US Dollar</option>
+              <option value="cny">CNY — Chinese Yuan</option>
+              <option value="gbp">GBP — Pound Sterling</option>
+              <option value="eur">EUR — Euro</option>
+              <option value="jpy">JPY — Japanese Yen</option>
+              <option value="hkd">HKD — Hong Kong Dollar</option>
+              <option value="sgd">SGD — Singapore Dollar</option>
+              <option value="cad">CAD — Canadian Dollar</option>
+              <option value="aud">AUD — Australian Dollar</option>
+            </select>
           </label>
           <label>
             {t("studio.tierBlurb")}
