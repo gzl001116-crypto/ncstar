@@ -733,7 +733,7 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
             <strong>{product.title}</strong>
           )}
           <p className="muted">
-            {phrase(product.kind)} · {yuan(product.price)} · {t("studio.sold", { n: sold })}
+            {phrase(product.kind)} · {fiat(product.price, product.priceCurrency)} · {coinText(product.coinPrice)} · {t("studio.sold", { n: sold })}
             {product.playFormat ? ` · ${t("product.viaPlay")}` : ""}
             {product.allowDownload ? ` · ${t("product.canDownload")}` : product.playFormat ? ` · ${t("product.playOnly")}` : ""}
             {product.allowPreview ? ` · ${t("product.preview")}` : ""}
@@ -758,7 +758,7 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
         </label>
         <label>
           {t("studio.price")}
-          <input name="price" type="number" min="0.01" max="9999" step="0.01" defaultValue={product.price} required />
+          <input name="price" type="number" min="1" max="9999" step="0.01" defaultValue={product.price} required />
         </label>
         <label>
           价格货币 / Price currency
@@ -774,6 +774,7 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
             <option value="aud">AUD — Australian Dollar</option>
           </select>
         </label>
+        <p className="fineprint">法币原价固定保存；商城硬币价按最新汇率换算，不会反向修改法币原价。 / Fiat price stays fixed; the marketplace coin price follows the latest FX rate.</p>
         <label>
           {t("studio.includes")}
           <input name="includes" defaultValue={product.includes.join("，")} placeholder={t("studio.includesPh")} />
@@ -939,7 +940,7 @@ export function StudioWorks() {
         </label>
         <label>
           {t("studio.price")}
-          <input name="price" type="number" min="0.01" max="9999" step="0.01" required />
+          <input name="price" type="number" min="1" max="9999" step="0.01" required />
         </label>
         <label>
           价格货币 / Price currency
@@ -955,6 +956,7 @@ export function StudioWorks() {
             <option value="aud">AUD — Australian Dollar</option>
           </select>
         </label>
+        <p className="fineprint">法币原价固定保存；商城硬币价按最新汇率换算，不会反向修改法币原价。 / Fiat price stays fixed; the marketplace coin price follows the latest FX rate.</p>
         <label>
           {t("studio.includes")}
           <input name="includes" placeholder={t("studio.includesPh")} />
@@ -1078,6 +1080,7 @@ export function StudioTiers() {
               <option value="aud">AUD — Australian Dollar</option>
             </select>
           </label>
+          <p className="fineprint">法币原价固定保存；会员硬币价按最新汇率换算。 / Fiat price stays fixed; the coin price follows the latest FX rate.</p>
           <label>
             {t("studio.tierBlurb")}
             <textarea name="blurb" rows={3} defaultValue={tier.blurb} />
