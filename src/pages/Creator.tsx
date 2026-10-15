@@ -5,7 +5,7 @@ import { Avatar, Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
-import { yuan } from "../utils";
+import { coinText, fiat } from "../utils";
 import { NotFound } from "./NotFound";
 
 export function CreatorPage() {
@@ -167,7 +167,7 @@ export function CreatorPage() {
                 <p className="kicker">{current ? t("creator.current") : tier.rank === 1 ? t("creator.entry") : t("creator.fuller")}</p>
                 <h2>{phrase(tier.name)}</h2>
                 <div className="ticket-price">
-                  <strong>{yuan(tier.price)}</strong>
+                  <strong>{fiat(tier.price, tier.priceCurrency)}</strong>\n                  <span>{coinText(tier.coinPrice)}</span>
                   <span>{t("common.per30")}</span>
                 </div>
                 <p>{phrase(tier.blurb)}</p>
