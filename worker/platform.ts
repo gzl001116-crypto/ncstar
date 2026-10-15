@@ -1187,6 +1187,20 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
   if (!mine) return fail("err.loginRequired", 401);
+  const idempotencyKey = textOf(body.idempotencyKey, 120);
+  if (body.pay === "coins" && idempotencyKey) {
+    const prior = sql.get("SELECT user_id, kind, target_id FROM coin_transactions WHERE idempotency_key = ?", idempotencyKey);
+    if (prior) {
+      if (String(prior.user_id) !== viewer) return fail("err.pay.idempotency");
+      const tierIntent = textOf(body.tierId, 80);
+      const productIntent = textOf(body.productId, 80);
+      const targets = String(prior.target_id).split(",");
+      if (tierIntent && (String(prior.kind) !== "membership" || String(prior.target_id) !== tierIntent)) return fail("err.pay.idempotency");
+      if (productIntent && (String(prior.kind) !== "product" || !targets.includes(productIntent))) return fail("err.pay.idempotency");
+      if (!tierIntent && !productIntent && String(prior.kind) !== "product") return fail("err.pay.idempotency");
+      return withState(sql, viewer, String(prior.kind) === "membership" ? "toast.member" : "toast.library");
+    }
+  }
   const tierId = textOf(body.tierId, 80);
   const directId = textOf(body.productId, 80);
   let payload: PayPayload;
@@ -1230,7 +1244,6 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
     };
   }
   if (body.pay !== "coins") return fail("err.pay.coinsOnly");
-  const idempotencyKey = textOf(body.idempotencyKey, 120);
   const rates = await loadFxRates(fetchImpl);
   if (!rates) return fail("err.pay.fx");
   return coinCheckout(sql, viewer, payload, idempotencyKey, rates);
