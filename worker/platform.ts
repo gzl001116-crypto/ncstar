@@ -594,7 +594,7 @@ function canRead(sql: Sql, viewer: string, creatorId: string, minRank: number, v
   return Number(row.rank) >= minRank;
 }
 
-function snapshot(sql: Sql, viewer: string, rates?: Record<string, number>) {
+function snapshot(sql: Sql, viewer: string, rates: Record<string, number> | undefined = fxRatesCache?.rates) {
   const viewerRow = viewer ? sql.get("SELECT * FROM users WHERE id = ?", viewer) : undefined;
   const viewerHandle = viewerRow ? String(viewerRow.handle) : "";
   const avatarByHandle = new Map(
