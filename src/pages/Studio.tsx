@@ -681,6 +681,7 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
       title,
       description: String(data.get("description") ?? ""),
       price,
+      priceCurrency: String(data.get("priceCurrency") ?? product.priceCurrency ?? "cny"),
       kind: String(data.get("kind") ?? product.kind),
       includes: String(data.get("includes") ?? "")
         .split(/[,，]/)
@@ -757,7 +758,21 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
         </label>
         <label>
           {t("studio.price")}
-          <input name="price" type="number" min="1" max="9999" step="0.01" defaultValue={product.price} required />
+          <input name="price" type="number" min="0.01" max="9999" step="0.01" defaultValue={product.price} required />
+        </label>
+        <label>
+          价格货币 / Price currency
+          <select name="priceCurrency" defaultValue={product.priceCurrency || "cny"}>
+            <option value="usd">USD — US Dollar</option>
+            <option value="cny">CNY — Chinese Yuan</option>
+            <option value="gbp">GBP — Pound Sterling</option>
+            <option value="eur">EUR — Euro</option>
+            <option value="jpy">JPY — Japanese Yen</option>
+            <option value="hkd">HKD — Hong Kong Dollar</option>
+            <option value="sgd">SGD — Singapore Dollar</option>
+            <option value="cad">CAD — Canadian Dollar</option>
+            <option value="aud">AUD — Australian Dollar</option>
+          </select>
         </label>
         <label>
           {t("studio.includes")}
@@ -873,6 +888,7 @@ export function StudioWorks() {
       title,
       description: String(data.get("description") ?? ""),
       price,
+      priceCurrency: String(data.get("priceCurrency") ?? "cny"),
       kind: String(data.get("kind") ?? ""),
       includes: String(data.get("includes") ?? "")
         .split(/[,，]/)
@@ -923,7 +939,21 @@ export function StudioWorks() {
         </label>
         <label>
           {t("studio.price")}
-          <input name="price" type="number" min="1" max="9999" step="0.01" required />
+          <input name="price" type="number" min="0.01" max="9999" step="0.01" required />
+        </label>
+        <label>
+          价格货币 / Price currency
+          <select name="priceCurrency" defaultValue="cny">
+            <option value="usd">USD — US Dollar</option>
+            <option value="cny">CNY — Chinese Yuan</option>
+            <option value="gbp">GBP — Pound Sterling</option>
+            <option value="eur">EUR — Euro</option>
+            <option value="jpy">JPY — Japanese Yen</option>
+            <option value="hkd">HKD — Hong Kong Dollar</option>
+            <option value="sgd">SGD — Singapore Dollar</option>
+            <option value="cad">CAD — Canadian Dollar</option>
+            <option value="aud">AUD — Australian Dollar</option>
+          </select>
         </label>
         <label>
           {t("studio.includes")}
@@ -1011,6 +1041,7 @@ export function StudioTiers() {
       id,
       name: String(data.get("name") ?? ""),
       price: Number(data.get("price") ?? 0),
+      priceCurrency: String(data.get("priceCurrency") ?? "cny"),
       blurb: String(data.get("blurb") ?? ""),
       perks: String(data.get("perks") ?? "")
         .split(/[,，]/)
