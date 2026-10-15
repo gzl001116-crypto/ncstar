@@ -921,20 +921,15 @@ if (balanceResponse.status !== 200 || !balanceResponse.data.ok || typeof balance
 }
 const topupRequest = { action: "checkout", user_id: String(fanUser.data.user.id), coins: 5, ts: Date.now(), nonce: crypto.randomUUID() };
 const topupSignature = await signCoinRequest(JSON.stringify(topupRequest));
-const topupStart = await readerNow.send("/api/coin/checkout", topupRequest, "POST", { "x-coin-signature": topupSignature });
 const topupBalanceBefore = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
-const topupReturn = topupStart.data.sessionId
-  ? await readerNow.send(`/api/coin/return?session_id=${encodeURIComponent(topupStart.data.sessionId)}`, undefined, "GET")
-  : { status: 0, raw: "missing topup session", data: {} };
+const topupStart = await readerNow.send("/api/coin/checkout", topupRequest, "POST", { "x-coin-signature": topupSignature });
 const topupBalanceAfter = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
-if (
-  topupStart.status !== 200 ||
-  !topupStart.data.url ||
-  topupReturn.status !== 302 ||
-  topupBalanceAfter !== topupBalanceBefore + 5 ||
-  !sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", `stripe:${topupStart.data.sessionId}`)
-) {
-  throw new Error(`coin top-up ${topupStart.status} ${topupStart.raw} ${topupReturn.status} ${topupReturn.raw} ${topupBalanceBefore}->${topupBalanceAfter}`);
+if (topupStart.status !== 410 || topupBalanceAfter !== topupBalanceBefore || topupStart.data.url) {
+  throw new Error(`coin top-up must be disabled ${topupStart.status} ${topupStart.raw} ${topupBalanceBefore}->${topupBalanceAfter}`);
+}
+const stripeWebhookDisabled = await readerNow.send("/api/stripe/webhook", { id: "evt_disabled", type: "checkout.session.completed", data: { object: { id: "cs_test_disabled" } } }, "POST");
+if (stripeWebhookDisabled.status !== 410) {
+  throw new Error(`Stripe payment webhook must be disabled ${stripeWebhookDisabled.status} ${stripeWebhookDisabled.raw}`);
 }
 
 const scratch = await creator.send("/api/products", {
