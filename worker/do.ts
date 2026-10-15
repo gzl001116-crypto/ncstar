@@ -8,7 +8,7 @@ type StorageSql = {
 
 export class FanstarStore {
   constructor(
-    private ctx: { storage: { sql: StorageSql } },
+    private ctx: { storage: { sql: StorageSql; transactionSync<T>(callback: () => T): T } },
     private env: MailEnv,
   ) {}
 
