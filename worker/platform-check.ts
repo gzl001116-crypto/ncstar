@@ -4,13 +4,14 @@ import { handleApp } from "./platform.ts";
 
 const sql = openSql(":memory:");
 const limiter = memoryLimiter();
-const env: MailEnv & { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: string } = {
+const env: MailEnv & { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: string; COIN_SSO_SECRET?: string } = {
   RESEND_API_KEY: "test-key",
   CODE_SECRET: "test-secret",
   STRIPE_SECRET_KEY: "sk_test_platform_check",
   STRIPE_WEBHOOK_SECRET: "whsec_platform_check",
+  COIN_SSO_SECRET: "coin-sso-platform-check",
 };
-const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string; currency: string }>();
+const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string; currency: string; metadata: Record<string, string> }>();
 let rateDown = false;
 const stripeEvents = new Map<string, { id: string; type: string; data: { object: { id: string } } }>();
 const transfers: { id: string; amount: number; currency: string; destination: string; key: string }[] = [];
@@ -89,11 +90,16 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
       const currency = params.get("line_items[0][price_data][currency]") ?? "";
       if (currency !== "cny" && currency !== "usd") throw new Error(`currency ${currency}`);
       const pay = params.get("metadata[pay]");
-      if (currency === "cny" && (pay !== "card" || params.get("payment_method_options[wechat_pay][client]") !== "web")) {
-        throw new Error("card session shape");
-      }
-      if (currency === "usd" && (pay !== "crypto" || params.has("payment_method_options[wechat_pay][client]"))) {
-        throw new Error("crypto session shape");
+      const kind = params.get("metadata[kind]");
+      if (kind === "coin_topup") {
+        if (currency !== "usd" || params.has("payment_method_options[wechat_pay][client]")) throw new Error("coin top-up session shape");
+      } else {
+        if (currency === "cny" && (pay !== "card" || params.get("payment_method_options[wechat_pay][client]") !== "web")) {
+          throw new Error("card session shape");
+        }
+        if (currency === "usd" && (pay !== "crypto" || params.has("payment_method_options[wechat_pay][client]"))) {
+          throw new Error("crypto session shape");
+        }
       }
       for (const [key, value] of params) {
         if (key.includes("[price_data][currency]") && value !== currency) throw new Error("mixed currency");
@@ -105,13 +111,18 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
     }
     const currency = params.get("line_items[0][price_data][currency]") ?? "cny";
     const id = `cs_test_${stripeSessions.size + 1}`;
+    const metadata: Record<string, string> = {};
+    for (const [key, value] of params) {
+      if (key.startsWith("metadata[") && key.endsWith("]")) metadata[key.slice(9, -1)] = value;
+    }
     stripeSessions.set(id, {
       amount,
       currency,
       paymentId: params.get("metadata[paymentId]") ?? "",
       userId: params.get("metadata[userId]") ?? "",
+      metadata,
     });
-    return Response.json({ id, url: `https://checkout.stripe.test/${id}`, payment_status: "unpaid", status: "open", amount_total: amount, currency, metadata: {} });
+    return Response.json({ id, url: `https://checkout.stripe.test/${id}`, payment_status: "unpaid", status: "open", amount_total: amount, currency, metadata });
   }
   if (url.includes("/v1/events/")) {
     const eventId = decodeURIComponent(url.split("/").pop() ?? "");
@@ -129,9 +140,21 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
     status: stripePaid ? "complete" : "open",
     amount_total: stripeAmount ?? saved.amount,
     currency: saved.currency,
-    metadata: { paymentId: saved.paymentId, userId: saved.userId },
+    metadata: saved.metadata,
   });
 }
+async function signCoinRequest(raw: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(String(env.COIN_SSO_SECRET)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw));
+  return btoa(String.fromCharCode(...new Uint8Array(mac))).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+}
+
 const codes = new Map<string, string>();
 
 async function ticket(email: string, fresh = false) {
@@ -884,6 +907,34 @@ const support = await readerNow.send("/api/support", { creatorId: "ashi", amount
 const supportBalanceAfter = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
 if (support.status !== 200 || !(supportBalanceAfter < supportBalanceBefore) || !sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", "support-ashi-2-usd")) {
   throw new Error(`creator support ${support.status} ${support.raw}`);
+}
+const sso = await readerNow.send("/api/coin/sso", undefined, "GET");
+if (sso.status !== 302 || !String(sso.raw).includes("coin.starchose.org/sso?token=")) {
+  throw new Error(`coin SSO ${sso.status} ${sso.raw}`);
+}
+const balanceRequest = { action: "balance", user_id: String(fanUser.data.user.id), ts: Date.now(), nonce: crypto.randomUUID() };
+const balanceRaw = JSON.stringify(balanceRequest);
+const balanceSignature = await signCoinRequest(balanceRaw);
+const balanceResponse = await readerNow.send("/api/coin/checkout", balanceRequest, "POST", { "x-coin-signature": balanceSignature });
+if (balanceResponse.status !== 200 || !balanceResponse.data.ok || typeof balanceResponse.data.balance !== "number") {
+  throw new Error(`signed balance API ${balanceResponse.status} ${balanceResponse.raw}`);
+}
+const topupRequest = { action: "checkout", user_id: String(fanUser.data.user.id), coins: 5, ts: Date.now(), nonce: crypto.randomUUID() };
+const topupSignature = await signCoinRequest(JSON.stringify(topupRequest));
+const topupStart = await readerNow.send("/api/coin/checkout", topupRequest, "POST", { "x-coin-signature": topupSignature });
+const topupBalanceBefore = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
+const topupReturn = topupStart.data.sessionId
+  ? await readerNow.send(`/api/coin/return?session_id=${encodeURIComponent(topupStart.data.sessionId)}`, undefined, "GET")
+  : { status: 0, raw: "missing topup session", data: {} };
+const topupBalanceAfter = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
+if (
+  topupStart.status !== 200 ||
+  !topupStart.data.url ||
+  topupReturn.status !== 302 ||
+  topupBalanceAfter !== topupBalanceBefore + 5 ||
+  !sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", `stripe:${topupStart.data.sessionId}`)
+) {
+  throw new Error(`coin top-up ${topupStart.status} ${topupStart.raw} ${topupReturn.status} ${topupReturn.raw} ${topupBalanceBefore}->${topupBalanceAfter}`);
 }
 
 const scratch = await creator.send("/api/products", {
