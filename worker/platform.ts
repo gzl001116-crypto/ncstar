@@ -944,9 +944,9 @@ function cart(sql: Sql, request: Request, body: Record<string, unknown>) {
   return withState(sql, viewer, "toast.cart.add");
 }
 
-function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number, creatorId: string) {
+function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number, creatorId: string, currency = "cny") {
   sql.run(
-    "INSERT INTO orders (id, user_id, kind, target_id, amount, fee, created_at, creator_id, currency, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'cny', '')",
+    "INSERT INTO orders (id, user_id, kind, target_id, amount, fee, created_at, creator_id, currency, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')",
     id(),
     viewer,
     kind,
@@ -955,12 +955,13 @@ function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, am
     feeOf(amount),
     new Date().toISOString(),
     creatorId,
+    currency,
   );
 }
 
-type PayItem = { id: string; price: number; title: string; creatorId: string };
+type PayItem = { id: string; price: number; priceCurrency: string; title: string; creatorId: string };
 type PayPayload =
-  | { kind: "membership"; tierId: string; creatorId: string; price: number; title: string }
+  | { kind: "membership"; tierId: string; creatorId: string; price: number; priceCurrency: string; title: string }
   | { kind: "product"; items: PayItem[] };
 
 function minorUnits(amount: number) {
@@ -975,6 +976,120 @@ function stripeLocale(value: unknown) {
 
 function payAmount(payload: PayPayload) {
   return payload.kind === "membership" ? minorUnits(payload.price) : payload.items.reduce((sum, item) => sum + minorUnits(item.price), 0);
+}
+
+function coinCheckout(sql: Sql, viewer: string, payload: PayPayload, key: string, rates: Record<string, number>) {
+  if (key.length < 8 || key.length > 120) return fail("err.pay.idempotency");
+  const kind = payload.kind;
+  const title = payload.kind === "membership" ? payload.title : undefined;
+  try {
+    const result = sql.transaction(() => {
+      const prior = sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key);
+      if (prior) return { duplicate: true, code: kind === "membership" ? "toast.member" : "toast.library" };
+      const allItems = payload.kind === "product" ? payload.items : [];
+      const items = allItems.filter((item) => !sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, item.id));
+      if (payload.kind === "product" && items.length === 0) return { duplicate: true, code: "toast.library" };
+      const price = payload.kind === "membership" ? payload.price : items.reduce((sum, item) => sum + item.price, 0);
+      const coinParts = payload.kind === "membership"
+        ? [coinValue(payload.price, payload.priceCurrency, rates)]
+        : items.map((item) => coinValue(item.price, item.priceCurrency, rates));
+      const coins = Math.round(coinParts.reduce((sum, value) => sum + value, 0) * 100) / 100;
+      if (!Number.isFinite(coins) || coins <= 0) throw new Error("err.pay.fx");
+      const user = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
+      const balance = Number(user?.coins ?? 0);
+      if (balance + 1e-9 < coins) throw new Error("err.coin.insufficient");
+      sql.run("UPDATE users SET coins = coins - ? WHERE id = ? AND coins >= ?", coins, viewer, coins);
+      const after = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
+      const transactionId = id();
+      const now = new Date().toISOString();
+      const currency = payload.kind === "membership" ? payload.priceCurrency : items[0]?.priceCurrency ?? "usd";
+      const targetId = payload.kind === "membership" ? payload.tierId : items.map((item) => item.id).join(",");
+      sql.run(
+        "INSERT INTO coin_transactions (id, idempotency_key, user_id, kind, target_id, coins, fiat_amount, fiat_currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        transactionId, key, viewer, kind, targetId, coins, price, currency, now,
+      );
+      sql.run(
+        "INSERT INTO coin_ledger (id, user_id, transaction_id, amount, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        id(), viewer, transactionId, -coins, Number(after?.coins ?? 0), now,
+      );
+      if (payload.kind === "membership") {
+        const current = sql.get("SELECT expires_at FROM memberships WHERE user_id = ? AND creator_id = ?", viewer, payload.creatorId);
+        const currentExpiry = current ? Date.parse(String(current.expires_at)) : 0;
+        const base = Number.isFinite(currentExpiry) && currentExpiry > Date.now() ? currentExpiry : Date.now();
+        const expiresAt = new Date(base + 30 * 24 * 60 * 60 * 1000).toISOString();
+        sql.run("DELETE FROM memberships WHERE user_id = ? AND creator_id = ?", viewer, payload.creatorId);
+        sql.run(
+          "INSERT INTO memberships (user_id, creator_id, tier_id, expires_at, price) VALUES (?, ?, ?, ?, ?)",
+          viewer, payload.creatorId, payload.tierId, expiresAt, payload.price,
+        );
+        placeOrder(sql, viewer, "membership", payload.tierId, payload.price, payload.creatorId, payload.priceCurrency);
+      } else {
+        for (const item of items) {
+          sql.run(
+            "INSERT INTO purchases (user_id, product_id, purchased_at, price) VALUES (?, ?, ?, ?)",
+            viewer, item.id, now, item.price,
+          );
+          sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, item.id);
+          placeOrder(sql, viewer, "product", item.id, item.price, item.creatorId, item.priceCurrency);
+        }
+      }
+      return { duplicate: false, code: kind === "membership" ? "toast.member" : "toast.library" };
+    });
+    return withState(sql, viewer, result.code, undefined, title);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.startsWith("err.")) return fail(message);
+    const prior = sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key);
+    if (prior) return withState(sql, viewer, kind === "membership" ? "toast.member" : "toast.library", undefined, title);
+    return fail("err.coin.transaction", 500);
+  }
+}
+
+function creatorSupport(sql: Sql, request: Request, body: Record<string, unknown>, fetchImpl: typeof fetch) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const creatorId = textOf(body.creatorId, 80);
+  const creator = sql.get("SELECT handle FROM creators WHERE handle = ?", creatorId);
+  if (!creator) return fail("err.creator.missing", 404);
+  if (String(creator.handle) === String(sql.get("SELECT handle FROM users WHERE id = ?", viewer)?.handle)) return fail("err.product.self");
+  const amount = Number(body.amount);
+  const currency = currencyOf(body.currency);
+  const key = textOf(body.idempotencyKey, 120);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 9999 || !currency || key.length < 8) return fail("err.pay.amount");
+  return loadFxRates(fetchImpl).then((rates) => {
+    if (!rates) return fail("err.pay.fx");
+    const coins = coinValue(amount, currency, rates);
+    try {
+      sql.transaction(() => {
+        if (sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key)) return;
+        const user = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
+        if (Number(user?.coins ?? 0) + 1e-9 < coins) throw new Error("err.coin.insufficient");
+        sql.run("UPDATE users SET coins = coins - ? WHERE id = ? AND coins >= ?", coins, viewer, coins);
+        const after = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
+        const transactionId = id();
+        const now = new Date().toISOString();
+        sql.run(
+          "INSERT INTO coin_transactions (id, idempotency_key, user_id, kind, target_id, coins, fiat_amount, fiat_currency, created_at) VALUES (?, ?, ?, 'support', ?, ?, ?, ?, ?)",
+          transactionId, key, viewer, creatorId, coins, amount, currency, now,
+        );
+        sql.run(
+          "INSERT INTO coin_ledger (id, user_id, transaction_id, amount, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+          id(), viewer, transactionId, -coins, Number(after?.coins ?? 0), now,
+        );
+        sql.run(
+          "INSERT INTO creator_supports (id, user_id, creator_id, amount, currency, coins, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          id(), viewer, creatorId, amount, currency, coins, now,
+        );
+        placeOrder(sql, viewer, "support", creatorId, amount, creatorId, currency);
+      });
+      return withState(sql, viewer, "toast.support");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("err.")) return fail(message);
+      if (sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key)) return withState(sql, viewer, "toast.support");
+      return fail("err.coin.transaction", 500);
+    }
+  });
 }
 
 function fulfillPayment(sql: Sql, viewer: string, payment: Row) {
@@ -1198,6 +1313,7 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   const description = textOf(body.description, 2000);
   const fileBody = textOf(body.fileBody, 20000);
   const price = Number(body.price);
+  const priceCurrency = currencyOf(body.priceCurrency);
   const kind = textOf(body.kind, 40) || "数字作品";
   const playFormat = textOf(body.playFormat, 20);
   const playSource = typeof body.playBody === "string" ? body.playBody.trim().slice(0, 100_000) : "";
