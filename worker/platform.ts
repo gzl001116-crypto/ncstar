@@ -1345,7 +1345,7 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   const description = textOf(body.description, 2000);
   const fileBody = textOf(body.fileBody, 20000);
   const price = Number(body.price);
-  const priceCurrency = currencyOf(body.priceCurrency);
+  const priceCurrency = currencyOf(body.priceCurrency, "cny");
   const kind = textOf(body.kind, 40) || "数字作品";
   const playFormat = textOf(body.playFormat, 20);
   const playSource = typeof body.playBody === "string" ? body.playBody.trim().slice(0, 100_000) : "";
@@ -1412,7 +1412,7 @@ async function publishUpload(sql: Sql, request: Request) {
   const title = textOf(form.get("title"), 80);
   const description = textOf(form.get("description"), 2000);
   const price = Number(form.get("price"));
-  const priceCurrency = currencyOf(form.get("priceCurrency"));
+  const priceCurrency = currencyOf(form.get("priceCurrency"), "cny");
   const kind = textOf(form.get("kind"), 40) || "数字作品";
   const includes = textOf(form.get("includes"), 400)
     .split(/[,，]/)
