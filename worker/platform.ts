@@ -1704,7 +1704,7 @@ async function coinSso(sql: Sql, request: Request, env: PayEnv) {
   return Response.redirect(`https://coin.starchose.org/sso?token=${encodeURIComponent(token)}`, 302);
 }
 
-async function coinApi(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
+async function coinApi(sql: Sql, request: Request, env: PayEnv, _fetchImpl: typeof fetch) {
   if (!env.COIN_SSO_SECRET) return fail("err.coin.unconfigured", 503);
   const raw = await request.text();
   if (!(await verifyCoinSignature(raw, request.headers.get("x-coin-signature") ?? "", env.COIN_SSO_SECRET))) {
@@ -1729,119 +1729,22 @@ async function coinApi(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeo
   } catch {
     return fail("err.coin.replay", 409);
   }
-  const user = sql.get("SELECT id, email, coins FROM users WHERE id = ?", userId);
+  const user = sql.get("SELECT id, coins FROM users WHERE id = ?", userId);
   if (!user) return fail("err.loginRequired", 401);
   if (body.action === "balance") return json({ ok: true, balance: Number(user.coins ?? 0) });
-  if (body.action !== "checkout") return fail("err.coin.action");
-  const coins = Number(body.coins);
-  if (![5, 10, 20, 50, 100, 200].includes(coins)) return fail("err.coin.amount");
-  if (!stripeKey(env)) return fail("err.pay.unconfigured", 503);
-  const topupId = id();
-  const now = new Date().toISOString();
-  sql.run(
-    "INSERT INTO coin_topups (id, user_id, coins, amount, currency, session_id, status, created_at) VALUES (?, ?, ?, ?, 'usd', '', 'pending', ?)",
-    topupId, userId, coins, coins * 100, now,
-  );
-  const fields: Record<string, string> = {
-    mode: "payment",
-    success_url: "https://fanstar.dev/api/coin/return?session_id={CHECKOUT_SESSION_ID}",
-    cancel_url: "https://coin.starchose.org/?pay=cancel",
-    customer_email: String(user.email),
-    locale: "auto",
-    client_reference_id: topupId,
-    "metadata[kind]": "coin_topup",
-    "metadata[topupId]": topupId,
-    "metadata[userId]": userId,
-    "metadata[coins]": String(coins),
-    "line_items[0][quantity]": "1",
-    "line_items[0][price_data][currency]": "usd",
-    "line_items[0][price_data][unit_amount]": String(coins * 100),
-    "line_items[0][price_data][product_data][name]": `Fanstar Coins · ${coins}`,
-  };
-  const created = await stripeRequest(env, "/v1/checkout/sessions", "POST", fields, fetchImpl);
-  if (!created.ok || !created.session.url) {
-    sql.run("DELETE FROM coin_topups WHERE id = ?", topupId);
-    return fail(created.ok ? "err.pay.stripe" : created.code);
-  }
-  sql.run("UPDATE coin_topups SET session_id = ? WHERE id = ?", created.session.id, topupId);
-  return json({ ok: true, url: created.session.url, sessionId: created.session.id });
+  return fail("err.coin.topupDisabled", 410);
 }
 
-function creditCoinTopup(sql: Sql, session: StripeSession) {
-  const topupId = String(session.metadata?.topupId ?? "");
-  const topup = topupId ? sql.get("SELECT * FROM coin_topups WHERE id = ?", topupId) : undefined;
-  if (!topup || String(topup.session_id) !== session.id || String(topup.user_id) !== String(session.metadata?.userId ?? "")) return false;
-  const coins = Number(topup.coins);
-  if (
-    session.metadata?.kind !== "coin_topup" ||
-    Number(session.metadata?.coins) !== coins ||
-    session.payment_status !== "paid" ||
-    session.amount_total !== Number(topup.amount) ||
-    String(session.currency ?? "").toLowerCase() !== "usd"
-  ) return false;
-  try {
-    sql.transaction(() => {
-      const fresh = sql.get("SELECT * FROM coin_topups WHERE id = ?", topupId);
-      if (!fresh || String(fresh.status) === "paid") return;
-      const key = `stripe:${session.id}`;
-      if (sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key)) {
-        sql.run("UPDATE coin_topups SET status = 'paid' WHERE id = ?", topupId);
-        return;
-      }
-      const user = sql.get("SELECT coins FROM users WHERE id = ?", String(fresh.user_id));
-      if (!user) throw new Error("err.loginRequired");
-      sql.run("UPDATE users SET coins = coins + ? WHERE id = ?", Number(fresh.coins), String(fresh.user_id));
-      const after = sql.get("SELECT coins FROM users WHERE id = ?", String(fresh.user_id));
-      const transactionId = id();
-      const now = new Date().toISOString();
-      sql.run(
-        "INSERT INTO coin_transactions (id, idempotency_key, user_id, kind, target_id, coins, fiat_amount, fiat_currency, created_at) VALUES (?, ?, ?, 'topup', ?, ?, ?, 'usd', ?)",
-        transactionId, key, String(fresh.user_id), topupId, Number(fresh.coins), Number(fresh.amount) / 100, now,
-      );
-      sql.run(
-        "INSERT INTO coin_ledger (id, user_id, transaction_id, amount, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        id(), String(fresh.user_id), transactionId, Number(fresh.coins), Number(after?.coins ?? 0), now,
-      );
-      sql.run("UPDATE coin_topups SET status = 'paid' WHERE id = ?", topupId);
-    });
-    return true;
-  } catch {
-    return false;
-  }
+function creditCoinTopup(_sql: Sql, _session: StripeSession) {
+  return false;
 }
 
-async function coinReturn(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
-  const sessionId = textOf(new URL(request.url).searchParams.get("session_id"), 120);
-  const topup = sessionId ? sql.get("SELECT * FROM coin_topups WHERE session_id = ?", sessionId) : undefined;
-  if (!topup) return new Response("Top-up not found", { status: 404 });
-  const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
-  if (loaded.ok) creditCoinTopup(sql, loaded.session);
-  const success = sql.get("SELECT status FROM coin_topups WHERE id = ?", String(topup.id));
-  return Response.redirect(`https://coin.starchose.org/?pay=${String(success?.status) === "paid" ? "success" : "cancel"}`, 302);
+async function coinReturn(_sql: Sql, _request: Request, _env: PayEnv, _fetchImpl: typeof fetch) {
+  return fail("err.coin.topupDisabled", 410);
 }
 
-async function stripeWebhook(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
-  const payload = await request.text();
-  const confirmed = await confirmedEvent(env, payload, request.headers.get("stripe-signature") ?? "", fetchImpl);
-  if (!confirmed.ok) return fail(confirmed.code);
-  const sessionId = textOf(confirmed.event.data?.object?.id, 120);
-  if (!sessionId.startsWith("cs_")) return json({ received: true });
-  const topup = sql.get("SELECT * FROM coin_topups WHERE session_id = ?", sessionId);
-  if (topup) {
-    if (type === "checkout.session.async_payment_failed") {
-      if (String(topup.status) !== "paid") sql.run("UPDATE coin_topups SET status = 'failed' WHERE id = ?", String(topup.id));
-      return json({ received: true });
-    }
-    if (type !== "checkout.session.completed" && type !== "checkout.session.async_payment_succeeded") return json({ received: true });
-    const loadedTopup = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
-    if (loadedTopup.ok && creditCoinTopup(sql, loadedTopup.session)) return json({ received: true });
-    return json({ received: true });
-  }
-  const payment = sql.get("SELECT * FROM payments WHERE session_id = ?", sessionId);
-  if (!payment || String(payment.status) === "paid") return json({ received: true });
-  // Stripe is reserved for coin top-ups. Legacy content checkout sessions never unlock content.
-  sql.run("UPDATE payments SET status = 'cancelled' WHERE id = ?", String(payment.id));
-  return json({ received: true });
+async function stripeWebhook(_sql: Sql, _request: Request, _env: PayEnv, _fetchImpl: typeof fetch) {
+  return fail("err.pay.coinsOnly", 410);
 }
 
 function readCover(sql: Sql, request: Request) {
