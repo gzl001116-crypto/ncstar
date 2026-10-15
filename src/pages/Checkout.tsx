@@ -140,8 +140,8 @@ export function Checkout() {
         )}
       </div>
       <aside className="pay-card">
-        <h2>{t("checkout.due", { amount: yuan(total) })}</h2>
-        <p className="muted">{t("checkout.share", { amount: yuan(creatorShare(total)) })}</p>
+        <h2>应付硬币 / Coins due: {totalCoins.toFixed(2)} 🪙</h2>
+        <p className="muted">余额 / Balance: {(user.coins ?? 0).toFixed(2)} 🪙</p>
         {canceled && !error && <p className="banner-note">{t("checkout.canceled")}</p>}
         {sessionId && busy && <p className="muted">{t("checkout.returning")}</p>}
         {error && <p className="error">{error}</p>}
