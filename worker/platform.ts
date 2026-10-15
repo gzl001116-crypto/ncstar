@@ -242,6 +242,9 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE users ADD COLUMN payout_ready INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN payout_method TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN creator_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN fiat_amount REAL NOT NULL DEFAULT 0",
+    "ALTER TABLE orders ADD COLUMN fiat_currency TEXT NOT NULL DEFAULT 'cny'",
+    "ALTER TABLE orders ADD COLUMN coin_amount REAL NOT NULL DEFAULT 0",
     "ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'cny'",
     "ALTER TABLE orders ADD COLUMN transfer_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE payments ADD COLUMN charged_currency TEXT NOT NULL DEFAULT 'cny'",
@@ -944,18 +947,26 @@ function cart(sql: Sql, request: Request, body: Record<string, unknown>) {
   return withState(sql, viewer, "toast.cart.add");
 }
 
-function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number, creatorId: string, currency = "cny") {
+function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number, creatorId: string, currency = "cny", rates?: Record<string, number>, coinAmount = 0) {
+  const fiatCurrency = currency.toLowerCase();
+  const cnyRate = rates?.CNY;
+  const fiatRate = rates?.[fiatCurrency.toUpperCase()];
+  const payoutAmount = rates && Number.isFinite(cnyRate) && Number.isFinite(fiatRate) && fiatRate > 0
+    ? Math.round((amount / fiatRate) * cnyRate * 100) / 100
+    : amount;
   sql.run(
-    "INSERT INTO orders (id, user_id, kind, target_id, amount, fee, created_at, creator_id, currency, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '')",
+    "INSERT INTO orders (id, user_id, kind, target_id, amount, fee, created_at, creator_id, currency, transfer_id, fiat_amount, fiat_currency, coin_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'cny', '', ?, ?, ?)",
     id(),
     viewer,
     kind,
     targetId,
-    amount,
-    feeOf(amount),
+    payoutAmount,
+    feeOf(payoutAmount),
     new Date().toISOString(),
     creatorId,
-    currency,
+    amount,
+    fiatCurrency,
+    coinAmount,
   );
 }
 
@@ -1022,7 +1033,7 @@ function coinCheckout(sql: Sql, viewer: string, payload: PayPayload, key: string
           "INSERT INTO memberships (user_id, creator_id, tier_id, expires_at, price) VALUES (?, ?, ?, ?, ?)",
           viewer, payload.creatorId, payload.tierId, expiresAt, payload.price,
         );
-        placeOrder(sql, viewer, "membership", payload.tierId, payload.price, payload.creatorId, payload.priceCurrency);
+        placeOrder(sql, viewer, "membership", payload.tierId, payload.price, payload.creatorId, payload.priceCurrency, rates, coins);
       } else {
         for (const item of items) {
           sql.run(
@@ -1030,7 +1041,7 @@ function coinCheckout(sql: Sql, viewer: string, payload: PayPayload, key: string
             viewer, item.id, now, item.price,
           );
           sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, item.id);
-          placeOrder(sql, viewer, "product", item.id, item.price, item.creatorId, item.priceCurrency);
+          placeOrder(sql, viewer, "product", item.id, item.price, item.creatorId, item.priceCurrency, rates, coinParts[items.indexOf(item)] ?? 0);
         }
       }
       return { duplicate: false, code: kind === "membership" ? "toast.member" : "toast.library" };
@@ -1080,7 +1091,7 @@ function creatorSupport(sql: Sql, request: Request, body: Record<string, unknown
           "INSERT INTO creator_supports (id, user_id, creator_id, amount, currency, coins, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
           id(), viewer, creatorId, amount, currency, coins, now,
         );
-        placeOrder(sql, viewer, "support", creatorId, amount, creatorId, currency);
+        placeOrder(sql, viewer, "support", creatorId, amount, creatorId, currency, rates, coins);
       });
       return withState(sql, viewer, "toast.support");
     } catch (error) {
