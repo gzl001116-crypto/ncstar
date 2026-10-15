@@ -1007,10 +1007,16 @@ function coinCheckout(sql: Sql, viewer: string, payload: PayPayload, key: string
   if (key.length < 8 || key.length > 120) return fail("err.pay.idempotency");
   const kind = payload.kind;
   const title = payload.kind === "membership" ? payload.title : undefined;
+  const expectedTarget = payload.kind === "membership" ? payload.tierId : payload.items.map((item) => item.id).join(",");
   try {
     const result = sql.transaction(() => {
-      const prior = sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key);
-      if (prior) return { duplicate: true, code: kind === "membership" ? "toast.member" : "toast.library" };
+      const prior = sql.get("SELECT id, user_id, kind, target_id FROM coin_transactions WHERE idempotency_key = ?", key);
+      if (prior) {
+        if (String(prior.user_id) !== viewer || String(prior.kind) !== kind || String(prior.target_id) !== expectedTarget) {
+          throw new Error("err.pay.idempotency");
+        }
+        return { duplicate: true, code: kind === "membership" ? "toast.member" : "toast.library" };
+      }
       const allItems = payload.kind === "product" ? payload.items : [];
       const items = allItems.filter((item) => !sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, item.id));
       if (payload.kind === "product" && items.length === 0) return { duplicate: true, code: "toast.library" };
@@ -1087,7 +1093,11 @@ function creatorSupport(sql: Sql, request: Request, body: Record<string, unknown
     if (coins <= 0) return fail("err.pay.small");
     try {
       sql.transaction(() => {
-        if (sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key)) return;
+        const prior = sql.get("SELECT id, user_id, kind, target_id FROM coin_transactions WHERE idempotency_key = ?", key);
+        if (prior) {
+          if (String(prior.user_id) !== viewer || String(prior.kind) !== "support" || String(prior.target_id) !== creatorId) throw new Error("err.pay.idempotency");
+          return;
+        }
         const user = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
         if (Number(user?.coins ?? 0) + 1e-9 < coins) throw new Error("err.coin.insufficient");
         sql.run("UPDATE users SET coins = coins - ? WHERE id = ? AND coins >= ?", coins, viewer, coins);
