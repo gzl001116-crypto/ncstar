@@ -1,6 +1,7 @@
 import { cacheLimiter, type MailEnv } from "./codes.ts";
 import { handleApp } from "./platform.ts";
 import type { Row, Sql, SqlValue } from "./sql.ts";
+import type { PayEnv } from "./stripe.ts";
 
 type StorageSql = {
   exec(query: string, ...bindings: SqlValue[]): { toArray(): Row[] };
@@ -9,7 +10,7 @@ type StorageSql = {
 export class FanstarStore {
   constructor(
     private ctx: { storage: { sql: StorageSql; transactionSync<T>(callback: () => T): T } },
-    private env: MailEnv,
+    private env: PayEnv,
   ) {}
 
   async fetch(request: Request) {
