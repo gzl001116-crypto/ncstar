@@ -1070,6 +1070,7 @@ function creatorSupport(sql: Sql, request: Request, body: Record<string, unknown
   return loadFxRates(fetchImpl).then((rates) => {
     if (!rates) return fail("err.pay.fx");
     const coins = coinValue(amount, currency, rates);
+    if (coins <= 0) return fail("err.pay.small");
     try {
       sql.transaction(() => {
         if (sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key)) return;
@@ -1638,6 +1639,9 @@ async function stripeWebhook(sql: Sql, request: Request, env: PayEnv, fetchImpl:
   if (!sessionId.startsWith("cs_")) return json({ received: true });
   const payment = sql.get("SELECT * FROM payments WHERE session_id = ?", sessionId);
   if (!payment || String(payment.status) === "paid") return json({ received: true });
+  // Content purchases are coin-only; legacy Stripe sessions must not grant paid content.
+  sql.run("UPDATE payments SET status = 'cancelled' WHERE id = ?", String(payment.id));
+  return json({ received: true });
   const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
   if (!loaded.ok) return fail(loaded.code);
   const viewer = String(payment.user_id);
@@ -2430,7 +2434,7 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/cart") return cart(sql, request, body);
   if (url.pathname === "/api/support") return creatorSupport(sql, request, body, stripeFetch);
   if (url.pathname === "/api/checkout") return checkout(sql, request, body, env, stripeFetch);
-  if (url.pathname === "/api/checkout/complete") return completeCheckout(sql, request, body, env, stripeFetch);
+  if (url.pathname === "/api/checkout/complete") return fail("err.pay.coinsOnly");
   if (url.pathname === "/api/product/delete") return deleteProduct(sql, request, body);
   if (url.pathname === "/api/posts") return publishPost(sql, request, body);
   if (url.pathname === "/api/products") return publishProduct(sql, request, body);
