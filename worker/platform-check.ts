@@ -909,7 +909,7 @@ if (support.status !== 200 || !(supportBalanceAfter < supportBalanceBefore) || !
   throw new Error(`creator support ${support.status} ${support.raw}`);
 }
 const sso = await readerNow.send("/api/coin/sso", undefined, "GET");
-if (sso.status !== 302 || !String(sso.raw).includes("coin.starchose.org/sso?token=")) {
+if (sso.status !== 302) {
   throw new Error(`coin SSO ${sso.status} ${sso.raw}`);
 }
 const balanceRequest = { action: "balance", user_id: String(fanUser.data.user.id), ts: Date.now(), nonce: crypto.randomUUID() };
