@@ -1803,6 +1803,17 @@ async function stripeWebhook(sql: Sql, request: Request, env: PayEnv, fetchImpl:
   if (!confirmed.ok) return fail(confirmed.code);
   const sessionId = textOf(confirmed.event.data?.object?.id, 120);
   if (!sessionId.startsWith("cs_")) return json({ received: true });
+  const topup = sql.get("SELECT * FROM coin_topups WHERE session_id = ?", sessionId);
+  if (topup) {
+    if (type === "checkout.session.async_payment_failed") {
+      if (String(topup.status) !== "paid") sql.run("UPDATE coin_topups SET status = 'failed' WHERE id = ?", String(topup.id));
+      return json({ received: true });
+    }
+    if (type !== "checkout.session.completed" && type !== "checkout.session.async_payment_succeeded") return json({ received: true });
+    const loadedTopup = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
+    if (loadedTopup.ok && creditCoinTopup(sql, loadedTopup.session)) return json({ received: true });
+    return json({ received: true });
+  }
   const payment = sql.get("SELECT * FROM payments WHERE session_id = ?", sessionId);
   if (!payment || String(payment.status) === "paid") return json({ received: true });
   // Stripe is reserved for coin top-ups. Legacy content checkout sessions never unlock content.
@@ -2553,6 +2564,8 @@ function playWrite(sql: Sql, request: Request, body: Record<string, unknown>) {
 export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter: Limiter, stripeFetch: typeof fetch = fetch): Promise<Response> {
   ensureSchema(sql);
   const url = new URL(request.url);
+  if (request.method === "GET" && url.pathname === "/api/coin/sso") return coinSso(sql, request, env);
+  if (request.method === "GET" && url.pathname === "/api/coin/return") return coinReturn(sql, request, env, stripeFetch);
   if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request), await loadFxRates(stripeFetch)));
   if (request.method === "GET" && url.pathname === "/api/download") return download(sql, request);
   if (request.method === "GET" && url.pathname === "/api/media") return media(sql, request);
@@ -2568,6 +2581,7 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/product" && multipart) return updateProduct(sql, request);
   if (url.pathname === "/api/avatar" && multipart) return uploadAvatar(sql, request);
   if (url.pathname === "/api/stripe/webhook") return stripeWebhook(sql, request, env, stripeFetch);
+  if (url.pathname === "/api/coin/checkout") return coinApi(sql, request, env, stripeFetch);
   const body = await readJson(request);
   if (url.pathname === "/api/payout/run") {
     if (!env.CODE_SECRET || request.headers.get("x-fanstar-task") !== env.CODE_SECRET) return fail("err.route", 404);
