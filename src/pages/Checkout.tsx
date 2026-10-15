@@ -117,7 +117,8 @@ export function Checkout() {
               <p>{phrase(tier.blurb)}</p>
               <p className="muted">{existing ? t("checkout.renewNote") : t("checkout.freshNote")}</p>
             </div>
-            <span className="price">{fiat(tier.price, tier.priceCurrency)}</span>\n            <span className="muted">{coinText(tier.coinPrice)}</span>
+            <span className="price">{fiat(tier.price, tier.priceCurrency)}</span>
+            <span className="muted">{coinText(tier.coinPrice)}</span>
           </article>
         ) : lines.length === 0 ? (
           <div className="empty">
@@ -134,7 +135,8 @@ export function Checkout() {
                   {t("common.remove")}
                 </button>
               </div>
-              <span className="price">{fiat(product.price, product.priceCurrency)}</span>\n              <span className="muted">{coinText(product.coinPrice)}</span>
+              <span className="price">{fiat(product.price, product.priceCurrency)}</span>
+              <span className="muted">{coinText(product.coinPrice)}</span>
             </article>
           ))
         )}
