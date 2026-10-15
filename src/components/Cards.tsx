@@ -81,7 +81,8 @@ export function ProductCard({ product }: { product: Product }) {
             <span className="pill">{phrase(product.kind)}</span>
             <span className="price">{fiat(product.price, product.priceCurrency)}</span>
           </div>
-          <h3>{product.title}</h3>\n          <p className="muted">{coinText(product.coinPrice)}</p>
+          <h3>{product.title}</h3>
+          <p className="muted">{coinText(product.coinPrice)}</p>
           {product.description && <p className="clamp">{phrase(product.description)}</p>}
           {product.tags.length > 0 && (
             <div className="tag-row">
