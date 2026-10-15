@@ -152,7 +152,7 @@ async function signCoinRequest(raw: string) {
     ["sign"],
   );
   const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw));
-  return btoa(String.fromCharCode(...new Uint8Array(mac))).replace(/=/g, "").replace(/\\+/g, "-").replace(/\\//g, "_");
+  return btoa(String.fromCharCode(...new Uint8Array(mac))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 }
 
 const codes = new Map<string, string>();
