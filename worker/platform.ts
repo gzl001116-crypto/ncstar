@@ -200,6 +200,20 @@ const STATEMENTS = [
     coins REAL NOT NULL,
     created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS coin_topups (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    coins REAL NOT NULL,
+    amount INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'usd',
+    session_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS coin_api_nonces (
+    nonce TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
