@@ -828,7 +828,7 @@ if (
   !(balanceAfter < balanceBefore) ||
   !sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", `card-pay-${cardId}`)
 ) throw new Error(`coin purchase ${startedPay.status} ${startedPay.raw}`);
-const repeatPay = await readerNow.send("/api/checkout", { pay: "coins", idempotencyKey: `card-pay-${cardId}` });
+const repeatPay = await readerNow.send("/api/checkout", { productId: cardId, pay: "coins", idempotencyKey: `card-pay-${cardId}` });
 const afterRepeat = await readerNow.send("/api/state", undefined, "GET");
 if (repeatPay.status !== 200 || Number(afterRepeat.data.user?.coins ?? 0) !== balanceAfter) {
   throw new Error(`duplicate coin charge ${repeatPay.status} ${repeatPay.raw}`);
