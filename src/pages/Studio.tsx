@@ -213,7 +213,7 @@ export function StudioHome() {
               <div>
                 <strong>{product.title}</strong>
                 <p className="muted">
-                  {phrase(product.kind)} · {yuan(product.price)}
+                  {phrase(product.kind)} · {fiat(product.price, product.priceCurrency)} · {coinText(product.coinPrice)}
                 </p>
               </div>
             </Link>
@@ -1087,7 +1087,7 @@ export function StudioTiers() {
             <input name="perks" defaultValue={tier.perks.join("，")} placeholder={t("studio.tierPerksPh")} />
           </label>
           <p className="muted">
-            {phrase(tier.name)} · {yuan(tier.price)}
+            {phrase(tier.name)} · {fiat(tier.price, tier.priceCurrency)} · {coinText(tier.coinPrice)}
             {t("common.per30")}
           </p>
           {error && <p className="error">{error}</p>}
@@ -1256,7 +1256,7 @@ export function StudioOrders() {
                 <strong>{phrase(order.title)}</strong>
                 <p className="muted">{t("studio.buyer", { name: order.buyer })}</p>
               </div>
-              <span>{yuan(order.amount)}</span>
+              <span>{fiat(order.amount, order.currency)} · {coinText(order.coinAmount)}</span>
               <span className="muted">{formatDate(order.createdAt)}</span>
             </article>
           ))}
