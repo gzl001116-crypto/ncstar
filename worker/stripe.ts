@@ -4,6 +4,7 @@ export type PayEnv = MailEnv & {
   STRIPE_SECRET_KEY?: string;
   STRIPE_PUBLISHABLE_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
+  COIN_SSO_SECRET?: string;
   stripe?: string;
 };
 

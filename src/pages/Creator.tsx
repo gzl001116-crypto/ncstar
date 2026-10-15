@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ProductCard } from "../components/Cards";
 import { Avatar, Cover } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
-import { yuan } from "../utils";
+import { coinText, fiat } from "../utils";
 import { NotFound } from "./NotFound";
 
 export function CreatorPage() {
@@ -12,9 +13,13 @@ export function CreatorPage() {
   const [params, setParams] = useSearchParams();
   const tab = params.get("tab") ?? "posts";
   const { t, phrase, rel, rank, locale } = useI18n();
-  const { ready, creators, posts, products, tiers, user, followed, toggleFollow, followerCount, supporterCount, canRead, activeMembership } =
+  const { ready, creators, posts, products, tiers, user, followed, toggleFollow, followerCount, supporterCount, canRead, activeMembership, supportCreator } =
     useStore();
   const navigate = useNavigate();
+  const [supportAmount, setSupportAmount] = useState("5");
+  const [supportCurrency, setSupportCurrency] = useState("usd");
+  const [supportBusy, setSupportBusy] = useState(false);
+  const [supportError, setSupportError] = useState("");
   const creator = creators.find((item) => item.handle === handle);
   useTitle(creator ? `${creator.name} · ${t("brand")}` : t("creator.missingTitle"));
   if (!ready) return <div className="page"><p className="muted">{t("common.loading")}</p></div>;
@@ -77,6 +82,37 @@ export function CreatorPage() {
               {followed(creator.id) ? t("creator.following") : t("creator.follow")}
             </button>
           )}
+          {!own && (
+            <div className="stack" style={{ marginTop: "1rem" }}>
+              <strong>支持创作者 / Support creator</strong>
+              <div className="row">
+                <input aria-label="Support amount" type="number" min="0.01" max="9999" step="0.01" value={supportAmount} onChange={(event) => setSupportAmount(event.target.value)} />
+                <select aria-label="Support currency" value={supportCurrency} onChange={(event) => setSupportCurrency(event.target.value)}>
+                  <option value="usd">USD</option>
+                  <option value="cny">CNY</option>
+                  <option value="gbp">GBP</option>
+                  <option value="eur">EUR</option>
+                  <option value="jpy">JPY</option>
+                  <option value="hkd">HKD</option>
+                  <option value="sgd">SGD</option>
+                  <option value="cad">CAD</option>
+                  <option value="aud">AUD</option>
+                </select>
+              </div>
+              <button type="button" className="btn btn-line" disabled={supportBusy || Number(supportAmount) <= 0} onClick={async () => {
+                if (!user) { navigate(`/login?next=/c/${creator.handle}`); return; }
+                setSupportBusy(true);
+                setSupportError("");
+                const result = await supportCreator({ creatorId: creator.handle, amount: Number(supportAmount), currency: supportCurrency });
+                setSupportBusy(false);
+                if (result) setSupportError(result);
+              }}>
+                {supportBusy ? "处理中…" : "使用硬币支持 / Support with coins"}
+              </button>
+              {supportError && <p className="error">{supportError}</p>}
+              {user && <p className="muted">当前余额 / Balance: {(user.coins ?? 0).toFixed(2)} 🪙</p>}
+            </div>
+          )}
         </div>
       </header>
 
@@ -131,7 +167,8 @@ export function CreatorPage() {
                 <p className="kicker">{current ? t("creator.current") : tier.rank === 1 ? t("creator.entry") : t("creator.fuller")}</p>
                 <h2>{phrase(tier.name)}</h2>
                 <div className="ticket-price">
-                  <strong>{yuan(tier.price)}</strong>
+                  <strong>{fiat(tier.price, tier.priceCurrency)}</strong>
+                  <span>{coinText(tier.coinPrice)}</span>
                   <span>{t("common.per30")}</span>
                 </div>
                 <p>{phrase(tier.blurb)}</p>

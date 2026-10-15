@@ -13,6 +13,18 @@ export function yuan(amount: number) {
   return `¥${amount.toFixed(digits)}`;
 }
 
+export function fiat(amount: number, currency = "cny", locale?: string) {
+  try {
+    return new Intl.NumberFormat(locale, { style: "currency", currency: currency.toUpperCase(), maximumFractionDigits: 2 }).format(amount);
+  } catch {
+    return `${currency.toUpperCase()} ${amount.toFixed(2)}`;
+  }
+}
+
+export function coinText(amount?: number) {
+  return typeof amount === "number" && Number.isFinite(amount) ? `🪙 ${amount.toFixed(2)}` : "🪙 —";
+}
+
 export function creatorShare(amount: number) {
   return Math.round(amount * (1 - PLATFORM_FEE) * 100) / 100;
 }

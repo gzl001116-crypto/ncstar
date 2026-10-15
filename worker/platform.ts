@@ -5,6 +5,39 @@ import type { Row, Sql, SqlValue } from "./sql.ts";
 import { CRYPTO_MAX_MINOR, CRYPTO_MIN_MINOR, quoteCnyPerUsd, sessionFields, signatureMatches, splitUsdMinors, stripeForm, stripeGet, stripeKey, stripeRequest, stripeSend, usdMinorUnits, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
 
 const COOKIE = "fanstar_session";
+const SUPPORTED_FIAT = new Set(["usd", "cny", "gbp", "eur", "jpy", "hkd", "sgd", "cad", "aud"]);
+let fxRatesCache: { at: number; rates: Record<string, number> } | undefined;
+
+async function loadFxRates(fetchImpl: typeof fetch): Promise<Record<string, number> | undefined> {
+  if (fxRatesCache && Date.now() - fxRatesCache.at < 5 * 60 * 1000) return fxRatesCache.rates;
+  try {
+    const response = await fetchImpl("https://open.er-api.com/v6/latest/USD", { headers: { accept: "application/json" } });
+    if (!response.ok) return undefined;
+    const data = (await response.json()) as { result?: string; rates?: Record<string, number> };
+    if (data.result !== "success" || !data.rates || !SUPPORTED_FIAT.has("usd")) return undefined;
+    const rates: Record<string, number> = { USD: 1 };
+    for (const currency of SUPPORTED_FIAT) {
+      const rate = currency === "usd" ? 1 : Number(data.rates[currency.toUpperCase()]);
+      if (!Number.isFinite(rate) || rate <= 0) return undefined;
+      rates[currency.toUpperCase()] = rate;
+    }
+    fxRatesCache = { at: Date.now(), rates };
+    return rates;
+  } catch {
+    return undefined;
+  }
+}
+
+function currencyOf(value: unknown, fallback = "cny") {
+  const currency = String(value ?? fallback).trim().toLowerCase();
+  return SUPPORTED_FIAT.has(currency) ? currency : "";
+}
+
+function coinValue(amount: number, currency: string, rates: Record<string, number>) {
+  const rate = rates[currency.toUpperCase()];
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(rate) || rate <= 0) return 0;
+  return Math.round((amount / rate) * 100) / 100;
+}
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -16,7 +49,8 @@ const STATEMENTS = [
     handle TEXT NOT NULL UNIQUE,
     bio TEXT NOT NULL,
     is_creator INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    coins REAL NOT NULL DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
@@ -38,6 +72,7 @@ const STATEMENTS = [
     creator_id TEXT NOT NULL,
     name TEXT NOT NULL,
     price REAL NOT NULL,
+    price_currency TEXT NOT NULL DEFAULT 'cny',
     rank INTEGER NOT NULL,
     blurb TEXT NOT NULL,
     perks TEXT NOT NULL
@@ -58,6 +93,7 @@ const STATEMENTS = [
     title TEXT NOT NULL,
     description TEXT NOT NULL,
     price REAL NOT NULL,
+    price_currency TEXT NOT NULL DEFAULT 'cny',
     kind TEXT NOT NULL,
     includes TEXT NOT NULL,
     cover_key TEXT NOT NULL,
@@ -136,6 +172,48 @@ const STATEMENTS = [
     position INTEGER NOT NULL,
     PRIMARY KEY (playlist_id, product_id, track_index)
   )`,
+  `CREATE TABLE IF NOT EXISTS coin_transactions (
+    id TEXT PRIMARY KEY,
+    idempotency_key TEXT NOT NULL UNIQUE,
+    user_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    target_id TEXT NOT NULL,
+    coins REAL NOT NULL,
+    fiat_amount REAL NOT NULL,
+    fiat_currency TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS coin_ledger (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    transaction_id TEXT NOT NULL UNIQUE,
+    amount REAL NOT NULL,
+    balance_after REAL NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS creator_supports (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    creator_id TEXT NOT NULL,
+    amount REAL NOT NULL,
+    currency TEXT NOT NULL,
+    coins REAL NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS coin_topups (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    coins REAL NOT NULL,
+    amount INTEGER NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'usd',
+    session_id TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS coin_api_nonces (
+    nonce TEXT PRIMARY KEY,
+    expires_at INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS payments (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
@@ -152,6 +230,9 @@ const STATEMENTS = [
 function ensureSchema(sql: Sql) {
   for (const statement of STATEMENTS) sql.exec(statement);
   for (const statement of [
+    "ALTER TABLE products ADD COLUMN price_currency TEXT NOT NULL DEFAULT 'cny'",
+    "ALTER TABLE tiers ADD COLUMN price_currency TEXT NOT NULL DEFAULT 'cny'",
+    "ALTER TABLE users ADD COLUMN coins REAL NOT NULL DEFAULT 0",
     "ALTER TABLE products ADD COLUMN play_format TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN play_body TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE products ADD COLUMN file_name TEXT NOT NULL DEFAULT ''",
@@ -175,6 +256,9 @@ function ensureSchema(sql: Sql) {
     "ALTER TABLE users ADD COLUMN payout_ready INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE users ADD COLUMN payout_method TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN creator_id TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN fiat_amount REAL NOT NULL DEFAULT 0",
+    "ALTER TABLE orders ADD COLUMN fiat_currency TEXT NOT NULL DEFAULT 'cny'",
+    "ALTER TABLE orders ADD COLUMN coin_amount REAL NOT NULL DEFAULT 0",
     "ALTER TABLE orders ADD COLUMN currency TEXT NOT NULL DEFAULT 'cny'",
     "ALTER TABLE orders ADD COLUMN transfer_id TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE payments ADD COLUMN charged_currency TEXT NOT NULL DEFAULT 'cny'",
@@ -524,7 +608,7 @@ function canRead(sql: Sql, viewer: string, creatorId: string, minRank: number, v
   return Number(row.rank) >= minRank;
 }
 
-function snapshot(sql: Sql, viewer: string) {
+function snapshot(sql: Sql, viewer: string, rates: Record<string, number> | undefined = fxRatesCache?.rates) {
   const viewerRow = viewer ? sql.get("SELECT * FROM users WHERE id = ?", viewer) : undefined;
   const viewerHandle = viewerRow ? String(viewerRow.handle) : "";
   const avatarByHandle = new Map(
@@ -588,6 +672,8 @@ function snapshot(sql: Sql, viewer: string) {
     title: String(row.title),
     description: String(row.description),
     price: Number(row.price),
+    priceCurrency: String(row.price_currency ?? "cny").toLowerCase(),
+    coinPrice: rates ? coinValue(Number(row.price), String(row.price_currency ?? "cny").toLowerCase(), rates) : undefined,
     kind: String(row.kind),
     includes: JSON.parse(String(row.includes)) as string[],
     coverKey: String(row.cover_key),
@@ -607,6 +693,8 @@ function snapshot(sql: Sql, viewer: string) {
     creatorId: String(row.creator_id),
     name: String(row.name),
     price: Number(row.price),
+    priceCurrency: String(row.price_currency ?? "cny").toLowerCase(),
+    coinPrice: rates ? coinValue(Number(row.price), String(row.price_currency ?? "cny").toLowerCase(), rates) : undefined,
     rank: Number(row.rank),
     blurb: String(row.blurb),
     perks: JSON.parse(String(row.perks)) as string[],
@@ -627,6 +715,7 @@ function snapshot(sql: Sql, viewer: string) {
         bio: String(viewerRow.bio),
         avatarAt: String(viewerRow.avatar_at ?? ""),
         isCreator: Number(viewerRow.is_creator) === 1,
+        coins: Number(viewerRow.coins ?? 0),
         follows: sql.all("SELECT creator_id FROM follows WHERE user_id = ?", viewer).map((row) => String(row.creator_id)),
         likes: sql.all("SELECT post_id FROM likes WHERE user_id = ?", viewer).map((row) => String(row.post_id)),
         memberships: sql.all("SELECT * FROM memberships WHERE user_id = ?", viewer).map((row) => ({
@@ -872,23 +961,32 @@ function cart(sql: Sql, request: Request, body: Record<string, unknown>) {
   return withState(sql, viewer, "toast.cart.add");
 }
 
-function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number, creatorId: string) {
+function placeOrder(sql: Sql, viewer: string, kind: string, targetId: string, amount: number, creatorId: string, currency = "cny", rates?: Record<string, number>, coinAmount = 0) {
+  const fiatCurrency = currency.toLowerCase();
+  const cnyRate = rates?.CNY;
+  const fiatRate = rates?.[fiatCurrency.toUpperCase()];
+  const payoutAmount = rates && Number.isFinite(cnyRate) && Number.isFinite(fiatRate) && fiatRate > 0
+    ? Math.round((amount / fiatRate) * cnyRate * 100) / 100
+    : amount;
   sql.run(
-    "INSERT INTO orders (id, user_id, kind, target_id, amount, fee, created_at, creator_id, currency, transfer_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'cny', '')",
+    "INSERT INTO orders (id, user_id, kind, target_id, amount, fee, created_at, creator_id, currency, transfer_id, fiat_amount, fiat_currency, coin_amount) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'cny', '', ?, ?, ?)",
     id(),
     viewer,
     kind,
     targetId,
-    amount,
-    feeOf(amount),
+    payoutAmount,
+    feeOf(payoutAmount),
     new Date().toISOString(),
     creatorId,
+    amount,
+    fiatCurrency,
+    coinAmount,
   );
 }
 
-type PayItem = { id: string; price: number; title: string; creatorId: string };
+type PayItem = { id: string; price: number; priceCurrency: string; title: string; creatorId: string };
 type PayPayload =
-  | { kind: "membership"; tierId: string; creatorId: string; price: number; title: string }
+  | { kind: "membership"; tierId: string; creatorId: string; price: number; priceCurrency: string; title: string }
   | { kind: "product"; items: PayItem[] };
 
 function minorUnits(amount: number) {
@@ -903,6 +1001,131 @@ function stripeLocale(value: unknown) {
 
 function payAmount(payload: PayPayload) {
   return payload.kind === "membership" ? minorUnits(payload.price) : payload.items.reduce((sum, item) => sum + minorUnits(item.price), 0);
+}
+
+function coinCheckout(sql: Sql, viewer: string, payload: PayPayload, key: string, rates: Record<string, number>) {
+  if (key.length < 8 || key.length > 120) return fail("err.pay.idempotency");
+  const kind = payload.kind;
+  const title = payload.kind === "membership" ? payload.title : undefined;
+  const expectedTarget = payload.kind === "membership" ? payload.tierId : payload.items.map((item) => item.id).join(",");
+  try {
+    const result = sql.transaction(() => {
+      const prior = sql.get("SELECT id, user_id, kind, target_id FROM coin_transactions WHERE idempotency_key = ?", key);
+      if (prior) {
+        if (String(prior.user_id) !== viewer || String(prior.kind) !== kind || String(prior.target_id) !== expectedTarget) {
+          throw new Error("err.pay.idempotency");
+        }
+        return { duplicate: true, code: kind === "membership" ? "toast.member" : "toast.library" };
+      }
+      const allItems = payload.kind === "product" ? payload.items : [];
+      const items = allItems.filter((item) => !sql.get("SELECT product_id FROM purchases WHERE user_id = ? AND product_id = ?", viewer, item.id));
+      if (payload.kind === "product" && items.length === 0) return { duplicate: true, code: "toast.library" };
+      const price = payload.kind === "membership" ? payload.price : items.reduce((sum, item) => sum + item.price, 0);
+      const coinParts = payload.kind === "membership"
+        ? [coinValue(payload.price, payload.priceCurrency, rates)]
+        : items.map((item) => coinValue(item.price, item.priceCurrency, rates));
+      const coins = Math.round(coinParts.reduce((sum, value) => sum + value, 0) * 100) / 100;
+      if (!Number.isFinite(coins) || coins <= 0) throw new Error("err.pay.fx");
+      const user = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
+      const balance = Number(user?.coins ?? 0);
+      if (balance + 1e-9 < coins) throw new Error("err.coin.insufficient");
+      sql.run("UPDATE users SET coins = coins - ? WHERE id = ? AND coins >= ?", coins, viewer, coins);
+      const after = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
+      const transactionId = id();
+      const now = new Date().toISOString();
+      const currency = payload.kind === "membership" ? payload.priceCurrency : items[0]?.priceCurrency ?? "usd";
+      const targetId = payload.kind === "membership" ? payload.tierId : items.map((item) => item.id).join(",");
+      sql.run(
+        "INSERT INTO coin_transactions (id, idempotency_key, user_id, kind, target_id, coins, fiat_amount, fiat_currency, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        transactionId, key, viewer, kind, targetId, coins, price, currency, now,
+      );
+      sql.run(
+        "INSERT INTO coin_ledger (id, user_id, transaction_id, amount, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        id(), viewer, transactionId, -coins, Number(after?.coins ?? 0), now,
+      );
+      if (payload.kind === "membership") {
+        const current = sql.get("SELECT expires_at FROM memberships WHERE user_id = ? AND creator_id = ?", viewer, payload.creatorId);
+        const currentExpiry = current ? Date.parse(String(current.expires_at)) : 0;
+        const base = Number.isFinite(currentExpiry) && currentExpiry > Date.now() ? currentExpiry : Date.now();
+        const expiresAt = new Date(base + 30 * 24 * 60 * 60 * 1000).toISOString();
+        sql.run("DELETE FROM memberships WHERE user_id = ? AND creator_id = ?", viewer, payload.creatorId);
+        sql.run(
+          "INSERT INTO memberships (user_id, creator_id, tier_id, expires_at, price) VALUES (?, ?, ?, ?, ?)",
+          viewer, payload.creatorId, payload.tierId, expiresAt, payload.price,
+        );
+        placeOrder(sql, viewer, "membership", payload.tierId, payload.price, payload.creatorId, payload.priceCurrency, rates, coins);
+      } else {
+        for (const item of items) {
+          sql.run(
+            "INSERT INTO purchases (user_id, product_id, purchased_at, price) VALUES (?, ?, ?, ?)",
+            viewer, item.id, now, item.price,
+          );
+          sql.run("DELETE FROM cart_items WHERE user_id = ? AND product_id = ?", viewer, item.id);
+          placeOrder(sql, viewer, "product", item.id, item.price, item.creatorId, item.priceCurrency, rates, coinParts[items.indexOf(item)] ?? 0);
+        }
+      }
+      return { duplicate: false, code: kind === "membership" ? "toast.member" : "toast.library" };
+    });
+    return withState(sql, viewer, result.code, undefined, title);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.startsWith("err.")) return fail(message);
+    const prior = sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key);
+    if (prior) return withState(sql, viewer, kind === "membership" ? "toast.member" : "toast.library", undefined, title);
+    return fail("err.coin.transaction", 500);
+  }
+}
+
+function creatorSupport(sql: Sql, request: Request, body: Record<string, unknown>, fetchImpl: typeof fetch) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  const creatorId = textOf(body.creatorId, 80);
+  const creator = sql.get("SELECT handle FROM creators WHERE handle = ?", creatorId);
+  if (!creator) return fail("err.creator.missing", 404);
+  if (String(creator.handle) === String(sql.get("SELECT handle FROM users WHERE id = ?", viewer)?.handle)) return fail("err.product.self");
+  const amount = Number(body.amount);
+  const currency = currencyOf(body.currency);
+  const key = textOf(body.idempotencyKey, 120);
+  if (!Number.isFinite(amount) || amount <= 0 || amount > 9999 || !currency || key.length < 8) return fail("err.pay.amount");
+  return loadFxRates(fetchImpl).then((rates) => {
+    if (!rates) return fail("err.pay.fx");
+    const coins = coinValue(amount, currency, rates);
+    if (coins <= 0) return fail("err.pay.small");
+    try {
+      sql.transaction(() => {
+        const prior = sql.get("SELECT id, user_id, kind, target_id FROM coin_transactions WHERE idempotency_key = ?", key);
+        if (prior) {
+          if (String(prior.user_id) !== viewer || String(prior.kind) !== "support" || String(prior.target_id) !== creatorId) throw new Error("err.pay.idempotency");
+          return;
+        }
+        const user = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
+        if (Number(user?.coins ?? 0) + 1e-9 < coins) throw new Error("err.coin.insufficient");
+        sql.run("UPDATE users SET coins = coins - ? WHERE id = ? AND coins >= ?", coins, viewer, coins);
+        const after = sql.get("SELECT coins FROM users WHERE id = ?", viewer);
+        const transactionId = id();
+        const now = new Date().toISOString();
+        sql.run(
+          "INSERT INTO coin_transactions (id, idempotency_key, user_id, kind, target_id, coins, fiat_amount, fiat_currency, created_at) VALUES (?, ?, ?, 'support', ?, ?, ?, ?, ?)",
+          transactionId, key, viewer, creatorId, coins, amount, currency, now,
+        );
+        sql.run(
+          "INSERT INTO coin_ledger (id, user_id, transaction_id, amount, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+          id(), viewer, transactionId, -coins, Number(after?.coins ?? 0), now,
+        );
+        sql.run(
+          "INSERT INTO creator_supports (id, user_id, creator_id, amount, currency, coins, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          id(), viewer, creatorId, amount, currency, coins, now,
+        );
+        placeOrder(sql, viewer, "support", creatorId, amount, creatorId, currency, rates, coins);
+      });
+      return withState(sql, viewer, "toast.support");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      if (message.startsWith("err.")) return fail(message);
+      if (sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key)) return withState(sql, viewer, "toast.support");
+      return fail("err.coin.transaction", 500);
+    }
+  });
 }
 
 function fulfillPayment(sql: Sql, viewer: string, payment: Row) {
@@ -964,7 +1187,20 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
   if (!mine) return fail("err.loginRequired", 401);
-  if (!stripeKey(env)) return fail("err.pay.unconfigured");
+  const idempotencyKey = textOf(body.idempotencyKey, 120);
+  if (body.pay === "coins" && idempotencyKey) {
+    const prior = sql.get("SELECT user_id, kind, target_id FROM coin_transactions WHERE idempotency_key = ?", idempotencyKey);
+    if (prior) {
+      if (String(prior.user_id) !== viewer) return fail("err.pay.idempotency");
+      const tierIntent = textOf(body.tierId, 80);
+      const productIntent = textOf(body.productId, 80);
+      const targets = String(prior.target_id).split(",");
+      if (tierIntent && (String(prior.kind) !== "membership" || String(prior.target_id) !== tierIntent)) return fail("err.pay.idempotency");
+      if (productIntent && (String(prior.kind) !== "product" || !targets.includes(productIntent))) return fail("err.pay.idempotency");
+      if (!tierIntent && !productIntent && String(prior.kind) !== "product") return fail("err.pay.idempotency");
+      return withState(sql, viewer, String(prior.kind) === "membership" ? "toast.member" : "toast.library");
+    }
+  }
   const tierId = textOf(body.tierId, 80);
   const directId = textOf(body.productId, 80);
   let payload: PayPayload;
@@ -975,7 +1211,7 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
     if (String(product.creator_id) === String(mine.handle)) return fail("err.product.self");
     payload = {
       kind: "product",
-      items: [{ id: String(product.id), price: Number(product.price), title: String(product.title), creatorId: String(product.creator_id) }],
+      items: [{ id: String(product.id), price: Number(product.price), priceCurrency: String(product.price_currency ?? "cny").toLowerCase(), title: String(product.title), creatorId: String(product.creator_id) }],
     };
     cancelPath = `/c/${encodeURIComponent(String(product.creator_id))}/shop/${encodeURIComponent(String(product.id))}?pay=cancel`;
   } else if (tierId) {
@@ -987,6 +1223,7 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
       tierId: String(tier.id),
       creatorId: String(tier.creator_id),
       price: Number(tier.price),
+      priceCurrency: String(tier.price_currency ?? "cny").toLowerCase(),
       title: String(tier.name),
     };
     cancelPath = `/checkout?tier=${encodeURIComponent(String(tier.id))}&pay=cancel`;
@@ -1003,9 +1240,14 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
     if (payable.length === 0) return fail("err.cart.empty");
     payload = {
       kind: "product",
-      items: payable.map((item) => ({ id: String(item.id), price: Number(item.price), title: String(item.title), creatorId: String(item.creator_id) })),
+      items: payable.map((item) => ({ id: String(item.id), price: Number(item.price), priceCurrency: String(item.price_currency ?? "cny").toLowerCase(), title: String(item.title), creatorId: String(item.creator_id) })),
     };
   }
+  if (body.pay !== "coins") return fail("err.pay.coinsOnly");
+  const rates = await loadFxRates(fetchImpl);
+  if (!rates) return fail("err.pay.fx");
+  return coinCheckout(sql, viewer, payload, idempotencyKey, rates);
+
   const serialized = JSON.stringify(payload);
   const amount = payload.kind === "membership" ? payload.price : payload.items.reduce((sum, item) => sum + item.price, 0);
   const crypto = body.pay === "crypto";
@@ -1126,6 +1368,7 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   const description = textOf(body.description, 2000);
   const fileBody = textOf(body.fileBody, 20000);
   const price = Number(body.price);
+  const priceCurrency = currencyOf(body.priceCurrency, "cny");
   const kind = textOf(body.kind, 40) || "数字作品";
   const playFormat = textOf(body.playFormat, 20);
   const playSource = typeof body.playBody === "string" ? body.playBody.trim().slice(0, 100_000) : "";
@@ -1135,6 +1378,7 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   if (Array.from(title).length < 2) return fail("err.product.title");
   if (fileBody.length < 8) return fail("err.file");
   if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
+  if (!priceCurrency) return fail("err.price.currency");
   if (playFormat && !isPlayFormat(playFormat)) return fail("err.play.format");
   const parsed = parsePlay(playFormat, playSource);
   if (!parsed.ok) return fail(parsed.code);
@@ -1153,12 +1397,13 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
     }
   }
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, price_currency, kind, includes, cover_key, file_body, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     id(),
     String(mine.handle),
     title,
     description,
     Math.round(price * 100) / 100,
+    priceCurrency,
     kind,
     JSON.stringify(includes.length ? includes : [fileName(title)]),
     id(),
@@ -1190,6 +1435,7 @@ async function publishUpload(sql: Sql, request: Request) {
   const title = textOf(form.get("title"), 80);
   const description = textOf(form.get("description"), 2000);
   const price = Number(form.get("price"));
+  const priceCurrency = currencyOf(form.get("priceCurrency"), "cny");
   const kind = textOf(form.get("kind"), 40) || "数字作品";
   const includes = textOf(form.get("includes"), 400)
     .split(/[,，]/)
@@ -1202,6 +1448,7 @@ async function publishUpload(sql: Sql, request: Request) {
   if (uploaded.size > MAX_UPLOAD) return fail("err.file.size");
   if (Array.from(title).length < 2) return fail("err.product.title");
   if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
+  if (!priceCurrency) return fail("err.price.currency");
   const workTags = parseWorkTags(form.get("tags"));
   if (!workTags.ok) return fail(workTags.code);
   const chosen = chosenAccess(form);
@@ -1226,12 +1473,13 @@ async function publishUpload(sql: Sql, request: Request) {
     if (!coverType) return fail("err.cover.type");
   }
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, price_currency, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     productId,
     String(mine.handle),
     title,
     description,
     Math.round(price * 100) / 100,
+    priceCurrency,
     kind,
     JSON.stringify(includes.length ? includes : [filename]),
     id(),
@@ -1276,6 +1524,7 @@ async function updateProduct(sql: Sql, request: Request) {
   const title = textOf(form.get("title"), 80);
   const description = textOf(form.get("description"), 2000);
   const price = Number(form.get("price"));
+  const priceCurrency = currencyOf(form.get("priceCurrency"), String(product.price_currency ?? "cny"));
   const kind = textOf(form.get("kind"), 40) || String(product.kind);
   const includes = textOf(form.get("includes"), 400)
     .split(/[,，]/)
@@ -1284,6 +1533,7 @@ async function updateProduct(sql: Sql, request: Request) {
     .slice(0, 8);
   if (Array.from(title).length < 2) return fail("err.product.title");
   if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
+  if (!priceCurrency) return fail("err.price.currency");
   const workTags = parseWorkTags(form.get("tags"));
   if (!workTags.ok) return fail(workTags.code);
   const chosen = chosenAccess(form);
@@ -1344,10 +1594,11 @@ async function updateProduct(sql: Sql, request: Request) {
     coverAt = new Date().toISOString();
   }
   sql.run(
-    `UPDATE products SET title = ?, description = ?, price = ?, kind = ?, includes = ?, tags = ?, file_body = ?, file_name = ?, file_type = ?, play_format = ?, play_body = ?, allow_play = ?, allow_download = ?, allow_preview = ?, preview_mode = ?, preview_limit = ?, preview_body = ?, listed = ?, cover_body = ?, cover_type = ?, cover_at = ? WHERE id = ?`,
+    `UPDATE products SET title = ?, description = ?, price = ?, price_currency = ?, kind = ?, includes = ?, tags = ?, file_body = ?, file_name = ?, file_type = ?, play_format = ?, play_body = ?, allow_play = ?, allow_download = ?, allow_preview = ?, preview_mode = ?, preview_limit = ?, preview_body = ?, listed = ?, cover_body = ?, cover_type = ?, cover_at = ? WHERE id = ?`,
     title,
     description,
     Math.round(price * 100) / 100,
+    priceCurrency,
     kind,
     JSON.stringify(includes.length ? includes : [fileNameStored || fileName(title)]),
     JSON.stringify(workTags.tags),
@@ -1416,27 +1667,180 @@ async function confirmedEvent(env: PayEnv, payload: string, header: string, fetc
   return { ok: true as const, event: confirmed };
 }
 
+function base64Url(bytes: Uint8Array) {
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
+function fromBase64Url(value: string) {
+  const base64 = value.replace(/-/g, "+").replace(/_/g, "/");
+  const binary = atob(base64 + "=".repeat((4 - (base64.length % 4)) % 4));
+  return Uint8Array.from(binary, (char) => char.charCodeAt(0));
+}
+
+async function coinToken(payload: { sub: string; exp: number; nonce: string }, secret: string) {
+  const body = base64Url(new TextEncoder().encode(JSON.stringify(payload)));
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const signature = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
+  return `${body}.${base64Url(signature)}`;
+}
+
+async function verifyCoinSignature(raw: string, signature: string, secret: string) {
+  try {
+    if (!signature || !secret) return false;
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+    return await crypto.subtle.verify("HMAC", key, fromBase64Url(signature), new TextEncoder().encode(raw));
+  } catch {
+    return false;
+  }
+}
+
+async function coinSso(sql: Sql, request: Request, env: PayEnv) {
+  const { viewer, response } = requireUser(sql, request);
+  if (response) return response;
+  if (!env.COIN_SSO_SECRET) return fail("err.coin.unconfigured", 503);
+  const token = await coinToken({ sub: viewer, exp: Date.now() + 60_000, nonce: crypto.randomUUID() }, env.COIN_SSO_SECRET);
+  return Response.redirect(`https://coin.starchose.org/sso?token=${encodeURIComponent(token)}`, 302);
+}
+
+async function coinApi(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
+  if (!env.COIN_SSO_SECRET) return fail("err.coin.unconfigured", 503);
+  const raw = await request.text();
+  if (!(await verifyCoinSignature(raw, request.headers.get("x-coin-signature") ?? "", env.COIN_SSO_SECRET))) {
+    return fail("err.coin.signature", 401);
+  }
+  let body: Record<string, unknown>;
+  try {
+    body = JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return fail("err.request", 400);
+  }
+  const userId = textOf(body.user_id, 120);
+  const timestamp = Number(body.ts);
+  const nonce = textOf(body.nonce, 120);
+  if (!userId || !nonce || !Number.isFinite(timestamp) || Math.abs(Date.now() - timestamp) > 60_000) return fail("err.coin.expired", 401);
+  try {
+    sql.transaction(() => {
+      if (sql.get("SELECT nonce FROM coin_api_nonces WHERE nonce = ?", nonce)) throw new Error("err.coin.replay");
+      sql.run("INSERT INTO coin_api_nonces (nonce, expires_at) VALUES (?, ?)", nonce, Date.now() + 120_000);
+      sql.run("DELETE FROM coin_api_nonces WHERE expires_at < ?", Date.now());
+    });
+  } catch {
+    return fail("err.coin.replay", 409);
+  }
+  const user = sql.get("SELECT id, email, coins FROM users WHERE id = ?", userId);
+  if (!user) return fail("err.loginRequired", 401);
+  if (body.action === "balance") return json({ ok: true, balance: Number(user.coins ?? 0) });
+  if (body.action !== "checkout") return fail("err.coin.action");
+  const coins = Number(body.coins);
+  if (![5, 10, 20, 50, 100, 200].includes(coins)) return fail("err.coin.amount");
+  if (!stripeKey(env)) return fail("err.pay.unconfigured", 503);
+  const topupId = id();
+  const now = new Date().toISOString();
+  sql.run(
+    "INSERT INTO coin_topups (id, user_id, coins, amount, currency, session_id, status, created_at) VALUES (?, ?, ?, ?, 'usd', '', 'pending', ?)",
+    topupId, userId, coins, coins * 100, now,
+  );
+  const fields: Record<string, string> = {
+    mode: "payment",
+    success_url: "https://fanstar.dev/api/coin/return?session_id={CHECKOUT_SESSION_ID}",
+    cancel_url: "https://coin.starchose.org/?pay=cancel",
+    customer_email: String(user.email),
+    locale: "auto",
+    client_reference_id: topupId,
+    "metadata[kind]": "coin_topup",
+    "metadata[topupId]": topupId,
+    "metadata[userId]": userId,
+    "metadata[coins]": String(coins),
+    "line_items[0][quantity]": "1",
+    "line_items[0][price_data][currency]": "usd",
+    "line_items[0][price_data][unit_amount]": String(coins * 100),
+    "line_items[0][price_data][product_data][name]": `Fanstar Coins · ${coins}`,
+  };
+  const created = await stripeRequest(env, "/v1/checkout/sessions", "POST", fields, fetchImpl);
+  if (!created.ok || !created.session.url) {
+    sql.run("DELETE FROM coin_topups WHERE id = ?", topupId);
+    return fail(created.ok ? "err.pay.stripe" : created.code);
+  }
+  sql.run("UPDATE coin_topups SET session_id = ? WHERE id = ?", created.session.id, topupId);
+  return json({ ok: true, url: created.session.url, sessionId: created.session.id });
+}
+
+function creditCoinTopup(sql: Sql, session: StripeSession) {
+  const topupId = String(session.metadata?.topupId ?? "");
+  const topup = topupId ? sql.get("SELECT * FROM coin_topups WHERE id = ?", topupId) : undefined;
+  if (!topup || String(topup.session_id) !== session.id || String(topup.user_id) !== String(session.metadata?.userId ?? "")) return false;
+  const coins = Number(topup.coins);
+  if (
+    session.metadata?.kind !== "coin_topup" ||
+    Number(session.metadata?.coins) !== coins ||
+    session.payment_status !== "paid" ||
+    session.amount_total !== Number(topup.amount) ||
+    String(session.currency ?? "").toLowerCase() !== "usd"
+  ) return false;
+  try {
+    sql.transaction(() => {
+      const fresh = sql.get("SELECT * FROM coin_topups WHERE id = ?", topupId);
+      if (!fresh || String(fresh.status) === "paid") return;
+      const key = `stripe:${session.id}`;
+      if (sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", key)) {
+        sql.run("UPDATE coin_topups SET status = 'paid' WHERE id = ?", topupId);
+        return;
+      }
+      const user = sql.get("SELECT coins FROM users WHERE id = ?", String(fresh.user_id));
+      if (!user) throw new Error("err.loginRequired");
+      sql.run("UPDATE users SET coins = coins + ? WHERE id = ?", Number(fresh.coins), String(fresh.user_id));
+      const after = sql.get("SELECT coins FROM users WHERE id = ?", String(fresh.user_id));
+      const transactionId = id();
+      const now = new Date().toISOString();
+      sql.run(
+        "INSERT INTO coin_transactions (id, idempotency_key, user_id, kind, target_id, coins, fiat_amount, fiat_currency, created_at) VALUES (?, ?, ?, 'topup', ?, ?, ?, 'usd', ?)",
+        transactionId, key, String(fresh.user_id), topupId, Number(fresh.coins), Number(fresh.amount) / 100, now,
+      );
+      sql.run(
+        "INSERT INTO coin_ledger (id, user_id, transaction_id, amount, balance_after, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        id(), String(fresh.user_id), transactionId, Number(fresh.coins), Number(after?.coins ?? 0), now,
+      );
+      sql.run("UPDATE coin_topups SET status = 'paid' WHERE id = ?", topupId);
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function coinReturn(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
+  const sessionId = textOf(new URL(request.url).searchParams.get("session_id"), 120);
+  const topup = sessionId ? sql.get("SELECT * FROM coin_topups WHERE session_id = ?", sessionId) : undefined;
+  if (!topup) return new Response("Top-up not found", { status: 404 });
+  const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
+  if (loaded.ok) creditCoinTopup(sql, loaded.session);
+  const success = sql.get("SELECT status FROM coin_topups WHERE id = ?", String(topup.id));
+  return Response.redirect(`https://coin.starchose.org/?pay=${String(success?.status) === "paid" ? "success" : "cancel"}`, 302);
+}
+
 async function stripeWebhook(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) {
   const payload = await request.text();
   const confirmed = await confirmedEvent(env, payload, request.headers.get("stripe-signature") ?? "", fetchImpl);
   if (!confirmed.ok) return fail(confirmed.code);
-  const type = confirmed.event.type ?? "";
   const sessionId = textOf(confirmed.event.data?.object?.id, 120);
   if (!sessionId.startsWith("cs_")) return json({ received: true });
-  const payment = sql.get("SELECT * FROM payments WHERE session_id = ?", sessionId);
-  if (!payment || String(payment.status) === "paid") return json({ received: true });
-  const loaded = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
-  if (!loaded.ok) return fail(loaded.code);
-  const viewer = String(payment.user_id);
-  if (type === "checkout.session.async_payment_failed") {
-    if (loaded.session.payment_status !== "paid") sql.run("UPDATE payments SET status = 'failed' WHERE id = ?", String(payment.id));
-    else if (sessionMatches(loaded.session, payment, viewer)) fulfillPayment(sql, viewer, payment);
+  const topup = sql.get("SELECT * FROM coin_topups WHERE session_id = ?", sessionId);
+  if (topup) {
+    if (type === "checkout.session.async_payment_failed") {
+      if (String(topup.status) !== "paid") sql.run("UPDATE coin_topups SET status = 'failed' WHERE id = ?", String(topup.id));
+      return json({ received: true });
+    }
+    if (type !== "checkout.session.completed" && type !== "checkout.session.async_payment_succeeded") return json({ received: true });
+    const loadedTopup = await stripeRequest(env, `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`, "GET", undefined, fetchImpl);
+    if (loadedTopup.ok && creditCoinTopup(sql, loadedTopup.session)) return json({ received: true });
     return json({ received: true });
   }
-  if (type !== "checkout.session.completed" && type !== "checkout.session.async_payment_succeeded") return json({ received: true });
-  if (loaded.session.payment_status !== "paid") return json({ received: true });
-  if (!sessionMatches(loaded.session, payment, viewer)) return fail("err.pay.amount");
-  fulfillPayment(sql, viewer, payment);
+  const payment = sql.get("SELECT * FROM payments WHERE session_id = ?", sessionId);
+  if (!payment || String(payment.status) === "paid") return json({ received: true });
+  // Stripe is reserved for coin top-ups. Legacy content checkout sessions never unlock content.
+  sql.run("UPDATE payments SET status = 'cancelled' WHERE id = ?", String(payment.id));
   return json({ received: true });
 }
 
@@ -1501,16 +1905,19 @@ function updateTier(sql: Sql, request: Request, body: Record<string, unknown>) {
   const name = textOf(body.name, 40);
   const blurb = textOf(body.blurb, 400);
   const price = Number(body.price);
+  const priceCurrency = currencyOf(body.priceCurrency, String(tier.price_currency ?? "cny"));
   const perks = (Array.isArray(body.perks) ? body.perks : [])
     .map((item) => textOf(item, 40))
     .filter(Boolean)
     .slice(0, 8);
   if (name.length < 2) return fail("err.title");
   if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
+  if (!priceCurrency) return fail("err.price.currency");
   sql.run(
-    "UPDATE tiers SET name = ?, price = ?, blurb = ?, perks = ? WHERE id = ?",
+    "UPDATE tiers SET name = ?, price = ?, price_currency = ?, blurb = ?, perks = ? WHERE id = ?",
     name,
     Math.round(price * 100) / 100,
+    priceCurrency,
     blurb,
     JSON.stringify(perks),
     String(tier.id),
@@ -1798,15 +2205,16 @@ function desk(sql: Sql, request: Request, env: PayEnv, fetchImpl: typeof fetch) 
 async function deskBody(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetch) {
   const handle = String(mine.handle);
   const orders = sql.all(
-    `SELECT orders.id, orders.kind, orders.target_id, orders.amount, orders.fee, orders.created_at, users.name AS buyer,
-            CASE WHEN orders.kind = 'product' THEN products.title ELSE tiers.name END AS title
+    `SELECT orders.id, orders.kind, orders.target_id, orders.amount, orders.fee, orders.created_at, orders.fiat_amount, orders.fiat_currency, orders.coin_amount, users.name AS buyer,
+            CASE WHEN orders.kind = 'product' THEN products.title WHEN orders.kind = 'membership' THEN tiers.name ELSE '创作者支持' END AS title
      FROM orders
      JOIN users ON users.id = orders.user_id
      LEFT JOIN products ON orders.kind = 'product' AND products.id = orders.target_id
      LEFT JOIN tiers ON orders.kind = 'membership' AND tiers.id = orders.target_id
-     WHERE products.creator_id = ? OR tiers.creator_id = ?
+     WHERE products.creator_id = ? OR tiers.creator_id = ? OR orders.creator_id = ?
      ORDER BY orders.created_at DESC
      LIMIT 40`,
+    handle,
     handle,
     handle,
   );
@@ -1831,7 +2239,9 @@ async function deskBody(sql: Sql, mine: Row, env: PayEnv, fetchImpl: typeof fetc
       targetId: String(row.target_id),
       title: String(row.title ?? ""),
       buyer: String(row.buyer),
-      amount: Number(row.amount),
+      amount: Number(row.fiat_amount ?? 0) > 0 ? Number(row.fiat_amount) : Number(row.amount),
+      currency: String(row.fiat_currency ?? "cny"),
+      coinAmount: Number(row.coin_amount ?? 0),
       fee: Number(row.fee),
       createdAt: String(row.created_at),
     })),
@@ -2177,7 +2587,9 @@ function playWrite(sql: Sql, request: Request, body: Record<string, unknown>) {
 export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter: Limiter, stripeFetch: typeof fetch = fetch): Promise<Response> {
   ensureSchema(sql);
   const url = new URL(request.url);
-  if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request)));
+  if (request.method === "GET" && url.pathname === "/api/coin/sso") return coinSso(sql, request, env);
+  if (request.method === "GET" && url.pathname === "/api/coin/return") return coinReturn(sql, request, env, stripeFetch);
+  if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request), await loadFxRates(stripeFetch)));
   if (request.method === "GET" && url.pathname === "/api/download") return download(sql, request);
   if (request.method === "GET" && url.pathname === "/api/media") return media(sql, request);
   if (request.method === "GET" && url.pathname === "/api/play") return playRead(sql, request);
@@ -2192,6 +2604,7 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/product" && multipart) return updateProduct(sql, request);
   if (url.pathname === "/api/avatar" && multipart) return uploadAvatar(sql, request);
   if (url.pathname === "/api/stripe/webhook") return stripeWebhook(sql, request, env, stripeFetch);
+  if (url.pathname === "/api/coin/checkout") return coinApi(sql, request, env, stripeFetch);
   const body = await readJson(request);
   if (url.pathname === "/api/payout/run") {
     if (!env.CODE_SECRET || request.headers.get("x-fanstar-task") !== env.CODE_SECRET) return fail("err.route", 404);
@@ -2209,8 +2622,9 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/like") return like(sql, request, body);
   if (url.pathname === "/api/comments") return comment(sql, request, body);
   if (url.pathname === "/api/cart") return cart(sql, request, body);
+  if (url.pathname === "/api/support") return creatorSupport(sql, request, body, stripeFetch);
   if (url.pathname === "/api/checkout") return checkout(sql, request, body, env, stripeFetch);
-  if (url.pathname === "/api/checkout/complete") return completeCheckout(sql, request, body, env, stripeFetch);
+  if (url.pathname === "/api/checkout/complete") return fail("err.pay.coinsOnly");
   if (url.pathname === "/api/product/delete") return deleteProduct(sql, request, body);
   if (url.pathname === "/api/posts") return publishPost(sql, request, body);
   if (url.pathname === "/api/products") return publishProduct(sql, request, body);

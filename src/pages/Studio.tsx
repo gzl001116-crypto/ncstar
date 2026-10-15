@@ -6,7 +6,7 @@ import { PasswordForm } from "./Password";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { CATEGORIES, type Category, type Product } from "../types";
-import { formatDate, utcStamp, yuan } from "../utils";
+import { coinText, fiat, formatDate, utcStamp, yuan } from "../utils";
 
 const KINDS = ["数字作品", "插画", "音乐", "设计", "摄影", "写作", "图案"] as const;
 const MAX_FILE = 8 * 1024 * 1024;
@@ -213,7 +213,7 @@ export function StudioHome() {
               <div>
                 <strong>{product.title}</strong>
                 <p className="muted">
-                  {phrase(product.kind)} · {yuan(product.price)}
+                  {phrase(product.kind)} · {fiat(product.price, product.priceCurrency)} · {coinText(product.coinPrice)}
                 </p>
               </div>
             </Link>
@@ -681,6 +681,7 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
       title,
       description: String(data.get("description") ?? ""),
       price,
+      priceCurrency: String(data.get("priceCurrency") ?? product.priceCurrency ?? "cny"),
       kind: String(data.get("kind") ?? product.kind),
       includes: String(data.get("includes") ?? "")
         .split(/[,，]/)
@@ -732,7 +733,7 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
             <strong>{product.title}</strong>
           )}
           <p className="muted">
-            {phrase(product.kind)} · {yuan(product.price)} · {t("studio.sold", { n: sold })}
+            {phrase(product.kind)} · {fiat(product.price, product.priceCurrency)} · {coinText(product.coinPrice)} · {t("studio.sold", { n: sold })}
             {product.playFormat ? ` · ${t("product.viaPlay")}` : ""}
             {product.allowDownload ? ` · ${t("product.canDownload")}` : product.playFormat ? ` · ${t("product.playOnly")}` : ""}
             {product.allowPreview ? ` · ${t("product.preview")}` : ""}
@@ -759,6 +760,21 @@ function WorkEditor({ product, sold }: { product: Product; sold: number }) {
           {t("studio.price")}
           <input name="price" type="number" min="1" max="9999" step="0.01" defaultValue={product.price} required />
         </label>
+        <label>
+          价格货币 / Price currency
+          <select name="priceCurrency" defaultValue={product.priceCurrency || "cny"}>
+            <option value="usd">USD — US Dollar</option>
+            <option value="cny">CNY — Chinese Yuan</option>
+            <option value="gbp">GBP — Pound Sterling</option>
+            <option value="eur">EUR — Euro</option>
+            <option value="jpy">JPY — Japanese Yen</option>
+            <option value="hkd">HKD — Hong Kong Dollar</option>
+            <option value="sgd">SGD — Singapore Dollar</option>
+            <option value="cad">CAD — Canadian Dollar</option>
+            <option value="aud">AUD — Australian Dollar</option>
+          </select>
+        </label>
+        <p className="fineprint">法币原价固定保存；商城硬币价按最新汇率换算，不会反向修改法币原价。 / Fiat price stays fixed; the marketplace coin price follows the latest FX rate.</p>
         <label>
           {t("studio.includes")}
           <input name="includes" defaultValue={product.includes.join("，")} placeholder={t("studio.includesPh")} />
@@ -873,6 +889,7 @@ export function StudioWorks() {
       title,
       description: String(data.get("description") ?? ""),
       price,
+      priceCurrency: String(data.get("priceCurrency") ?? "cny"),
       kind: String(data.get("kind") ?? ""),
       includes: String(data.get("includes") ?? "")
         .split(/[,，]/)
@@ -925,6 +942,21 @@ export function StudioWorks() {
           {t("studio.price")}
           <input name="price" type="number" min="1" max="9999" step="0.01" required />
         </label>
+        <label>
+          价格货币 / Price currency
+          <select name="priceCurrency" defaultValue="cny">
+            <option value="usd">USD — US Dollar</option>
+            <option value="cny">CNY — Chinese Yuan</option>
+            <option value="gbp">GBP — Pound Sterling</option>
+            <option value="eur">EUR — Euro</option>
+            <option value="jpy">JPY — Japanese Yen</option>
+            <option value="hkd">HKD — Hong Kong Dollar</option>
+            <option value="sgd">SGD — Singapore Dollar</option>
+            <option value="cad">CAD — Canadian Dollar</option>
+            <option value="aud">AUD — Australian Dollar</option>
+          </select>
+        </label>
+        <p className="fineprint">法币原价固定保存；商城硬币价按最新汇率换算，不会反向修改法币原价。 / Fiat price stays fixed; the marketplace coin price follows the latest FX rate.</p>
         <label>
           {t("studio.includes")}
           <input name="includes" placeholder={t("studio.includesPh")} />
@@ -1011,6 +1043,7 @@ export function StudioTiers() {
       id,
       name: String(data.get("name") ?? ""),
       price: Number(data.get("price") ?? 0),
+      priceCurrency: String(data.get("priceCurrency") ?? "cny"),
       blurb: String(data.get("blurb") ?? ""),
       perks: String(data.get("perks") ?? "")
         .split(/[,，]/)
@@ -1031,8 +1064,23 @@ export function StudioTiers() {
           </label>
           <label>
             {t("studio.tierPrice")}
-            <input name="price" type="number" min="1" max="9999" step="1" defaultValue={tier.price} required />
+            <input name="price" type="number" min="0.01" max="9999" step="0.01" defaultValue={tier.price} required />
           </label>
+          <label>
+            价格货币 / Price currency
+            <select name="priceCurrency" defaultValue={tier.priceCurrency || "cny"}>
+              <option value="usd">USD — US Dollar</option>
+              <option value="cny">CNY — Chinese Yuan</option>
+              <option value="gbp">GBP — Pound Sterling</option>
+              <option value="eur">EUR — Euro</option>
+              <option value="jpy">JPY — Japanese Yen</option>
+              <option value="hkd">HKD — Hong Kong Dollar</option>
+              <option value="sgd">SGD — Singapore Dollar</option>
+              <option value="cad">CAD — Canadian Dollar</option>
+              <option value="aud">AUD — Australian Dollar</option>
+            </select>
+          </label>
+          <p className="fineprint">法币原价固定保存；会员硬币价按最新汇率换算。 / Fiat price stays fixed; the coin price follows the latest FX rate.</p>
           <label>
             {t("studio.tierBlurb")}
             <textarea name="blurb" rows={3} defaultValue={tier.blurb} />
@@ -1042,7 +1090,7 @@ export function StudioTiers() {
             <input name="perks" defaultValue={tier.perks.join("，")} placeholder={t("studio.tierPerksPh")} />
           </label>
           <p className="muted">
-            {phrase(tier.name)} · {yuan(tier.price)}
+            {phrase(tier.name)} · {fiat(tier.price, tier.priceCurrency)} · {coinText(tier.coinPrice)}
             {t("common.per30")}
           </p>
           {error && <p className="error">{error}</p>}
@@ -1211,7 +1259,7 @@ export function StudioOrders() {
                 <strong>{phrase(order.title)}</strong>
                 <p className="muted">{t("studio.buyer", { name: order.buyer })}</p>
               </div>
-              <span>{yuan(order.amount)}</span>
+              <span>{fiat(order.amount, order.currency)} · {coinText(order.coinAmount)}</span>
               <span className="muted">{formatDate(order.createdAt)}</span>
             </article>
           ))}

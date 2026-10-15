@@ -4,13 +4,14 @@ import { handleApp } from "./platform.ts";
 
 const sql = openSql(":memory:");
 const limiter = memoryLimiter();
-const env: MailEnv & { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: string } = {
+const env: MailEnv & { STRIPE_SECRET_KEY?: string; STRIPE_WEBHOOK_SECRET?: string; COIN_SSO_SECRET?: string } = {
   RESEND_API_KEY: "test-key",
   CODE_SECRET: "test-secret",
   STRIPE_SECRET_KEY: "sk_test_platform_check",
   STRIPE_WEBHOOK_SECRET: "whsec_platform_check",
+  COIN_SSO_SECRET: "coin-sso-platform-check",
 };
-const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string; currency: string }>();
+const stripeSessions = new Map<string, { amount: number; paymentId: string; userId: string; currency: string; metadata: Record<string, string> }>();
 let rateDown = false;
 const stripeEvents = new Map<string, { id: string; type: string; data: { object: { id: string } } }>();
 const transfers: { id: string; amount: number; currency: string; destination: string; key: string }[] = [];
@@ -36,7 +37,7 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
   const method = (init?.method ?? "GET").toUpperCase();
   if (url.includes("open.er-api.com")) {
     if (rateDown) return new Response("down", { status: 503 });
-    return Response.json({ result: "success", rates: { CNY: 7.2 } });
+    return Response.json({ result: "success", rates: { USD: 1, CNY: 7.2, GBP: 0.8, EUR: 0.9, JPY: 150, HKD: 7.8, SGD: 1.35, CAD: 1.36, AUD: 1.5 } });
   }
   if (url.includes("/v2/") && headerValue(init?.headers, "Stripe-Version") !== "2026-09-30.preview") {
     throw new Error("stripe version missing");
@@ -89,11 +90,16 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
       const currency = params.get("line_items[0][price_data][currency]") ?? "";
       if (currency !== "cny" && currency !== "usd") throw new Error(`currency ${currency}`);
       const pay = params.get("metadata[pay]");
-      if (currency === "cny" && (pay !== "card" || params.get("payment_method_options[wechat_pay][client]") !== "web")) {
-        throw new Error("card session shape");
-      }
-      if (currency === "usd" && (pay !== "crypto" || params.has("payment_method_options[wechat_pay][client]"))) {
-        throw new Error("crypto session shape");
+      const kind = params.get("metadata[kind]");
+      if (kind === "coin_topup") {
+        if (currency !== "usd" || params.has("payment_method_options[wechat_pay][client]")) throw new Error("coin top-up session shape");
+      } else {
+        if (currency === "cny" && (pay !== "card" || params.get("payment_method_options[wechat_pay][client]") !== "web")) {
+          throw new Error("card session shape");
+        }
+        if (currency === "usd" && (pay !== "crypto" || params.has("payment_method_options[wechat_pay][client]"))) {
+          throw new Error("crypto session shape");
+        }
       }
       for (const [key, value] of params) {
         if (key.includes("[price_data][currency]") && value !== currency) throw new Error("mixed currency");
@@ -105,13 +111,18 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
     }
     const currency = params.get("line_items[0][price_data][currency]") ?? "cny";
     const id = `cs_test_${stripeSessions.size + 1}`;
+    const metadata: Record<string, string> = {};
+    for (const [key, value] of params) {
+      if (key.startsWith("metadata[") && key.endsWith("]")) metadata[key.slice(9, -1)] = value;
+    }
     stripeSessions.set(id, {
       amount,
       currency,
       paymentId: params.get("metadata[paymentId]") ?? "",
       userId: params.get("metadata[userId]") ?? "",
+      metadata,
     });
-    return Response.json({ id, url: `https://checkout.stripe.test/${id}`, payment_status: "unpaid", status: "open", amount_total: amount, currency, metadata: {} });
+    return Response.json({ id, url: `https://checkout.stripe.test/${id}`, payment_status: "unpaid", status: "open", amount_total: amount, currency, metadata });
   }
   if (url.includes("/v1/events/")) {
     const eventId = decodeURIComponent(url.split("/").pop() ?? "");
@@ -129,9 +140,21 @@ async function stripeFetch(input: RequestInfo | URL, init?: RequestInit) {
     status: stripePaid ? "complete" : "open",
     amount_total: stripeAmount ?? saved.amount,
     currency: saved.currency,
-    metadata: { paymentId: saved.paymentId, userId: saved.userId },
+    metadata: saved.metadata,
   });
 }
+async function signCoinRequest(raw: string) {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(String(env.COIN_SSO_SECRET)),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw));
+  return btoa(String.fromCharCode(...new Uint8Array(mac))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+}
+
 const codes = new Map<string, string>();
 
 async function ticket(email: string, fresh = false) {
@@ -257,15 +280,15 @@ if (fanUser.status !== 200 || fanHandle === "reader" || !/^u[a-f0-9]{12}$/.test(
 if (fanUser.data.creators?.some((item: { handle: string }) => item.handle === "reader")) {
   throw new Error("reader handle became a creator page");
 }
+sql.run("UPDATE users SET coins = 10000 WHERE email = ?", "fan@example.com");
 const locked = fanUser.data.posts.find((item: { id: string }) => item.id === postId);
 if (locked.body) throw new Error("member post leaked before purchase");
 
 const added = await fan.send("/api/cart", { productId, op: "add" });
 if (added.status !== 200 || !added.data.user.cart.includes(productId)) throw new Error("cart failed");
 async function settle(sender: { send: (path: string, body?: unknown) => Promise<{ status: number; data: any; raw: string }> }, body?: unknown) {
-  const started = await sender.send("/api/checkout", body ?? {});
-  if (started.status !== 200 || started.data.user) return started;
-  return sender.send("/api/checkout/complete", { sessionId: started.data.sessionId });
+  const input = body && typeof body === "object" ? body as Record<string, unknown> : {};
+  return sender.send("/api/checkout", { ...input, pay: "coins", idempotencyKey: String(input.idempotencyKey ?? crypto.randomUUID()) });
 }
 const bought = await settle(fan);
 if (bought.status !== 200 || !bought.data.user.library.some((item: { productId: string }) => item.productId === productId)) {
@@ -816,30 +839,27 @@ const cardWork = await creator.send("/api/products", {
 const cardId = cardWork.data.products?.find((item: { title: string }) => item.title === "银行卡")?.id as string;
 if (cardWork.status !== 200 || !cardId) throw new Error(`card work ${cardWork.status} ${cardWork.raw}`);
 const queuedCard = await readerNow.send("/api/cart", { productId: cardId, op: "add" });
-stripePaid = false;
-const startedPay = await readerNow.send("/api/checkout", {});
-if (queuedCard.status !== 200 || startedPay.status !== 200 || !startedPay.data.url || startedPay.data.user) {
-  throw new Error(`stripe start ${startedPay.status} ${startedPay.raw}`);
+const beforeCoinPay = await readerNow.send("/api/state", undefined, "GET");
+const balanceBefore = Number(beforeCoinPay.data.user?.coins ?? 0);
+const startedPay = await readerNow.send("/api/checkout", { pay: "coins", idempotencyKey: `card-pay-${cardId}` });
+const afterCoinPay = await readerNow.send("/api/state", undefined, "GET");
+const balanceAfter = Number(afterCoinPay.data.user?.coins ?? 0);
+if (
+  queuedCard.status !== 200 ||
+  startedPay.status !== 200 ||
+  !afterCoinPay.data.user?.library?.some((item: { productId: string }) => item.productId === cardId) ||
+  !(balanceAfter < balanceBefore) ||
+  !sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", `card-pay-${cardId}`)
+) throw new Error(`coin purchase ${startedPay.status} ${startedPay.raw}`);
+const repeatPay = await readerNow.send("/api/checkout", { productId: cardId, pay: "coins", idempotencyKey: `card-pay-${cardId}` });
+const afterRepeat = await readerNow.send("/api/state", undefined, "GET");
+if (repeatPay.status !== 200 || Number(afterRepeat.data.user?.coins ?? 0) !== balanceAfter) {
+  throw new Error(`duplicate coin charge ${repeatPay.status} ${repeatPay.raw}`);
 }
-const beforePay = await readerNow.send("/api/state", undefined, "GET");
-if (beforePay.data.user?.library?.some((item: { productId: string }) => item.productId === cardId)) {
-  throw new Error("library opened before payment");
+const cashBlocked = await readerNow.send("/api/checkout", { productId: cardId });
+if (cashBlocked.status !== 400 || cashBlocked.data.code !== "err.pay.coinsOnly") {
+  throw new Error(`cash checkout not blocked ${cashBlocked.status} ${cashBlocked.raw}`);
 }
-const reusedPay = await readerNow.send("/api/checkout", {});
-if (reusedPay.data.sessionId !== startedPay.data.sessionId) throw new Error(`session was not reused ${reusedPay.raw}`);
-const pendingPay = await readerNow.send("/api/checkout/complete", { sessionId: startedPay.data.sessionId });
-if (pendingPay.status !== 400 || pendingPay.data.code !== "err.pay.pending") throw new Error(`unpaid ${pendingPay.status} ${pendingPay.raw}`);
-stripePaid = true;
-stripeAmount = 1;
-const wrongAmount = await readerNow.send("/api/checkout/complete", { sessionId: startedPay.data.sessionId });
-if (wrongAmount.status !== 400 || wrongAmount.data.code !== "err.pay.amount") throw new Error(`amount ${wrongAmount.status} ${wrongAmount.raw}`);
-stripeAmount = null;
-const finishedPay = await readerNow.send("/api/checkout/complete", { sessionId: startedPay.data.sessionId });
-if (finishedPay.status !== 200 || !finishedPay.data.user?.library?.some((item: { productId: string }) => item.productId === cardId)) {
-  throw new Error(`paid ${finishedPay.status} ${finishedPay.raw}`);
-}
-const againPay = await readerNow.send("/api/checkout/complete", { sessionId: startedPay.data.sessionId });
-if (againPay.status !== 200 || againPay.data.code !== "toast.library") throw new Error(`repeat pay ${againPay.status} ${againPay.raw}`);
 const bareWork = await creator.send("/api/products", {
   title: "未配置",
   description: "没有支付",
@@ -852,64 +872,70 @@ const bareId = bareWork.data.products?.find((item: { title: string }) => item.ti
 const bareCart = await readerNow.send("/api/cart", { productId: bareId, op: "add" });
 const savedKey = env.STRIPE_SECRET_KEY;
 delete env.STRIPE_SECRET_KEY;
-const blockedPay = await readerNow.send("/api/checkout", {});
+const blockedPay = await readerNow.send("/api/checkout", { pay: "coins", productId: bareId, idempotencyKey: `no-stripe-${bareId}` });
 env.STRIPE_SECRET_KEY = savedKey;
-if (bareCart.status !== 200 || blockedPay.status !== 400 || blockedPay.data.code !== "err.pay.unconfigured") {
-  throw new Error(`unconfigured pay ${blockedPay.status} ${blockedPay.raw}`);
+if (bareCart.status !== 200 || blockedPay.status !== 200 || !blockedPay.data.user?.library?.some((item: { productId: string }) => item.productId === bareId)) {
+  throw new Error(`coin checkout incorrectly depends on Stripe ${blockedPay.status} ${blockedPay.raw}`);
 }
-
 const coinWork = await creator.send("/api/products", {
   title: "虚拟币",
-  description: "稳定币支付",
+  description: "硬币支付",
   price: 4,
+  priceCurrency: "usd",
   kind: "文本",
   includes: ["短文"],
-  fileBody: "稳定币确认后才能看到的正文。",
+  fileBody: "硬币确认后才能看到的正文。",
 });
 const coinId = coinWork.data.products?.find((item: { title: string }) => item.title === "虚拟币")?.id as string;
-stripePaid = false;
-const cardSession = await readerNow.send("/api/checkout", { productId: coinId });
-const coinSession = await readerNow.send("/api/checkout", { pay: "crypto", productId: coinId });
-if (cardSession.status !== 200 || coinSession.status !== 200 || cardSession.data.sessionId === coinSession.data.sessionId) {
-  throw new Error(`crypto start ${cardSession.status} ${coinSession.status} ${coinSession.raw}`);
-}
-const reusedCoin = await readerNow.send("/api/checkout", { pay: "crypto", productId: coinId });
-if (reusedCoin.data.sessionId !== coinSession.data.sessionId) throw new Error(`crypto session was not reused ${reusedCoin.raw}`);
-stripePaid = true;
-stripeAmount = 400;
-const coinAsCard = await readerNow.send("/api/checkout/complete", { sessionId: coinSession.data.sessionId });
-if (coinAsCard.status !== 400 || coinAsCard.data.code !== "err.pay.amount") throw new Error(`crypto amount ${coinAsCard.status} ${coinAsCard.raw}`);
-stripeAmount = 56;
-const coinPaid = await readerNow.send("/api/checkout/complete", { sessionId: coinSession.data.sessionId });
-stripeAmount = null;
-const coinOrder = sql.get("SELECT amount, fee, currency FROM orders WHERE target_id = ? AND user_id = (SELECT id FROM users WHERE email = 'fan@example.com')", coinId);
+const coinBalanceBefore = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
+const coinPaid = await readerNow.send("/api/checkout", { pay: "coins", productId: coinId, idempotencyKey: `usd-work-${coinId}` });
+const coinOrder = sql.get("SELECT amount, fee, currency, fiat_amount, fiat_currency, coin_amount FROM orders WHERE target_id = ? AND user_id = (SELECT id FROM users WHERE email = 'fan@example.com')", coinId);
+const coinBalanceAfter = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
 if (
+  coinWork.status !== 200 ||
+  !coinId ||
   coinPaid.status !== 200 ||
   !coinPaid.data.user?.library?.some((item: { productId: string }) => item.productId === coinId) ||
-  Number(coinOrder?.amount) !== 4 ||
-  Number(coinOrder?.fee) !== 0.32 ||
-  coinOrder?.currency !== "cny"
+  Number(coinOrder?.fiat_amount) !== 4 ||
+  coinOrder?.fiat_currency !== "usd" ||
+  Number(coinOrder?.coin_amount) !== 4 ||
+  coinOrder?.currency !== "cny" ||
+  !(coinBalanceAfter < coinBalanceBefore)
+) throw new Error(`USD coin purchase ${coinPaid.status} ${coinPaid.raw} ${JSON.stringify(coinOrder)}`);
+const supportBalanceBefore = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
+const support = await readerNow.send("/api/support", { creatorId: "ashi", amount: 2, currency: "usd", idempotencyKey: "support-ashi-2-usd" });
+const supportBalanceAfter = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
+if (support.status !== 200 || !(supportBalanceAfter < supportBalanceBefore) || !sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", "support-ashi-2-usd")) {
+  throw new Error(`creator support ${support.status} ${support.raw}`);
+}
+const sso = await readerNow.send("/api/coin/sso", undefined, "GET");
+if (sso.status !== 302) {
+  throw new Error(`coin SSO ${sso.status} ${sso.raw}`);
+}
+const balanceRequest = { action: "balance", user_id: String(fanUser.data.user.id), ts: Date.now(), nonce: crypto.randomUUID() };
+const balanceRaw = JSON.stringify(balanceRequest);
+const balanceSignature = await signCoinRequest(balanceRaw);
+const balanceResponse = await readerNow.send("/api/coin/checkout", balanceRequest, "POST", { "x-coin-signature": balanceSignature });
+if (balanceResponse.status !== 200 || !balanceResponse.data.ok || typeof balanceResponse.data.balance !== "number") {
+  throw new Error(`signed balance API ${balanceResponse.status} ${balanceResponse.raw}`);
+}
+const topupRequest = { action: "checkout", user_id: String(fanUser.data.user.id), coins: 5, ts: Date.now(), nonce: crypto.randomUUID() };
+const topupSignature = await signCoinRequest(JSON.stringify(topupRequest));
+const topupStart = await readerNow.send("/api/coin/checkout", topupRequest, "POST", { "x-coin-signature": topupSignature });
+const topupBalanceBefore = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
+const topupReturn = topupStart.data.sessionId
+  ? await readerNow.send(`/api/coin/return?session_id=${encodeURIComponent(topupStart.data.sessionId)}`, undefined, "GET")
+  : { status: 0, raw: "missing topup session", data: {} };
+const topupBalanceAfter = Number((await readerNow.send("/api/state", undefined, "GET")).data.user?.coins ?? 0);
+if (
+  topupStart.status !== 200 ||
+  !topupStart.data.url ||
+  topupReturn.status !== 302 ||
+  topupBalanceAfter !== topupBalanceBefore + 5 ||
+  !sql.get("SELECT id FROM coin_transactions WHERE idempotency_key = ?", `stripe:${topupStart.data.sessionId}`)
 ) {
-  throw new Error(`crypto paid ${coinPaid.status} ${coinPaid.raw} ${JSON.stringify(coinOrder)}`);
+  throw new Error(`coin top-up ${topupStart.status} ${topupStart.raw} ${topupReturn.status} ${topupReturn.raw} ${topupBalanceBefore}->${topupBalanceAfter}`);
 }
-const tinyWork = await creator.send("/api/products", {
-  title: "一分钱",
-  description: "太小",
-  price: 1,
-  kind: "文本",
-  includes: ["短文"],
-  fileBody: "金额换算后不足五十美分。",
-});
-const tinyId = tinyWork.data.products?.find((item: { title: string }) => item.title === "一分钱")?.id as string;
-const tinyPay = await readerNow.send("/api/checkout", { pay: "crypto", productId: tinyId });
-rateDown = true;
-const ratePay = await readerNow.send("/api/checkout", { pay: "crypto", productId: coinId });
-rateDown = false;
-if (!tinyId || tinyPay.status !== 400 || tinyPay.data.code !== "err.pay.small" || ratePay.status !== 400 || ratePay.data.code !== "err.pay.crypto") {
-  throw new Error(`crypto limits ${tinyPay.status} ${tinyPay.raw} ${ratePay.status} ${ratePay.raw}`);
-}
-const stillCard = await readerNow.send("/api/checkout/complete", { sessionId: cardSession.data.sessionId });
-if (stillCard.status !== 200) throw new Error(`card after crypto ${stillCard.status} ${stillCard.raw}`);
 
 const scratch = await creator.send("/api/products", {
   title: "可删除",
@@ -963,147 +989,20 @@ const buyerFile = await readerNow.send(`/api/download?productId=${cardId}`, unde
 if (buyerFile.status !== 200 || !buyerFile.raw.includes("支付之后")) throw new Error(`buyer lost a deleted work ${buyerFile.status} ${buyerFile.raw}`);
 
 const hookWork = await creator.send("/api/products", {
-  title: "回调收款",
-  description: "支付回调",
+  title: "拒绝现金",
+  description: "只能硬币支付",
   price: 4,
   kind: "文本",
   includes: ["短文"],
-  fileBody: "回调确认后才能看到。",
+  fileBody: "现金流程不应解锁这份内容。",
 });
-const hookId = hookWork.data.products?.find((item: { title: string }) => item.title === "回调收款")?.id as string;
+const hookId = hookWork.data.products?.find((item: { title: string }) => item.title === "拒绝现金")?.id as string;
 const hookCart = await readerNow.send("/api/cart", { productId: hookId, op: "add" });
-stripePaid = false;
-const hookStart = await readerNow.send("/api/checkout", {});
-const hookPayload = JSON.stringify({
-  type: "checkout.session.completed",
-  data: { object: { id: hookStart.data.sessionId } },
-});
-async function signHook(payload: string) {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode("whsec_platform_check"),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${timestamp}.${payload}`));
-  const hex = [...new Uint8Array(mac)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  return `t=${timestamp},v1=${hex}`;
+const legacyCash = await readerNow.send("/api/checkout", { productId: hookId });
+const legacyComplete = await readerNow.send("/api/checkout/complete", { sessionId: "cs_legacy_cash" });
+if (hookWork.status !== 200 || hookCart.status !== 200 || legacyCash.data.code !== "err.pay.coinsOnly" || legacyComplete.data.code !== "err.pay.coinsOnly") {
+  throw new Error(`legacy cash bypass ${legacyCash.status} ${legacyCash.raw} ${legacyComplete.raw}`);
 }
-async function postHook(payload: string, signature: string) {
-  const response = await handleApp(
-    new Request("http://127.0.0.1/api/stripe/webhook", {
-      method: "POST",
-      headers: { "content-type": "application/json", "stripe-signature": signature },
-      body: payload,
-    }),
-    sql,
-    env,
-    limiter,
-    stripeFetch,
-  );
-  const raw = await response.text();
-  return { status: response.status, data: JSON.parse(raw) as { code?: string; received?: boolean }, raw };
-}
-const hookBad = await postHook(hookPayload, "t=1,v1=dead");
-const hookEarly = await postHook(hookPayload, await signHook(hookPayload));
-const earlyLibrary = await readerNow.send("/api/state", undefined, "GET");
-stripePaid = true;
-const hookDone = await postHook(hookPayload, await signHook(hookPayload));
-const hookLibrary = await readerNow.send("/api/state", undefined, "GET");
-const hookDesk = await creator.send("/api/desk", undefined, "GET");
-if (
-  hookWork.status !== 200 ||
-  !hookId ||
-  hookCart.status !== 200 ||
-  hookStart.status !== 200 ||
-  hookBad.status !== 400 ||
-  hookEarly.status !== 200 ||
-  hookEarly.data.received !== true ||
-  earlyLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === hookId) ||
-  hookDone.status !== 200 ||
-  !hookLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === hookId) ||
-  !hookDesk.data.orders?.some((order: { targetId: string; amount: number }) => order.targetId === hookId && order.amount === 4)
-) {
-  throw new Error(`webhook pay ${hookBad.status} ${hookEarly.status} ${hookDone.status} ${hookDone.raw} ${hookDesk.raw}`);
-}
-
-const asyncWork = await creator.send("/api/products", {
-  title: "异步收款",
-  description: "微信确认后入账",
-  price: 5,
-  kind: "文本",
-  includes: ["短文"],
-  fileBody: "异步支付确认后才能看到。",
-});
-const asyncId = asyncWork.data.products?.find((item: { title: string }) => item.title === "异步收款")?.id as string;
-const asyncCart = await readerNow.send("/api/cart", { productId: asyncId, op: "add" });
-stripePaid = false;
-const asyncStart = await readerNow.send("/api/checkout", {});
-const savedSecret = env.STRIPE_WEBHOOK_SECRET;
-delete env.STRIPE_WEBHOOK_SECRET;
-const asyncEventId = "evt_async_paid";
-stripeEvents.set(asyncEventId, {
-  id: asyncEventId,
-  type: "checkout.session.async_payment_succeeded",
-  data: { object: { id: asyncStart.data.sessionId } },
-});
-const asyncEarly = await postHook(
-  JSON.stringify({ id: asyncEventId, type: "checkout.session.async_payment_succeeded", data: { object: { id: asyncStart.data.sessionId } } }),
-  "",
-);
-const asyncEarlyLibrary = await readerNow.send("/api/state", undefined, "GET");
-stripePaid = true;
-const asyncDone = await postHook(
-  JSON.stringify({ id: asyncEventId, type: "checkout.session.async_payment_succeeded", data: { object: { id: asyncStart.data.sessionId } } }),
-  "",
-);
-const forged = await postHook(JSON.stringify({ id: "evt_missing", type: "checkout.session.completed", data: { object: { id: asyncStart.data.sessionId } } }), "");
-const asyncLibrary = await readerNow.send("/api/state", undefined, "GET");
-env.STRIPE_WEBHOOK_SECRET = savedSecret;
-const failWork = await creator.send("/api/products", {
-  title: "失败收款",
-  description: "失败不入账",
-  price: 5,
-  kind: "文本",
-  includes: ["短文"],
-  fileBody: "失败的支付不能看到。",
-});
-const failId = failWork.data.products?.find((item: { title: string }) => item.title === "失败收款")?.id as string;
-const failCart = await readerNow.send("/api/cart", { productId: failId, op: "add" });
-stripePaid = false;
-const failStart = await readerNow.send("/api/checkout", {});
-const failPayload = JSON.stringify({
-  type: "checkout.session.async_payment_failed",
-  data: { object: { id: failStart.data.sessionId } },
-});
-const failHook = await postHook(failPayload, await signHook(failPayload));
-const failLibrary = await readerNow.send("/api/state", undefined, "GET");
-const failAgain = await readerNow.send("/api/checkout", {});
-if (
-  asyncWork.status !== 200 ||
-  !asyncId ||
-  asyncCart.status !== 200 ||
-  asyncStart.status !== 200 ||
-  asyncEarly.status !== 200 ||
-  asyncEarlyLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === asyncId) ||
-  asyncDone.status !== 200 ||
-  forged.status !== 400 ||
-  !asyncLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === asyncId) ||
-  failWork.status !== 200 ||
-  !failId ||
-  failCart.status !== 200 ||
-  failStart.status !== 200 ||
-  failHook.status !== 200 ||
-  failLibrary.data.user?.library?.some((item: { productId: string }) => item.productId === failId) ||
-  failAgain.status !== 200 ||
-  failAgain.data.sessionId === failStart.data.sessionId
-) {
-  throw new Error(`async pay ${asyncEarly.status} ${asyncDone.status} ${forged.status} ${failHook.status} ${failAgain.raw}`);
-}
-
-stripePaid = true;
 const directWork = await creator.send("/api/products", {
   title: "卡片直购",
   description: "不经过购物袋",

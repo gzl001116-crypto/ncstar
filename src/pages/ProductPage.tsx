@@ -4,7 +4,7 @@ import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { isAbsolute, playHref, playPath } from "../site";
 import { useStore } from "../store";
-import { creatorShare, saveDownload, yuan } from "../utils";
+import { coinText, creatorShare, fiat, saveDownload } from "../utils";
 import { NotFound } from "./NotFound";
 
 function PlayLink({ id, className, children }: { id: string; className: string; children: string }) {
@@ -55,14 +55,14 @@ export function ProductPage() {
           </div>
         )}
         <h1>{product.title}</h1>
-        <p className="price price-lg">{yuan(product.price)}</p>
+        <p className="price price-lg">{fiat(product.price, product.priceCurrency)} · {coinText(product.coinPrice)}</p>
         {product.description && <p>{phrase(product.description)}</p>}
         <ul className="includes">
           {product.includes.map((item) => (
             <li key={item}>{phrase(item)}</li>
           ))}
         </ul>
-        <p className="fineprint">{t("product.share", { amount: yuan(creatorShare(product.price)) })}</p>
+        <p className="fineprint">{t("product.share", { amount: fiat(creatorShare(product.price), product.priceCurrency) })}</p>
         {product.listed && product.allowPreview && product.playFormat && !owned && !mine && (
           user ? (
             <PlayLink id={product.id} className="btn btn-line">{t("product.preview")}</PlayLink>

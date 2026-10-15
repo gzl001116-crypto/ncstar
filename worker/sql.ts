@@ -6,4 +6,5 @@ export type Sql = {
   run(sql: string, ...params: SqlValue[]): void;
   all(sql: string, ...params: SqlValue[]): Row[];
   get(sql: string, ...params: SqlValue[]): Row | undefined;
+  transaction<T>(fn: () => T): T;
 };

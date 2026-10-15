@@ -5,6 +5,7 @@ export { FanstarStore } from "./do.ts";
 
 export interface Env extends MailEnv {
   ASSETS: Fetcher;
+  COIN_SSO_SECRET?: string;
   FANSTAR: {
     idFromName(name: string): unknown;
     get(id: unknown): { fetch(request: Request): Promise<Response> };

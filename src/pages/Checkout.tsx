@@ -4,7 +4,7 @@ import { Cover, coverSrc } from "../components/Cover";
 import { useTitle } from "../hooks";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
-import { creatorShare, yuan } from "../utils";
+import { coinText, fiat } from "../utils";
 
 export function Checkout() {
   const { t, phrase, lang } = useI18n();
@@ -75,12 +75,12 @@ export function Checkout() {
     .filter((item): item is NonNullable<typeof item> => Boolean(item))
     .filter((item) => item.creatorId !== user.handle);
 
-  const total = tier ? tier.price : lines.reduce((sum, item) => sum + item.price, 0);
+  const totalCoins = tier ? tier.coinPrice ?? 0 : lines.reduce((sum, item) => sum + (item.coinPrice ?? 0), 0);
 
-  const pay = async (method?: "crypto") => {
+  const pay = async () => {
     setBusy(true);
     setError("");
-    const result = tier ? await checkoutTier(tier.id, lang, method) : direct ? await checkoutProduct(direct.id, lang, method) : await checkoutCart(lang, method);
+    const result = tier ? await checkoutTier(tier.id, lang) : direct ? await checkoutProduct(direct.id, lang) : await checkoutCart(lang);
     if (result.error) {
       setBusy(false);
       setError(result.error);
@@ -117,7 +117,8 @@ export function Checkout() {
               <p>{phrase(tier.blurb)}</p>
               <p className="muted">{existing ? t("checkout.renewNote") : t("checkout.freshNote")}</p>
             </div>
-            <span className="price">{yuan(tier.price)}</span>
+            <span className="price">{fiat(tier.price, tier.priceCurrency)}</span>
+            <span className="muted">{coinText(tier.coinPrice)}</span>
           </article>
         ) : lines.length === 0 ? (
           <div className="empty">
@@ -134,24 +135,23 @@ export function Checkout() {
                   {t("common.remove")}
                 </button>
               </div>
-              <span className="price">{yuan(product.price)}</span>
+              <span className="price">{fiat(product.price, product.priceCurrency)}</span>
+              <span className="muted">{coinText(product.coinPrice)}</span>
             </article>
           ))
         )}
       </div>
       <aside className="pay-card">
-        <h2>{t("checkout.due", { amount: yuan(total) })}</h2>
-        <p className="muted">{t("checkout.share", { amount: yuan(creatorShare(total)) })}</p>
+        <h2>应付硬币 / Coins due: {totalCoins.toFixed(2)} 🪙</h2>
+        <p className="muted">余额 / Balance: {(user.coins ?? 0).toFixed(2)} 🪙</p>
         {canceled && !error && <p className="banner-note">{t("checkout.canceled")}</p>}
         {sessionId && busy && <p className="muted">{t("checkout.returning")}</p>}
         {error && <p className="error">{error}</p>}
-        <button type="button" className="btn btn-dark btn-block" disabled={busy || (!tier && lines.length === 0)} onClick={() => void pay()}>
-          {busy ? t("common.wait") : t("checkout.confirm")}
+        <button type="button" className="btn btn-dark btn-block" disabled={busy || (!tier && lines.length === 0) || totalCoins <= 0 || (user.coins ?? 0) < totalCoins} onClick={() => void pay()}>
+          {busy ? t("common.wait") : "确认并支付硬币 / Pay with coins"}
         </button>
-        <button type="button" className="btn btn-line btn-block" disabled={busy || (!tier && lines.length === 0)} onClick={() => void pay("crypto")}>
-          {busy ? t("common.wait") : t("checkout.crypto")}
-        </button>
-        <p className="fineprint">{t("checkout.cryptoNote")}</p>
+        {(user.coins ?? 0) < totalCoins && <p className="muted">硬币余额不足，请先前往硬币中心充值。</p>}
+        <p className="fineprint">作品、会员及创作者支持均使用硬币支付。充值通过 Stripe 完成。</p>
       </aside>
     </div>
   );

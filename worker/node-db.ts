@@ -29,5 +29,10 @@ export function openSql(path = ".data/fanstar.sqlite"): Sql {
       const row = db.prepare(sql).get(...(params as SqlValue[]));
       return row ? ({ ...row } as Row) : undefined;
     },
+    transaction<T>(fn: () => T) {
+      db.exec("BEGIN IMMEDIATE");
+      try { const result = fn(); db.exec("COMMIT"); return result; }
+      catch (error) { db.exec("ROLLBACK"); throw error; }
+    },
   };
 }

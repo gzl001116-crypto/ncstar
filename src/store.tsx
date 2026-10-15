@@ -34,14 +34,15 @@ type StoreValue = {
   addComment: (postId: string, text: string) => Promise<string | null>;
   addToCart: (productId: string) => Promise<void>;
   removeFromCart: (productId: string) => Promise<void>;
-  checkoutCart: (locale: string, pay?: "crypto") => Promise<{ error: string | null; url?: string }>;
-  checkoutTier: (tierId: string, locale: string, pay?: "crypto") => Promise<{ error: string | null; url?: string }>;
+  checkoutCart: (locale: string) => Promise<{ error: string | null; url?: string }>;
+  checkoutTier: (tierId: string, locale: string) => Promise<{ error: string | null; url?: string }>;
   completeCheckout: (sessionId: string) => Promise<{ error: string | null; code?: string; name?: string }>;
   publishPost: (input: { title: string; excerpt: string; body: string; minRank: number }) => Promise<string | null>;
   publishProduct: (input: {
     title: string;
     description: string;
     price: number;
+    priceCurrency: string;
     kind: string;
     includes: string[];
     tags?: string;
@@ -65,9 +66,10 @@ type StoreValue = {
   removePlaylistItem: (playlistId: string, productId: string, trackIndex: number) => Promise<string | null>;
   changePassword: (input: { email?: string; code: string; token: string; expiresAt: number; password: string }) => Promise<string | null>;
   updateProfile: (input: { name: string; bio: string; location?: string; category?: Category; tags?: string }) => Promise<string | null>;
-  updateTier: (input: { id: string; name: string; price: number; blurb: string; perks: string[] }) => Promise<string | null>;
+  updateTier: (input: { id: string; name: string; price: number; priceCurrency: string; blurb: string; perks: string[] }) => Promise<string | null>;
   openStudio: (input: { handle: string; category: string; location: string; bio: string }) => Promise<string | null>;
-  checkoutProduct: (productId: string, locale: string, pay?: "crypto") => Promise<{ error: string | null; url?: string }>;
+  checkoutProduct: (productId: string, locale: string) => Promise<{ error: string | null; url?: string }>;
+  supportCreator: (input: { creatorId: string; amount: number; currency: string }) => Promise<string | null>;
   savePayout: (input: { country: string; holder: string; accountNumber: string; routing?: string; bankCode?: string; branchCode?: string; transit?: string; institution?: string }) => Promise<{ error: string | null; method?: string }>;
   uploadAvatar: (file: File) => Promise<string | null>;
   deleteAccount: (password: string) => Promise<string | null>;
@@ -78,6 +80,7 @@ type StoreValue = {
     title: string;
     description: string;
     price: number;
+    priceCurrency: string;
     kind: string;
     includes: string[];
     tags: string;
@@ -107,6 +110,8 @@ type StoreValue = {
 
 const empty: Catalog = { creators: [], posts: [], products: [], tiers: [], comments: [], user: null };
 const StoreContext = createContext<StoreValue | null>(null);
+const checkoutKeys = new Map<string, string>();
+const supportKeys = new Map<string, string>();
 
 async function call(path: string, body?: unknown) {
   const response = await fetch(path, {
@@ -244,10 +249,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return Boolean(tier && tier.rank >= post.minRank);
   };
 
-  const startCheckout = async (body: { tierId?: string; productId?: string; locale: string; pay?: "crypto" }) => {
+  const startCheckout = async (body: { tierId?: string; productId?: string; locale: string }) => {
+    const intent = body.tierId ? `tier:${body.tierId}` : body.productId ? `product:${body.productId}` : "cart";
+    const idempotencyKey = checkoutKeys.get(intent) ?? crypto.randomUUID();
+    checkoutKeys.set(intent, idempotencyKey);
     try {
-      const { response, data } = await call("/api/checkout", body);
+      const { response, data } = await call("/api/checkout", { ...body, pay: "coins", idempotencyKey });
       if (!response.ok) return { error: say(data.code, data.name, data.error) };
+      checkoutKeys.delete(intent);
       if (data.url) return { error: null, url: data.url };
       apply(data);
       return { error: null };
@@ -287,9 +296,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     removeFromCart: async (productId) => {
       await mutate("/api/cart", { productId, op: "remove" });
     },
-    checkoutCart: (locale, pay) => startCheckout({ locale, pay }),
-    checkoutTier: (tierId, locale, pay) => startCheckout({ tierId, locale, pay }),
-    checkoutProduct: (productId, locale, pay) => startCheckout({ productId, locale, pay }),
+    checkoutCart: (locale) => startCheckout({ locale }),
+    checkoutTier: (tierId, locale) => startCheckout({ tierId, locale }),
+    checkoutProduct: (productId, locale) => startCheckout({ productId, locale }),
     savePayout: async (input) => {
       try {
         const { response, data } = await call("/api/payout/method", input);
@@ -317,6 +326,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       form.set("title", input.title);
       form.set("description", input.description);
       form.set("price", String(input.price));
+      form.set("priceCurrency", input.priceCurrency);
       form.set("kind", input.kind);
       form.set("includes", input.includes.join(","));
       form.set("tags", input.tags ?? "");
@@ -361,6 +371,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       mutate("/api/play", { op: "playlist-remove", playlistId, productId, trackIndex }),
     changePassword: (input) => mutate("/api/password", input),
     updateProfile: (input) => mutate("/api/profile", input),
+    supportCreator: async (input) => {
+      const intent = `${input.creatorId}:${input.currency}:${input.amount.toFixed(2)}`;
+      const idempotencyKey = supportKeys.get(intent) ?? crypto.randomUUID();
+      supportKeys.set(intent, idempotencyKey);
+      const error = await mutate("/api/support", { ...input, idempotencyKey });
+      if (!error) supportKeys.delete(intent);
+      return error;
+    },
     updateTier: async (input) => {
       const error = await mutate("/api/tiers", input);
       if (!error) await loadDesk();
@@ -389,6 +407,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       form.set("title", input.title);
       form.set("description", input.description);
       form.set("price", String(input.price));
+      form.set("priceCurrency", input.priceCurrency);
       form.set("kind", input.kind);
       form.set("includes", input.includes.join(","));
       form.set("tags", input.tags);
