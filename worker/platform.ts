@@ -1151,7 +1151,6 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
   if (response) return response;
   const mine = sql.get("SELECT * FROM users WHERE id = ?", viewer);
   if (!mine) return fail("err.loginRequired", 401);
-  if (!stripeKey(env)) return fail("err.pay.unconfigured");
   const tierId = textOf(body.tierId, 80);
   const directId = textOf(body.productId, 80);
   let payload: PayPayload;
@@ -1162,7 +1161,7 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
     if (String(product.creator_id) === String(mine.handle)) return fail("err.product.self");
     payload = {
       kind: "product",
-      items: [{ id: String(product.id), price: Number(product.price), title: String(product.title), creatorId: String(product.creator_id) }],
+      items: [{ id: String(product.id), price: Number(product.price), priceCurrency: String(product.price_currency ?? "cny").toLowerCase(), title: String(product.title), creatorId: String(product.creator_id) }],
     };
     cancelPath = `/c/${encodeURIComponent(String(product.creator_id))}/shop/${encodeURIComponent(String(product.id))}?pay=cancel`;
   } else if (tierId) {
@@ -1174,6 +1173,7 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
       tierId: String(tier.id),
       creatorId: String(tier.creator_id),
       price: Number(tier.price),
+      priceCurrency: String(tier.price_currency ?? "cny").toLowerCase(),
       title: String(tier.name),
     };
     cancelPath = `/checkout?tier=${encodeURIComponent(String(tier.id))}&pay=cancel`;
@@ -1190,9 +1190,15 @@ async function checkout(sql: Sql, request: Request, body: Record<string, unknown
     if (payable.length === 0) return fail("err.cart.empty");
     payload = {
       kind: "product",
-      items: payable.map((item) => ({ id: String(item.id), price: Number(item.price), title: String(item.title), creatorId: String(item.creator_id) })),
+      items: payable.map((item) => ({ id: String(item.id), price: Number(item.price), priceCurrency: String(item.price_currency ?? "cny").toLowerCase(), title: String(item.title), creatorId: String(item.creator_id) })),
     };
   }
+  if (body.pay !== "coins") return fail("err.pay.coinsOnly");
+  const idempotencyKey = textOf(body.idempotencyKey, 120);
+  const rates = await loadFxRates(fetchImpl);
+  if (!rates) return fail("err.pay.fx");
+  return coinCheckout(sql, viewer, payload, idempotencyKey, rates);
+
   const serialized = JSON.stringify(payload);
   const amount = payload.kind === "membership" ? payload.price : payload.items.reduce((sum, item) => sum + item.price, 0);
   const crypto = body.pay === "crypto";
@@ -2408,6 +2414,7 @@ export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter
   if (url.pathname === "/api/like") return like(sql, request, body);
   if (url.pathname === "/api/comments") return comment(sql, request, body);
   if (url.pathname === "/api/cart") return cart(sql, request, body);
+  if (url.pathname === "/api/support") return creatorSupport(sql, request, body, stripeFetch);
   if (url.pathname === "/api/checkout") return checkout(sql, request, body, env, stripeFetch);
   if (url.pathname === "/api/checkout/complete") return completeCheckout(sql, request, body, env, stripeFetch);
   if (url.pathname === "/api/product/delete") return deleteProduct(sql, request, body);
