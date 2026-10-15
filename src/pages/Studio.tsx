@@ -6,7 +6,7 @@ import { PasswordForm } from "./Password";
 import { useI18n } from "../i18n";
 import { useStore } from "../store";
 import { CATEGORIES, type Category, type Product } from "../types";
-import { formatDate, utcStamp, yuan } from "../utils";
+import { coinText, creatorShare, fiat, formatDate, utcStamp, yuan } from "../utils";
 
 const KINDS = ["数字作品", "插画", "音乐", "设计", "摄影", "写作", "图案"] as const;
 const MAX_FILE = 8 * 1024 * 1024;
