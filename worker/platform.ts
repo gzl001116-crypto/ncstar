@@ -5,6 +5,39 @@ import type { Row, Sql, SqlValue } from "./sql.ts";
 import { CRYPTO_MAX_MINOR, CRYPTO_MIN_MINOR, quoteCnyPerUsd, sessionFields, signatureMatches, splitUsdMinors, stripeForm, stripeGet, stripeKey, stripeRequest, stripeSend, usdMinorUnits, webhookSecret, type PayEnv, type StripeSession } from "./stripe.ts";
 
 const COOKIE = "fanstar_session";
+const SUPPORTED_FIAT = new Set(["usd", "cny", "gbp", "eur", "jpy", "hkd", "sgd", "cad", "aud"]);
+let fxRatesCache: { at: number; rates: Record<string, number> } | undefined;
+
+async function loadFxRates(fetchImpl: typeof fetch): Promise<Record<string, number> | undefined> {
+  if (fxRatesCache && Date.now() - fxRatesCache.at < 5 * 60 * 1000) return fxRatesCache.rates;
+  try {
+    const response = await fetchImpl("https://open.er-api.com/v6/latest/USD", { headers: { accept: "application/json" } });
+    if (!response.ok) return undefined;
+    const data = (await response.json()) as { result?: string; rates?: Record<string, number> };
+    if (data.result !== "success" || !data.rates || !SUPPORTED_FIAT.has("usd")) return undefined;
+    const rates: Record<string, number> = { USD: 1 };
+    for (const currency of SUPPORTED_FIAT) {
+      const rate = currency === "usd" ? 1 : Number(data.rates[currency.toUpperCase()]);
+      if (!Number.isFinite(rate) || rate <= 0) return undefined;
+      rates[currency.toUpperCase()] = rate;
+    }
+    fxRatesCache = { at: Date.now(), rates };
+    return rates;
+  } catch {
+    return undefined;
+  }
+}
+
+function currencyOf(value: unknown, fallback = "cny") {
+  const currency = String(value ?? fallback).trim().toLowerCase();
+  return SUPPORTED_FIAT.has(currency) ? currency : "";
+}
+
+function coinValue(amount: number, currency: string, rates: Record<string, number>) {
+  const rate = rates[currency.toUpperCase()];
+  if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(rate) || rate <= 0) return 0;
+  return Math.round((amount / rate) * 100) / 100;
+}
 const SESSION_MS = 30 * 24 * 60 * 60 * 1000;
 const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -558,7 +591,7 @@ function canRead(sql: Sql, viewer: string, creatorId: string, minRank: number, v
   return Number(row.rank) >= minRank;
 }
 
-function snapshot(sql: Sql, viewer: string) {
+function snapshot(sql: Sql, viewer: string, rates?: Record<string, number>) {
   const viewerRow = viewer ? sql.get("SELECT * FROM users WHERE id = ?", viewer) : undefined;
   const viewerHandle = viewerRow ? String(viewerRow.handle) : "";
   const avatarByHandle = new Map(
@@ -623,6 +656,7 @@ function snapshot(sql: Sql, viewer: string) {
     description: String(row.description),
     price: Number(row.price),
     priceCurrency: String(row.price_currency ?? "cny").toLowerCase(),
+    coinPrice: rates ? coinValue(Number(row.price), String(row.price_currency ?? "cny").toLowerCase(), rates) : undefined,
     kind: String(row.kind),
     includes: JSON.parse(String(row.includes)) as string[],
     coverKey: String(row.cover_key),
@@ -643,6 +677,7 @@ function snapshot(sql: Sql, viewer: string) {
     name: String(row.name),
     price: Number(row.price),
     priceCurrency: String(row.price_currency ?? "cny").toLowerCase(),
+    coinPrice: rates ? coinValue(Number(row.price), String(row.price_currency ?? "cny").toLowerCase(), rates) : undefined,
     rank: Number(row.rank),
     blurb: String(row.blurb),
     perks: JSON.parse(String(row.perks)) as string[],
@@ -1172,6 +1207,7 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
   if (Array.from(title).length < 2) return fail("err.product.title");
   if (fileBody.length < 8) return fail("err.file");
   if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
+  if (!priceCurrency) return fail("err.price.currency");
   if (playFormat && !isPlayFormat(playFormat)) return fail("err.play.format");
   const parsed = parsePlay(playFormat, playSource);
   if (!parsed.ok) return fail(parsed.code);
@@ -1190,12 +1226,13 @@ function publishProduct(sql: Sql, request: Request, body: Record<string, unknown
     }
   }
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, price_currency, kind, includes, cover_key, file_body, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     id(),
     String(mine.handle),
     title,
     description,
     Math.round(price * 100) / 100,
+    priceCurrency,
     kind,
     JSON.stringify(includes.length ? includes : [fileName(title)]),
     id(),
@@ -1227,6 +1264,7 @@ async function publishUpload(sql: Sql, request: Request) {
   const title = textOf(form.get("title"), 80);
   const description = textOf(form.get("description"), 2000);
   const price = Number(form.get("price"));
+  const priceCurrency = currencyOf(form.get("priceCurrency"));
   const kind = textOf(form.get("kind"), 40) || "数字作品";
   const includes = textOf(form.get("includes"), 400)
     .split(/[,，]/)
@@ -1239,6 +1277,7 @@ async function publishUpload(sql: Sql, request: Request) {
   if (uploaded.size > MAX_UPLOAD) return fail("err.file.size");
   if (Array.from(title).length < 2) return fail("err.product.title");
   if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
+  if (!priceCurrency) return fail("err.price.currency");
   const workTags = parseWorkTags(form.get("tags"));
   if (!workTags.ok) return fail(workTags.code);
   const chosen = chosenAccess(form);
@@ -1263,12 +1302,13 @@ async function publishUpload(sql: Sql, request: Request) {
     if (!coverType) return fail("err.cover.type");
   }
   sql.run(
-    "INSERT INTO products (id, creator_id, title, description, price, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO products (id, creator_id, title, description, price, price_currency, kind, includes, cover_key, file_body, file_name, file_type, play_format, play_body, tags, allow_play, allow_download, allow_preview, preview_mode, preview_limit, preview_body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     productId,
     String(mine.handle),
     title,
     description,
     Math.round(price * 100) / 100,
+    priceCurrency,
     kind,
     JSON.stringify(includes.length ? includes : [filename]),
     id(),
@@ -1313,6 +1353,7 @@ async function updateProduct(sql: Sql, request: Request) {
   const title = textOf(form.get("title"), 80);
   const description = textOf(form.get("description"), 2000);
   const price = Number(form.get("price"));
+  const priceCurrency = currencyOf(form.get("priceCurrency"), String(product.price_currency ?? "cny"));
   const kind = textOf(form.get("kind"), 40) || String(product.kind);
   const includes = textOf(form.get("includes"), 400)
     .split(/[,，]/)
@@ -1321,6 +1362,7 @@ async function updateProduct(sql: Sql, request: Request) {
     .slice(0, 8);
   if (Array.from(title).length < 2) return fail("err.product.title");
   if (!Number.isFinite(price) || price < 1 || price > 9999) return fail("err.price");
+  if (!priceCurrency) return fail("err.price.currency");
   const workTags = parseWorkTags(form.get("tags"));
   if (!workTags.ok) return fail(workTags.code);
   const chosen = chosenAccess(form);
@@ -1381,10 +1423,11 @@ async function updateProduct(sql: Sql, request: Request) {
     coverAt = new Date().toISOString();
   }
   sql.run(
-    `UPDATE products SET title = ?, description = ?, price = ?, kind = ?, includes = ?, tags = ?, file_body = ?, file_name = ?, file_type = ?, play_format = ?, play_body = ?, allow_play = ?, allow_download = ?, allow_preview = ?, preview_mode = ?, preview_limit = ?, preview_body = ?, listed = ?, cover_body = ?, cover_type = ?, cover_at = ? WHERE id = ?`,
+    `UPDATE products SET title = ?, description = ?, price = ?, price_currency = ?, kind = ?, includes = ?, tags = ?, file_body = ?, file_name = ?, file_type = ?, play_format = ?, play_body = ?, allow_play = ?, allow_download = ?, allow_preview = ?, preview_mode = ?, preview_limit = ?, preview_body = ?, listed = ?, cover_body = ?, cover_type = ?, cover_at = ? WHERE id = ?`,
     title,
     description,
     Math.round(price * 100) / 100,
+    priceCurrency,
     kind,
     JSON.stringify(includes.length ? includes : [fileNameStored || fileName(title)]),
     JSON.stringify(workTags.tags),
@@ -1538,16 +1581,19 @@ function updateTier(sql: Sql, request: Request, body: Record<string, unknown>) {
   const name = textOf(body.name, 40);
   const blurb = textOf(body.blurb, 400);
   const price = Number(body.price);
+  const priceCurrency = currencyOf(body.priceCurrency, String(tier.price_currency ?? "cny"));
   const perks = (Array.isArray(body.perks) ? body.perks : [])
     .map((item) => textOf(item, 40))
     .filter(Boolean)
     .slice(0, 8);
   if (name.length < 2) return fail("err.title");
   if (!Number.isFinite(price) || price <= 0 || price > 9999) return fail("err.price");
+  if (!priceCurrency) return fail("err.price.currency");
   sql.run(
-    "UPDATE tiers SET name = ?, price = ?, blurb = ?, perks = ? WHERE id = ?",
+    "UPDATE tiers SET name = ?, price = ?, price_currency = ?, blurb = ?, perks = ? WHERE id = ?",
     name,
     Math.round(price * 100) / 100,
+    priceCurrency,
     blurb,
     JSON.stringify(perks),
     String(tier.id),
@@ -2214,7 +2260,7 @@ function playWrite(sql: Sql, request: Request, body: Record<string, unknown>) {
 export async function handleApp(request: Request, sql: Sql, env: PayEnv, limiter: Limiter, stripeFetch: typeof fetch = fetch): Promise<Response> {
   ensureSchema(sql);
   const url = new URL(request.url);
-  if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request)));
+  if (request.method === "GET" && url.pathname === "/api/state") return json(snapshot(sql, userId(sql, request), await loadFxRates(stripeFetch)));
   if (request.method === "GET" && url.pathname === "/api/download") return download(sql, request);
   if (request.method === "GET" && url.pathname === "/api/media") return media(sql, request);
   if (request.method === "GET" && url.pathname === "/api/play") return playRead(sql, request);
