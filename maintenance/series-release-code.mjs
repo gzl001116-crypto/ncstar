@@ -1,8 +1,8 @@
 import {readFileSync,writeFileSync} from 'node:fs';
-import {applySeriesUpdate} from './apply-series-update.mjs';
+import {applySeriesUpdate,applyDashboardNavLabel} from './apply-series-update.mjs';
 // Generates a Cloudflare execute body containing only public maintenance code.
 // The live module, private playback assets, settings and credentials never leave Cloudflare.
-export function seriesReleaseCode({indexHash,uiHash,nextIndexHash,appPath,cssPath,dryRun=true}) {
+export function seriesReleaseCode({indexHash,uiHash,nextIndexHash,appPath,cssPath,dryRun=true,navOnly=false}) {
   const source={};for(const [key,file]of Object.entries({server:'series-server.js',ui:'series-ui.js',css:'series.css'}))source[key]=readFileSync(new URL(file,import.meta.url),'utf8');
   return `async () => {
     const fingerprint=value=>{let h=2166136261;for(let i=0;i<value.length;i++)h=Math.imul(h^value.charCodeAt(i),16777619);return(h>>>0).toString(16);};
@@ -11,7 +11,7 @@ export function seriesReleaseCode({indexHash,uiHash,nextIndexHash,appPath,cssPat
     const raw=downloaded.result,boundary=raw.slice(0,raw.indexOf('\\r\\n')),modules={};
     for(const part of raw.split(boundary).slice(1,-1)){const at=part.indexOf('\\r\\n\\r\\n'),name=part.slice(0,at).match(/name="([^"]+)"/)?.[1];modules[name]=part.slice(at+4).replace(/\\r\\n$/,'');}
     if(fingerprint(modules['index.js'])!==${JSON.stringify(indexHash)}||fingerprint(modules['ui-assets-v6.js'])!==${JSON.stringify(uiHash)})throw Error('Production changed since validation; refusing overwrite');
-    const output=(${applySeriesUpdate.toString()})(modules['index.js'],modules['ui-assets-v6.js'],${JSON.stringify(source)});
+    const output=(${(navOnly?applyDashboardNavLabel:applySeriesUpdate).toString()})(modules['index.js'],modules['ui-assets-v6.js'],${JSON.stringify(navOnly?{}:source)});
     if(fingerprint(output.index)!==${JSON.stringify(nextIndexHash)}||output.appPath!==${JSON.stringify(appPath)}||output.cssPath!==${JSON.stringify(cssPath)})throw Error('Live transform differs from validated output');
     const summary={indexHash:fingerprint(output.index),uiHash:fingerprint(output.uiModule),appPath:output.appPath,cssPath:output.cssPath};
     if(${JSON.stringify(dryRun)})return{dryRun:true,...summary};
