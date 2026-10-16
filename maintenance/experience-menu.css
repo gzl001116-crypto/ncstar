@@ -1,0 +1,1 @@
+.account .menu-pop{max-height:calc(100svh - 100px);overflow-y:auto;overscroll-behavior:contain}@media(max-width:760px){.studio-publish-card input:not([type=checkbox]):not([type=radio]):not([type=range]),.studio-publish-card textarea,.studio-publish-card select,.catalog-header-search input{font-size:16px!important}.account .menu-pop{max-height:calc(100svh - 170px)}}
