@@ -40,10 +40,25 @@ export function applySeriesUpdate(index,uiModule,source) {
   app=once(app,'children:d?.name||a.creatorId}),n.jsxs("div",{className:"tw-work-card-bottom"','children:d?.name||a.creatorId}),n.jsx(FanstarSeriesBadge,{product:a}),n.jsxs("div",{className:"tw-work-card-bottom"');
   app=once(app,'n.jsx("h1",{children:f.title}),n.jsx(Zd,{product:f})','n.jsx("h1",{children:f.title}),n.jsx(FanstarSeriesBadge,{product:f}),n.jsx(Zd,{product:f})');
   app=once(app,'n.jsx(By,{product:f}),n.jsx(rg,{product:f})','n.jsx(By,{product:f}),n.jsx(FanstarSeriesContents,{product:f}),n.jsx(rg,{product:f})');
+  app=once(app,JSON.stringify('工作台概览').replace('工作台概览','\\u5DE5\\u4F5C\\u53F0\\u6982\\u89C8'),JSON.stringify('仪表盘'));
   app+='\n'+source.ui;
   const css=assets[cssPath].body+'\n'+source.css,nextApp='/api/ui/app-'+hash(app)+'.mjs',nextCss='/api/ui/style-'+hash(css)+'.css';
   for(const path of Object.keys(assets)){if(/^\/api\/ui\/app-[a-f0-9]+\.mjs$/.test(path)&&path!==appPath)delete assets[path];if(/^\/api\/ui\/style-[a-f0-9]+\.css$/.test(path)&&path!==cssPath)delete assets[path];}
   assets[nextApp]={...assets[appPath],body:app};assets[nextCss]={...assets[cssPath],body:css};
   uiModule=uiModule.slice(0,begin)+JSON.stringify(assets)+uiModule.slice(end);uiModule=uiModule.replace(appMatch[0],'export const UI_APP_PATH='+JSON.stringify(nextApp)+';').replace(cssMatch[0],'export const UI_CSS_PATH='+JSON.stringify(nextCss)+';');
   return{index,uiModule,app,appPath:nextApp,cssPath:nextCss};
+}
+
+// A guarded reconciliation for the sidebar label discovered during live UI QA.
+export function applyDashboardNavLabel(index,uiModule) {
+  const hash=value=>{let h=2166136261;for(let i=0;i<value.length;i++)h=Math.imul(h^value.charCodeAt(i),16777619);return(h>>>0).toString(16);};
+  const match=uiModule.match(/export const UI_APP_PATH=("[^"\n]+");/),css=uiModule.match(/export const UI_CSS_PATH=("[^"\n]+");/),marker='export const UI_ASSETS=',begin=uiModule.indexOf(marker)+marker.length,end=uiModule.lastIndexOf('};')+1;
+  if(!match||!css||begin<marker.length||end<begin)throw Error('Embedded UI module changed');
+  const assets=JSON.parse(uiModule.slice(begin,end)),oldPath=JSON.parse(match[1]),before=JSON.stringify('工作台概览').replace('工作台概览','\\u5DE5\\u4F5C\\u53F0\\u6982\\u89C8'),body=assets[oldPath].body;
+  if(body.split(before).length!==2)throw Error('Sidebar label changed');
+  const app=body.replace(before,JSON.stringify('仪表盘')),appPath='/api/ui/app-'+hash(app)+'.mjs';
+  for(const path of Object.keys(assets))if(/^\/api\/ui\/app-[a-f0-9]+\.mjs$/.test(path)&&path!==oldPath)delete assets[path];
+  assets[appPath]={...assets[oldPath],body:app};
+  uiModule=uiModule.slice(0,begin)+JSON.stringify(assets)+uiModule.slice(end);uiModule=uiModule.replace(match[0],'export const UI_APP_PATH='+JSON.stringify(appPath)+';');
+  return{index,uiModule,app,appPath,cssPath:JSON.parse(css[1])};
 }
