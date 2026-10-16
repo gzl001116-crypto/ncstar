@@ -30,4 +30,5 @@ tree=ui.render();let field=nodes(tree).find(item=>item.type?.name==='FanstarSeri
 field.props.onChange('seriesId','__new');field.props.onChange('seriesTitle','');tree=ui.render();await nodes(tree).find(item=>item.type==='form').props.onSubmit({preventDefault(){}});tree=ui.render();check(saved.length,0);check(nodes(tree).some(item=>item.props?.role==='alert'&&item.props.children==='系列名称至少填写 2 个字。'),true);
 field=nodes(tree).find(item=>item.type?.name==='FanstarSeriesField');field.props.onChange('seriesTitle','新的系列');field.props.onChange('seriesOrder','2');tree=ui.render();await nodes(tree).find(item=>item.type==='form').props.onSubmit({preventDefault(){}});check(saved.length,1);check(saved[0].seriesId,'__new');check(saved[0].seriesTitle,'新的系列');check(saved[0].seriesOrder,'2');check(saved[0].price,.75);check(saved[0].productId,'first');
 check(app.split('fanstarSeriesForm(g,w),').length,3);check(app.includes('["series","系列作品"]'),true);
+check(app.includes('const np=[["/studio","仪表盘"]'),true);
 console.log(checks+' series selector, editor, save payload, ordering, visibility and navigation checks passed');
