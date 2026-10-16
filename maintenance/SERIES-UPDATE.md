@@ -16,6 +16,8 @@ The repository's main application source predates the currently deployed uploade
 
 Base production fingerprints (UTF-16 FNV-1a): `index.js=14c1601b`, `ui-assets-v6.js=c238fc7c`. The release generator refuses a different base or a transformed main/UI asset path that differs from the locally validated output. Dry run is the default; setting `dryRun:false` generates an executable deployment body for the connected Cloudflare API. Native upload inherits existing bindings, secrets, assets and the Durable Object namespace.
 
+Live UI QA also found a residual **工作台概览** sidebar label. The final transform changes it to **仪表盘**. Production was reconciled with the guarded `navOnly` release mode, based on intermediate fingerprints `bd4e13e6` / `c198979e`. Final fingerprints: main `bd4e13e6`, UI module `38fc3250`; public app `/api/ui/app-84ccf3bb.mjs`, CSS `/api/ui/style-6634f7d0.css`. The series selector and empty collection page were verified in the signed-in browser without publishing synthetic content.
+
 ## Verification
 
 Generate a test fixture by applying `applySeriesUpdate` to the exact base Worker and an embedded UI fixture containing the live public app/CSS. Stub the UI import and export `handleApp`, `ensureSchema`, `snapshot`, `communityTables`, money helpers and `setTestRates` for local SQLite execution. Do not run fixture writes against production.
