@@ -1,0 +1,9 @@
+const RICH_REGION_CURRENCY = Object.fromEntries(Object.entries({
+ USD:'US PR GU VI EC SV PA TL FM MH PW',EUR:'AT BE CY DE EE ES FI FR GR HR IE IT LT LU LV MT NL PT SI SK AD MC SM VA BG',CNY:'CN',TWD:'TW',HKD:'HK',MOP:'MO',JPY:'JP',KRW:'KR',GBP:'GB GG IM JE',CHF:'CH LI',CAD:'CA',AUD:'AU CX CC KI NR TV',NZD:'NZ CK NU TK',SGD:'SG',MYR:'MY',THB:'TH',VND:'VN',IDR:'ID',PHP:'PH',INR:'IN',PKR:'PK',BDT:'BD',LKR:'LK',NPR:'NP',MMK:'MM',KHR:'KH',LAK:'LA',BND:'BN',MNT:'MN',BTN:'BT',MVR:'MV',AED:'AE',SAR:'SA',QAR:'QA',KWD:'KW',BHD:'BH',OMR:'OM',ILS:'IL PS',JOD:'JO',LBP:'LB',IQD:'IQ',IRR:'IR',YER:'YE',TRY:'TR',RUB:'RU',UAH:'UA',PLN:'PL',CZK:'CZ',HUF:'HU',RON:'RO',SEK:'SE',NOK:'NO SJ',DKK:'DK GL FO',ISK:'IS',RSD:'RS',ALL:'AL',BAM:'BA',MKD:'MK',MDL:'MD',GEL:'GE',AMD:'AM',AZN:'AZ',KZT:'KZ',UZS:'UZ',KGS:'KG',TJS:'TJ',TMT:'TM',BYN:'BY',BRL:'BR',MXN:'MX',ARS:'AR',CLP:'CL',COP:'CO',PEN:'PE',UYU:'UY',PYG:'PY',BOB:'BO',VES:'VE',CRC:'CR',GTQ:'GT',HNL:'HN',NIO:'NI',DOP:'DO',JMD:'JM',TTD:'TT',BBD:'BB',BSD:'BS',BZD:'BZ',XCD:'AG DM GD KN LC VC AI MS',HTG:'HT',GYD:'GY',SRD:'SR',ZAR:'ZA LS NA',EGP:'EG',MAD:'MA EH',DZD:'DZ',TND:'TN',LYD:'LY',NGN:'NG',GHS:'GH',KES:'KE',TZS:'TZ',UGX:'UG',RWF:'RW',ETB:'ET',XOF:'BJ BF CI GW ML NE SN TG',XAF:'CM CF TD CG GQ GA',MUR:'MU',SCR:'SC',MGA:'MG',MZN:'MZ',ZMW:'ZM',BWP:'BW',AOA:'AO',MWK:'MW',SZL:'SZ',SLE:'SL',GMD:'GM',GNF:'GN',LRD:'LR',SHP:'SH',SOS:'SO',DJF:'DJ',CDF:'CD',BIF:'BI',SDG:'SD',SSP:'SS',ERN:'ER',CVE:'CV',STN:'ST',FJD:'FJ',PGK:'PG',WST:'WS',TOP:'TO',VUV:'VU',SBD:'SB',XPF:'PF NC WF',AFN:'AF'
+}).flatMap(([currency,regions])=>regions.split(' ').map(region=>[region,currency])));
+function richLanguageRegion(languages) {
+  for(const language of languages||[]) {
+    try {const region=new Intl.Locale(String(language).replace(/_/g,'-')).region;if(region&&RICH_REGION_CURRENCY[region])return region;}catch{}
+  }
+  return '';
+}
