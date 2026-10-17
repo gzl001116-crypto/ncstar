@@ -1,0 +1,13 @@
+# Mobile header visibility and overlapping controls — October 17, 2026
+
+The previous mobile styles hid the header search form. Broad `account-btn span` rules also hid the initial-based fallback avatar when no uploaded avatar was available. Fixed bottom navigation reserved space only after the entire footer, while toasts and upload status remained anchored at the same bottom edge.
+
+This update keeps the brand/account controls on the first header row and shows the full search form on its own second row below 761 px. The account name has its own class; both image and fallback avatars have explicit visible styles and the button has an accessible account-menu label. The mobile header scrolls with the document to preserve usable content space. Expanded menus scroll within the available height; the duplicate search form in the auxiliary menu is hidden.
+
+The dock height is measured with ResizeObserver and shared through a CSS variable. Main content, footer, reading controls, toast messages, upload status and account menus reserve or offset that measured space, including the safe-area inset. Text-entry keyboard detection hides the dock while the viewport is substantially reduced, preserves the pre-keyboard height when switching fields, and restores navigation afterward. Subscriptions and scheduled frames are cleaned up on unmount.
+
+Mobile card titles and actions use separate rows to avoid squeezing titles out of narrow cards. Product details use one column, private conversation headings no longer stick over the thread, and file links, comments, composer actions and creator buttons wrap within the page width. Desktop rules remain unchanged except for the accessible account label and explicit username class.
+
+Validation: app and release-generator syntax checks; 34 existing experience UI checks; 15 viewport/dock/keyboard/cleanup checks. The live served app and CSS matched the validated bytes. The live signed-in desktop page loaded the new assets, avatar and search form. The available browser viewport was 1363 px wide; a phone viewport/physical device was not visually exercised, so no claim of visual phone testing is made. No messages, uploads, purchases or account changes were submitted.
+
+Guarded release: main remains deeb0be7; UI bbedaf7f → 21f07655. App `/api/ui/app-5133387.mjs`; CSS `/api/ui/style-a1225111.css`. Use `apply-mobile-layout.mjs` through `mobile-layout-release-code.mjs`, which defaults to dry run and refuses unexpected source fingerprints or output paths. Settings, bindings, static assets and private playback modules remain inside Cloudflare. Do not deploy the stale ordinary repository build or commit private live modules.
