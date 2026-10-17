@@ -4,6 +4,7 @@ function editFunction(text,name,edit){const a=text.indexOf('function '+name+'(')
 export function applyPublishShopFix(app,css){
  if(app.includes('function fanstarSeriesForm(')||app.includes('function CreatorShopControls('))throw Error('Already applied or source changed');
  if(app.split('fanstarSeriesForm(g, w)').length!==3)throw Error('Publish/edit series call sites changed');
+ app=once(app,'const OPEN_READER_PATH = "/api/ui/reading-54c4fda2.mjs";','const OPEN_READER_PATH = "/api/ui/reader-24649748.mjs";');
  app=once(app,"toLocaleString(undefined,{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})","toLocaleString(undefined,{year:'numeric',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})");
  app=editFunction(app,'ShopSearchControls',text=>once(once(text,'  onSet\n','  onSet,\n  showSort = true\n'),"}), n.jsxs('div', {\n      className: 'catalog-sort-controls',","}), showSort && n.jsxs('div', {\n      className: 'catalog-sort-controls',"));
  app=editFunction(app,'CreatorShopShelf',text=>{
