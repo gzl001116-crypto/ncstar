@@ -1,0 +1,7 @@
+import{readFileSync,writeFileSync}from'node:fs';import{localeReleaseCode}from'./locale-release-code.mjs';
+export function coverReaderLinkRelease(config){
+ const before="const summary={indexHash:hash(modules['index.js']),uiHash:hash(module),appPath,cssPath};";
+ const patch=`if(hash(modules['index.js'])!==${JSON.stringify(config.nextIndexHash)}){for(const name of ['publishProduct','publishUpload','updateProduct']){const current=modules['index.js'],a=current.indexOf('function '+name+'('),tail=current.slice(a+name.length+10),next=tail.search(/\\n(?:async )?function /),b=next<0?current.length:a+name.length+10+next;if(a<0)throw Error('Missing title handler');let scope=current.slice(a,b);const old=name==='publishProduct'?'const title = textOf(body.title, 80);':'const title = textOf(form.get("title"), 80);',value=old.replace(', 80)',', 100)');if(scope.split(old).length!==2)throw Error('Title handler changed');scope=scope.replace(old,value);modules['index.js']=current.slice(0,a)+scope+current.slice(b);}}if(hash(modules['index.js'])!==${JSON.stringify(config.nextIndexHash)})throw Error('Server patch mismatch');`;
+ const code=localeReleaseCode(config);if(code.split(before).length!==2)throw Error('Release generator changed');return code.replace(before,patch+before);
+}
+if(process.argv[2])writeFileSync(process.argv[3],coverReaderLinkRelease(JSON.parse(readFileSync(process.argv[2],'utf8'))));
