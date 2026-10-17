@@ -527,7 +527,7 @@ export const zh = {
   "page.avatarHint": "PNG、JPEG、GIF 或 WebP，不超过 1 MB。",
   "page.change": "更换头像",
   "page.apply": "申请创作者",
-  "page.applyLead": "主页地址只在申请创作者时填写。再写分类、所在地和一段介绍，提交之后就可以使用创作台。",
+  "page.applyLead": "填写主页地址和至少 8 字的介绍，提交后即可使用创作者工作台。",
   "page.note": "介绍",
   "page.notePh": "至少 8 个字，写你想发布什么。",
   "page.deleteH": "注销账号",
