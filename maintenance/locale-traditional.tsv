@@ -1,0 +1,50 @@
+# Original message key|繁體中文
+common.feeNote|買家支付標價，平台服務費由創作者承擔。
+home.title|fanstar · 探索創作與作品
+home.h1|探索創作，\n收藏喜歡的作品
+home.lead|瀏覽創作者的最新動態，探索數位作品，使用硬幣購買並在 play 中閱讀或播放。
+home.studio|進入工作台
+home.f1t|創作動態
+home.f1p|追蹤創作者，閱讀最新動態。
+home.f2t|數位作品
+home.f2p|使用硬幣購買喜歡的作品，統一收錄至作品庫。
+home.f3t|閱讀與播放
+home.f3p|在 play 中開啟已購作品，接續上次進度。
+home.followPeople|探索創作者
+home.shelf|精選作品
+creator.edit|編輯主頁
+studio.title|創作者工作台 · fanstar
+studio.loginH|登入創作者工作台
+studio.desk|{name}的工作台
+studio.newPost|發布動態
+studio.newProduct|發布作品
+studio.navProfile|我的主頁
+studio.navPosts|動態管理
+studio.saveWork|儲存作品
+studio.editWork|編輯作品
+studio.tiers|會員方案
+studio.lead|發布與管理內容，查看訂單，並設定收款帳戶。
+studio.payout|收款帳戶
+studio.navPayout|收益結算
+studio.openPayout|設定收款帳戶
+studio.net|預計結算收入
+studio.orders|訂單管理
+studio.navGuide|使用指南
+studio.openPosts|管理動態
+studio.openWorks|管理作品
+studio.openTiers|管理會員方案
+studio.openOrders|查看訂單
+studio.shortcutWorks|上傳小於 5 GB 的作品檔案，設定 play 與下載權限。
+studio.shortcutTiers|依需要建立會員方案，每期 30 天，不自動續費。
+studio.tierNote|依需要建立會員方案，自訂標價與權益。
+lib.active|會員紀錄
+lib.until|{status} · 至 {date} · {price} / 30 天
+toast.work|作品已更新
+toast.tier|會員方案已更新
+play.save|加入我的列表
+play.unsave|移出我的列表
+play.addTrack|加入播放列表
+play.listCreate|新增播放列表
+play.playlistNow|正在播放列表
+toast.play.save|已加入我的列表
+toast.play.unsave|已移出我的列表
