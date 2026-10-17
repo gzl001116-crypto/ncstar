@@ -260,7 +260,7 @@ function AccountAvatar() {
 }
 
 function ApplyCreator() {
-  const { t, phrase } = useI18n();
+  const { t } = useI18n();
   const { openStudio } = useStore();
   const navigate = useNavigate();
   const [error, setError] = useState("");
@@ -269,8 +269,6 @@ function ApplyCreator() {
     const data = new FormData(event.currentTarget);
     const result = await openStudio({
       handle: String(data.get("handle") ?? ""),
-      category: String(data.get("category") ?? ""),
-      location: String(data.get("location") ?? ""),
       bio: String(data.get("bio") ?? ""),
     });
     setError(result ?? "");
@@ -284,20 +282,6 @@ function ApplyCreator() {
       <label>
         {t("studio.handle")}
         <input name="handle" required placeholder={t("auth.handlePh")} autoCapitalize="none" />
-      </label>
-      <label>
-        {t("studio.category")}
-        <select name="category" defaultValue="写作">
-          {CATEGORIES.map((item) => (
-            <option key={item} value={item}>
-              {phrase(item)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        {t("studio.location")}
-        <input name="location" />
       </label>
       <label>
         {t("page.note")}
