@@ -1,0 +1,24 @@
+.brand .brand-image{display:block;width:38px;height:38px;min-width:38px;object-fit:cover;object-position:center;border-radius:10px;background:#000;color:inherit}
+.cover.work-cover{position:relative!important;width:100%;height:auto!important;max-height:none!important;min-height:0;overflow:hidden;aspect-ratio:auto!important;background:#e6e7e9;container-type:inline-size}
+.cover.work-cover>img{display:block!important;position:static!important;width:100%!important;height:auto!important;max-height:none;object-fit:contain!important;inset:auto!important;transform:none!important}
+.cover.work-cover-title{display:flex!important;align-items:center;justify-content:center;aspect-ratio:4 / 3!important;padding:9%;box-sizing:border-box;background:#e6e7e9!important;color:#363a40}
+.work-cover-name{font-family:inherit;font-size:clamp(14px,3vw,28px);font-size:var(--cover-title-size,10cqi);font-weight:650;line-height:1.4;text-align:center;white-space:normal;overflow-wrap:anywhere;word-break:normal;max-width:100%;display:block}
+.line-cover.work-cover{width:68px;flex:none}.tw-work-thumb.work-cover{width:64px}
+.shell .tw-comment-head{display:flex;align-items:center;flex-wrap:nowrap;gap:6px;min-width:0}
+.shell .tw-comment-head strong{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell .tw-comment-head time{display:inline!important;flex:none;margin-left:auto;white-space:nowrap;font-size:11px;line-height:1.4}
+.shell .tw-author-badge{flex:none;white-space:nowrap}
+.reader-progress-hidden .reading-progress-line,.reader-progress-hidden>.reader-tools .reader-speed:has(input[type=range]){display:none!important;pointer-events:none!important}
+.shell .tw-work-card,.shell .tw-creator-card{position:relative;isolation:isolate}
+.shell .card-primary-link{position:static!important}
+.shell .card-primary-link::after{content:"";position:absolute;inset:0;z-index:1;border-radius:inherit}
+.shell .card-primary-link:focus-visible::after{outline:3px solid #3978db;outline-offset:3px}
+.shell .tw-work-card-body a,.shell .tw-work-card-body button,.shell .tw-card-title-actions,.shell .tw-creator-actions{position:relative;z-index:2}
+.shell .tw-card-title-actions{pointer-events:auto}
+@media(max-width:700px){
+ .brand .brand-image{width:32px;height:32px;min-width:32px;border-radius:8px}
+ .shell .tw-work-card-title{display:flex;flex-direction:column;align-items:stretch;gap:5px}
+ .shell .tw-card-title-actions{position:relative!important;inset:auto!important;display:flex;justify-content:flex-end;gap:4px;margin:0;padding:0;align-self:stretch}
+ .shell .tw-card-title-actions .tw-favorite,.shell .tw-card-title-actions .tw-share-icon{min-width:44px;min-height:44px}
+ .shell .tw-comment-head{gap:4px}.shell .tw-comment-head time{font-size:10px}.shell .tw-author-badge{font-size:10px;padding:1px 4px}
+}
