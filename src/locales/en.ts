@@ -529,7 +529,7 @@ export const en: Dict = {
   "page.avatarHint": "PNG, JPEG, GIF, or WebP, up to 1 MB.",
   "page.change": "Change avatar",
   "page.apply": "Apply to be a creator",
-  "page.applyLead": "Choose your page address only when you apply to be a creator. Add a category, a place, and a short introduction. The studio is available after you submit.",
+  "page.applyLead": "Choose your page address and write an introduction of at least 8 characters. Your creator studio is available after you submit.",
   "page.note": "Introduction",
   "page.notePh": "At least 8 characters about what you want to publish.",
   "page.deleteH": "Delete account",
