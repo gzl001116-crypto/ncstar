@@ -17,6 +17,7 @@ export function applyCoverReaderLink(app,css){
   text=once(text,"    [busy, setBusy] = v.useState(false),\n",'');
   const a=text.indexOf('    {\n      url,');const b=text.indexOf('\n  v.useEffect',a);if(a<0||b<0)throw Error('Missing share data');text=text.slice(0,a)+"    {url}=shopSocialLinks(product);"+text.slice(b);
   const start=text.indexOf('    },\n    share = async () => {'),end=text.indexOf("\n  return n.jsxs('span'",start);if(start<0||end<0)throw Error('Missing native share');text=text.slice(0,start)+'    };'+text.slice(end);
+  const copyStart=text.indexOf('  const copy = async () => {'),copyEnd=text.indexOf("\n  return n.jsxs('span'",copyStart);if(copyStart<0||copyEnd<0)throw Error('Missing copy action');text=text.slice(0,copyStart)+`  const copy=async()=>{setStatus(fanstarTranslate('正在复制链接…'));try{await copyWorkShareLink(url,input.current);setStatus(fanstarTranslate('链接已复制'));}catch{setStatus(fanstarTranslate('请长按上方链接，选择复制。'));}};`+text.slice(copyEnd);
   text=once(text,'        if (mobileShareData(url, title)) void share();\n','');
   text=once(text,'children: fanstarTranslate("\\u5206\\u4EAB\\u5230")','children: fanstarTranslate("分享链接")');
   const extra=text.indexOf("}), n.jsx('p', {\n          className: 'shop-share-title',"),copy=text.indexOf("}), n.jsxs('div', {\n          className: 'shop-share-copy',",extra);if(extra<0||copy<0)throw Error('Missing social choices');text=text.slice(0,extra)+text.slice(copy);return text;
