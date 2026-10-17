@@ -1,0 +1,24 @@
+/* Only the two card triggers receive compact styling; the dialog is portalled to body. */
+.tw-card-title-actions{display:flex;align-items:center;gap:6px;line-height:1}
+.tw-card-title-actions>.tw-favorite-wrap,.tw-card-title-actions>.tw-product-share{display:inline-flex;align-items:center;justify-content:center;margin:0;padding:0;line-height:1}
+.tw-card-title-actions>.tw-favorite-wrap>.tw-favorite,.tw-card-title-actions>.tw-product-share>.tw-share-icon{box-sizing:border-box;display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;min-width:36px;min-height:36px;padding:0;line-height:1;border:1px solid #e5deea;border-radius:10px;background:#fff;color:#74647f;box-shadow:none;vertical-align:middle}
+.tw-card-title-actions svg{display:block;flex:none;width:18px;height:18px}
+.tw-card-title-actions>.tw-favorite-wrap>.tw-favorite.is-selected{color:#9562b4;background:#f6effb;border-color:#d9c7e6}
+.tw-favorite:disabled{opacity:.55;cursor:wait}
+.share-portal .shop-share-dialog{font-family:inherit;isolation:isolate}
+.share-portal .shop-share-dialog button{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;line-height:1.4;white-space:normal;cursor:pointer}
+.share-portal .shop-share-dialog .shop-native-share{width:100%;min-height:44px;padding:11px 14px;border-radius:10px}
+.share-portal .shop-share-copy{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}
+.share-portal .shop-share-url{width:100%;min-width:0;box-sizing:border-box;min-height:44px;font-size:13px}
+.share-portal .shop-share-copy button{width:auto;height:auto;min-height:44px;min-width:88px;padding:10px 12px;border-radius:10px}
+.share-portal .shop-share-close{width:36px;height:36px;min-width:36px;min-height:36px;padding:0;border-radius:50%}
+.share-portal .shop-share-hint{font-size:13px;line-height:1.7;overflow-wrap:anywhere}
+@media(max-width:760px){
+ .shell .tw-card-title-actions{top:7px;right:7px;gap:5px}
+ .shell .tw-card-title-actions>.tw-favorite-wrap>.tw-favorite,.shell .tw-card-title-actions>.tw-product-share>.tw-share-icon{width:36px;height:36px;min-width:36px;min-height:36px;border-radius:10px;background:#fffffff5;box-shadow:0 1px 5px #39254716}
+ .share-portal .shop-share-dialog{width:calc(100vw - 24px);max-width:420px;max-height:calc(100dvh - 24px);padding:20px}
+ .share-portal .shop-social-links{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .share-portal .shop-social-links a{min-width:0;min-height:72px;font-size:12px}
+ .share-portal .shop-share-url{font-size:16px}
+}
+@media(max-width:340px){.share-portal .shop-share-copy{grid-template-columns:minmax(0,1fr)}.share-portal .shop-share-copy button{width:100%}}
