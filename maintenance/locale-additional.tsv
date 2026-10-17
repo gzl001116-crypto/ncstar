@@ -1,0 +1,160 @@
+# Message key|한국어|ไทย|Bahasa Melayu
+meta.description|fanstar에서 게시물과 디지털 작품, 자동 갱신 없는 30일 멤버십을 만나 보세요.|fanstar ให้ครีเอเตอร์เผยแพร่โพสต์ ขายผลงานและสมาชิก 30 วันที่ไม่ต่ออายุอัตโนมัติ|fanstar menyediakan halaman pencipta untuk siaran, karya digital dan keahlian 30 hari tanpa pembaharuan automatik.
+footer.tokushoho|특정상거래법에 따른 표시|ข้อมูลตามกฎหมายธุรกรรมเชิงพาณิชย์|Pendedahan undang-undang transaksi komersial
+home.s1t|공개 게시물부터 읽기|อ่านโพสต์สาธารณะก่อน|Baca siaran awam dahulu
+home.s1p|게시물은 기본 공개이며 필요한 멤버십 등급이 표시됩니다.|โพสต์เปิดเป็นสาธารณะโดยค่าเริ่มต้น เนื้อหาล็อกจะแสดงระดับสมาชิกที่ต้องใช้|Siaran awam secara lalai. Kandungan terkunci menyatakan peringkat keahlian diperlukan.
+home.s2t|표시 가격으로 멤버십 가입|สมัครสมาชิกตามราคาที่แสดง|Langgan keahlian pada harga tertera
+home.s2p|표시 가격을 지불합니다. 멤버십은 자동 갱신 없이 30일이며 8%는 크리에이터 수익에서 공제됩니다.|ผู้ซื้อชำระตามราคา สมาชิก 30 วันไม่ต่ออายุอัตโนมัติ หัก 8% จากรายรับครีเอเตอร์|Pembeli membayar harga tertera. Keahlian 30 hari tanpa pembaharuan automatik. 8% ditolak daripada hasil pencipta.
+home.s3t|결제 확인 후 라이브러리에 추가|เพิ่มในคลังหลังยืนยัน|Ditambah ke pustaka selepas pengesahan
+home.s3p|Stripe 결제 확인 후 라이브러리에 추가됩니다. 다운로드와 온라인 이용은 작품 설정에 따릅니다.|หลัง Stripe ยืนยันการชำระ ผลงานจะเข้าคลัง การดาวน์โหลดและเปิดในเบราว์เซอร์ตามการตั้งค่าผลงาน|Karya ditambah selepas Stripe mengesahkan pembayaran. Muat turun dan akses pelayar mengikut tetapan karya.
+explore.title|둘러보기 · fanstar|สำรวจ · fanstar|Teroka · fanstar
+explore.h1|계속 보고 싶은 크리에이터를 만나세요|ค้นพบคนที่อยากติดตามต่อ|Temui pencipta yang ingin anda ikuti
+explore.ph|이름, 게시물 또는 작품 검색|ค้นหาชื่อ โพสต์หรือผลงาน|Cari nama, siaran atau karya
+creator.current|현재 등급|ระดับปัจจุบัน|Peringkat semasa
+creator.entry|기본|เริ่มต้น|Asas
+creator.fuller|추가 혜택|ครบยิ่งขึ้น|Lebih lengkap
+creator.unlocks|게시물 {posts}개 · 첨부 {files}개 이용 가능|ปลดล็อก {posts} โพสต์ · {files} ไฟล์แนบ|Buka {posts} siaran · {files} lampiran
+creator.ownTier|내 멤버십 플랜입니다|นี่คือแผนสมาชิกของคุณ|Ini pelan keahlian anda
+creator.renew|30일 연장|ต่ออีก 30 วัน|Lanjutkan 30 hari
+creator.switch|이 플랜으로 변경|เปลี่ยนเป็นแผนนี้|Tukar ke pelan ini
+creator.open30|30일 가입|สมัคร 30 วัน|Langgan 30 hari
+studio.priceSum|판매 가격 합계|รวมราคาที่วางขาย|Jumlah harga disenaraikan
+studio.kindPh|배경화면, 오디오, 템플릿…|วอลเปเปอร์ เสียง เทมเพลต…|Kertas dinding, audio, templat…
+studio.playHint|업로드 후 만화, 소설, 오디오, 동영상 또는 게임으로 분석합니다.|หลังอัปโหลดจะแยกเป็นมังงะ นิยาย เสียง วิดีโอหรือเกม|Selepas muat naik, fail dikenal pasti sebagai komik, novel, audio, video atau permainan.
+studio.previewHint|play에서 미리 봅니다. 미구매자는 설정한 콘텐츠나 범위만 볼 수 있습니다.|ดูตัวอย่างผ่าน play ผู้ยังไม่ซื้อเห็นได้เฉพาะเนื้อหาหรือช่วงที่คุณกำหนด|Pratonton melalui play. Bukan pembeli hanya melihat kandungan atau had yang ditetapkan.
+studio.previewLimitPh|만화는 페이지, 소설·게임은 글자, 오디오·동영상은 초 단위|มังงะใส่จำนวนหน้า นิยายและเกมใส่จำนวนอักขระ เสียงและวิดีโอใส่วินาที|Komik: halaman; novel dan permainan: aksara; audio dan video: saat
+studio.feeNote|표시 가격의 8%를 크리에이터 수익에서 공제하며 구매자 금액에 추가하지 않습니다. Stripe 확인 후 매주 금요일 UTC 00:00에 설정 계좌로 이체합니다.|ค่าธรรมเนียม 8% หักจากรายรับครีเอเตอร์ ไม่เพิ่มยอดผู้ซื้อ หลัง Stripe ยืนยันจะโอนเข้าบัญชีทุกวันศุกร์ UTC 00:00|Yuran 8% ditolak daripada hasil pencipta, tanpa ditambah kepada pembeli. Selepas pengesahan Stripe, hasil dipindah setiap Jumaat UTC 00:00.
+studio.shortcutPayout|스튜디오에서 은행 계좌를 설정하고 변경할 수 있습니다. fanstar는 전체 계좌번호를 저장하지 않습니다.|กรอกและเปลี่ยนบัญชีธนาคารในสตูดิโอ fanstar ไม่บันทึกเลขบัญชีเต็ม|Tetapkan dan tukar akaun bank dalam studio. fanstar tidak menyimpan nombor akaun penuh.
+studio.payoutLead|은행 계좌를 입력하고 변경할 수 있습니다. 전체 계좌번호는 Stripe에만 전달합니다. 8% 수수료를 공제한 수익을 매주 금요일 UTC 00:00에 이체합니다.|กรอกหรือเปลี่ยนบัญชีธนาคาร เลขบัญชีเต็มส่งให้ Stripe เท่านั้น หักค่าธรรมเนียม 8% จากรายรับแล้วโอนทุกวันศุกร์ UTC 00:00|Masukkan atau tukar akaun bank. Nombor penuh hanya diberi kepada Stripe. Hasil selepas yuran 8% dipindah setiap Jumaat UTC 00:00.
+studio.payoutReady|금요일 이체를 받을 수 있는 계좌입니다|บัญชีพร้อมรับเงินโอนวันศุกร์|Akaun sedia menerima pindahan Jumaat
+studio.payoutWait|Stripe가 정보를 확인 중입니다. 승인 후 매주 금요일 UTC 00:00에 이체합니다.|Stripe กำลังตรวจข้อมูล เมื่อผ่านแล้วจะโอนทุกวันศุกร์ UTC 00:00|Stripe sedang menyemak maklumat. Pindahan berlaku setiap Jumaat UTC 00:00 selepas diluluskan.
+studio.payoutReturn|Stripe에서 돌아왔습니다. 미완료된 정보를 계속 입력할 수 있습니다.|กลับจาก Stripe แล้ว กรอกข้อมูลที่ยังไม่เสร็จต่อได้|Kembali daripada Stripe. Teruskan mengisi maklumat yang belum lengkap.
+studio.payoutError|Stripe 출금 페이지를 열지 못했습니다. 다시 시도하세요.|เปิดหน้าถอนเงิน Stripe ไม่ได้ โปรดลองใหม่|Gagal membuka halaman pembayaran Stripe. Cuba lagi.
+studio.shortcutPosts|공개 또는 지정 멤버십 등급 이상에 공개합니다.|เปิดสาธารณะหรือเฉพาะสมาชิกตั้งแต่ระดับที่กำหนด|Awam atau keahlian peringkat ditetapkan dan ke atas.
+studio.shortcutWorks|5 GB 미만 파일을 업로드하고 play와 다운로드 권한을 설정하세요.|อัปโหลดไฟล์เล็กกว่า 5 GB แล้วตั้งสิทธิ์ play และดาวน์โหลด|Muat naik fail di bawah 5 GB dan tetapkan akses play serta muat turun.
+studio.shortcutTiers|자동 갱신 없는 30일 멤버십을 필요에 따라 만드세요.|สร้างแผนสมาชิก 30 วันที่ไม่ต่ออายุอัตโนมัติตามต้องการ|Cipta pelan keahlian 30 hari tanpa pembaharuan automatik mengikut keperluan.
+studio.shortcutOrders|작품·멤버십 주문 및 활성 멤버십을 확인하세요.|ดูคำสั่งซื้อผลงานและสมาชิก รวมถึงสมาชิกที่ยังใช้ได้|Lihat pesanan karya, keahlian dan ahli aktif.
+studio.shortcutProfile|이름, 분류, 소개 및 태그.|ชื่อ หมวดหมู่ ประวัติย่อและแท็ก|Nama, kategori, bio dan tag.
+studio.shortcutGuide|페이지 기능과 수수료 안내.|คำอธิบายแต่ละหน้าและการคิดค่าธรรมเนียม|Fungsi setiap halaman dan pengiraan yuran.
+studio.tierNote|가격과 혜택을 정해 멤버십 플랜을 만드세요.|สร้างแผนสมาชิกพร้อมกำหนดราคาและสิทธิประโยชน์เอง|Cipta pelan dengan harga dan faedah tersuai.
+studio.guideH|스튜디오 안내|คู่มือสตูดิโอ|Panduan studio
+studio.guideP1|스튜디오에서 현황, 게시물, 작품, 멤버십, 주문 및 출금을 관리합니다. 프로필 설정에서 이름, 소개와 태그를 수정합니다.|สตูดิโอมีภาพรวม โพสต์ ผลงาน แผนสมาชิก คำสั่งซื้อ การถอนและคู่มือ แก้ชื่อ ประวัติและแท็กที่หน้าโปรไฟล์|Studio mengurus gambaran keseluruhan, siaran, karya, keahlian, pesanan dan pengeluaran. Sunting nama, bio dan tag pada profil.
+studio.guideP2|게시물은 내 페이지에 표시됩니다. 공개하거나 지정 멤버십 등급 이상만 읽고 다운로드하도록 설정할 수 있습니다.|โพสต์แสดงบนหน้าของคุณ เลือกสาธารณะหรือให้สมาชิกตั้งแต่ระดับที่กำหนดอ่านและดาวน์โหลด|Siaran muncul pada halaman anda. Pilih awam atau hadkan bacaan dan muat turun kepada peringkat ahli tertentu.
+studio.guideP3|작품은 개별 판매되며 구매자는 결제 후 업로드 파일을 다운로드합니다. 텍스트, 이미지, 오디오, 동영상과 HTML은 play.fanstar.dev에서 열 수 있습니다. 상점에는 재생 링크가 없습니다.|ผลงานขายแยก ผู้ซื้อดาวน์โหลดไฟล์หลังชำระ ข้อความ ภาพ เสียง วิดีโอและ HTML เปิดใน play.fanstar.dev ร้านค้าไม่แสดงปุ่มเล่น|Karya dijual berasingan. Pembeli memuat turun selepas membayar. Teks, imej, audio, video dan HTML dibuka dalam play.fanstar.dev; kedai tidak memaparkan pautan main balik.
+studio.guideP4|멤버십은 두 등급이며 각 30일, 자동 갱신은 없습니다. 구매자는 표시 가격을 지불합니다.|สมาชิกมีสองระดับ ระดับละ 30 วัน ไม่ต่ออายุอัตโนมัติ ผู้ซื้อชำระตามราคา|Keahlian mempunyai dua peringkat, setiap satu 30 hari tanpa pembaharuan automatik. Pembeli membayar harga tertera.
+studio.guideP5|주문마다 표시 가격과 8% 수수료가 기록되며 크리에이터가 부담합니다. 계좌 설정 후 매주 금요일 UTC 00:00에 수익을 이체합니다.|ทุกคำสั่งซื้อบันทึกราคาและค่าธรรมเนียม 8% ที่ครีเอเตอร์รับผิดชอบ ตั้งบัญชีแล้วจะโอนทุกวันศุกร์ UTC 00:00|Setiap pesanan merekod harga dan yuran 8% ditanggung pencipta. Selepas akaun ditetapkan, hasil dipindah setiap Jumaat UTC 00:00.
+studio.guideP6|약관과 개인정보·상거래 안내는 브라우저 언어에 따라 표시됩니다. 직접 작성한 이름, 게시물과 작품은 그대로 유지됩니다.|ข้อกำหนด นโยบายความเป็นส่วนตัวและข้อมูลการค้าตามภาษาเบราว์เซอร์ ชื่อ โพสต์และผลงานที่คุณเขียนคงเดิม|Syarat, privasi dan pendedahan perdagangan mengikut bahasa pelayar. Nama, siaran dan karya anda dikekalkan.
+checkout.note|Stripe 결제창에서 결제합니다. 위안 표시 가격 또는 달러로 환산한 암호화폐 결제는 결제창의 지원 방식에 따릅니다. 확인 후 반영됩니다. 멤버십은 자동 갱신 없이 30일입니다. 카드번호와 지갑 개인키는 저장하지 않습니다.|ชำระในหน้ารับเงิน Stripe ตามราคาหยวนหรือแปลงเป็นดอลลาร์สำหรับคริปโต วิธีที่ใช้ได้ขึ้นกับหน้ารับเงิน ยืนยันแล้วจึงบันทึก สมาชิก 30 วันไม่ต่ออายุอัตโนมัติ เราไม่บันทึกเลขบัตรหรือคีย์กระเป๋า|Bayar melalui Stripe pada harga CNY atau penukaran USD untuk kripto, tertakluk kepada kaedah tersedia. Direkod selepas disahkan. Keahlian 30 hari tanpa pembaharuan automatik. Nombor kad dan kunci peribadi dompet tidak disimpan.
+checkout.renewNote|30일 · 자동 갱신 없음 · 오늘부터 새 30일 시작|30 วัน · ไม่ต่ออายุอัตโนมัติ · เริ่มนับ 30 วันใหม่วันนี้|30 hari · Tiada pembaharuan automatik · Tempoh baharu bermula hari ini
+checkout.freshNote|30일 · 자동 갱신 없음|30 วัน · ไม่ต่ออายุอัตโนมัติ|30 hari · Tiada pembaharuan automatik
+checkout.share|크리에이터 수령액 약 {amount}. 플랫폼 수수료 8%가 공제됩니다.|ครีเอเตอร์รับประมาณ {amount} หักค่าธรรมเนียมแพลตฟอร์ม 8%|Pencipta menerima kira-kira {amount}, selepas yuran platform 8%.
+checkout.crypto|암호화폐 결제|ชำระด้วยคริปโต|Bayar dengan kripto
+checkout.cryptoNote|달러로 환산해 Stripe 결제창을 엽니다. 지원 계정은 USDC 등의 스테이블코인을 사용할 수 있습니다. 주문은 위안으로 기록되며 8%가 크리에이터 수익에서 공제됩니다.|แปลงเป็นดอลลาร์แล้วเปิด Stripe บัญชีที่รองรับใช้สเตเบิลคอยน์ เช่น USDC ได้ คำสั่งซื้อบันทึกเป็นหยวน หัก 8% จากรายรับครีเอเตอร์|Harga ditukar ke USD sebelum Stripe dibuka. Stablecoin seperti USDC tersedia pada akaun layak. Pesanan direkod dalam CNY, dengan 8% ditolak daripada hasil pencipta.
+checkout.flashMember|「{name}」 멤버십 가입 완료, 30일간 유효합니다.|สมัคร 「{name}」 แล้ว ใช้ได้ 30 วัน|Keahlian 「{name}」 diaktifkan selama 30 hari.
+lib.support|{name}의 후원|การสนับสนุนของ {name}|Sokongan {name}
+lib.active|멤버십 기록|ประวัติสมาชิก|Rekod keahlian
+lib.until|{status} · {date}까지 · {price} / 30일|{status} · ถึง {date} · {price} / 30 วัน|{status} · Hingga {date} · {price} / 30 hari
+about.h1|작품을 전하는 공간|พื้นที่ส่งต่อผลงาน|Tempat berkongsi karya
+about.p1|fanstar는 일러스트레이터, 음악가, 사진가, 디자이너와 작가를 위한 페이지를 제공합니다. 가입 시 이메일 인증을 하며 같은 이메일로 다른 기기에서도 계정, 게시물, 작품과 주문을 이용합니다.|fanstar ให้หน้าสำหรับนักวาด นักดนตรี ช่างภาพ นักออกแบบและนักเขียน ยืนยันอีเมลเมื่อสมัคร แล้วใช้บัญชีเดิมดูโพสต์ ผลงานและคำสั่งซื้อบนอุปกรณ์อื่นได้|fanstar menyediakan halaman untuk ilustrator, pemuzik, jurugambar, pereka dan penulis. E-mel disahkan semasa pendaftaran. Akses akaun, siaran, karya dan pesanan pada peranti lain dengan e-mel sama.
+about.p2|게시물은 공개되며 멤버십으로 지정 콘텐츠를 이용합니다. 작품은 개별 판매되고 결제 후 라이브러리에 추가됩니다. 멤버십은 30일이며 자동 갱신되지 않습니다.|โพสต์เป็นสาธารณะ สมาชิกปลดล็อกเนื้อหาที่กำหนด ผลงานขายแยกและเข้าคลังหลังชำระ สมาชิก 30 วันไม่ต่ออายุอัตโนมัติ|Siaran adalah awam. Keahlian membuka kandungan tertentu. Karya dijual berasingan dan ditambah ke pustaka selepas pembayaran. Keahlian 30 hari tanpa pembaharuan automatik.
+about.p3|구매자는 표시 가격을 지불하며 크리에이터가 8% 수수료를 부담합니다. Stripe 확인 후 계정에 반영됩니다. 결제 방식은 결제창에 따르며 암호화폐는 달러로 환산됩니다. 출금은 매주 금요일 UTC 00:00에 처리합니다. 전체 카드번호는 저장하지 않습니다.|ผู้ซื้อชำระราคาที่แสดง ครีเอเตอร์รับผิดชอบค่าธรรมเนียม 8% Stripe ยืนยันแล้วจึงเข้าบัญชี วิธีชำระตามหน้ารับเงิน คริปโตแปลงเป็นดอลลาร์ ถอนทุกวันศุกร์ UTC 00:00 ไม่บันทึกเลขบัตรเต็ม|Pembeli membayar harga tertera; pencipta menanggung yuran 8%. Dikredit selepas Stripe mengesahkan. Kaedah mengikut halaman pembayaran, kripto ditukar ke USD. Pengeluaran setiap Jumaat UTC 00:00. Nombor kad penuh tidak disimpan.
+terms.title|이용약관 · fanstar|ข้อกำหนดการใช้บริการ · fanstar|Syarat perkhidmatan · fanstar
+terms.lead|fanstar 이용, 계정 가입 또는 결제는 본 이용약관과 개인정보 처리방침에 동의함을 의미합니다.|การใช้ fanstar สมัครบัญชีหรือชำระเงินถือว่าคุณยอมรับข้อกำหนดและนโยบายความเป็นส่วนตัว|Menggunakan fanstar, mendaftar atau membayar bermakna anda menerima syarat dan dasar privasi ini.
+terms.urlLabel|이 페이지 주소|ที่อยู่หน้านี้|Alamat halaman ini
+terms.statutory|다음은 일본어 공식 본문입니다.|ต่อไปนี้คือข้อความทางการภาษาญี่ปุ่น|Berikut ialah teks rasmi bahasa Jepun.
+terms.hOperator|운영자|ผู้ดำเนินการ|Pengendali
+terms.pOperator|fanstar(fanstar.dev) 운영자가 서비스를 제공합니다. 문의: support@fanstar.dev. 디지털 작품과 멤버십의 법적 안내는 특정상거래법 페이지를 참조하세요.|บริการนี้ให้โดยผู้ดำเนินการ fanstar (fanstar.dev) ติดต่อ support@fanstar.dev ข้อมูลทางกฎหมายการขายผลงานและสมาชิกอยู่ที่หน้ากฎหมายธุรกรรมเชิงพาณิชย์|Perkhidmatan dikendalikan oleh pengendali fanstar (fanstar.dev). Hubungi support@fanstar.dev. Rujuk halaman undang-undang perdagangan bagi jualan karya dan keahlian.
+terms.pAccount|본인 이메일로 가입하세요. 6자리 코드로 소유를 확인하며 비밀번호는 해시만 저장합니다. 다른 사이트의 비밀번호를 재사용하지 마세요.|ใช้อีเมลของตัวเอง รหัส 6 หลักใช้ยืนยันเจ้าของ รหัสผ่านเก็บเฉพาะแฮช อย่าใช้รหัสเดียวกับเว็บไซต์อื่น|Daftar dengan e-mel sendiri. Kod 6 digit mengesahkan pemilikan. Kata laluan disimpan sebagai hash. Jangan guna semula kata laluan laman lain.
+terms.hRoles|크리에이터와 후원자|ครีเอเตอร์และผู้สนับสนุน|Pencipta dan penyokong
+terms.pRoles|크리에이터는 게시 내용, 가격과 플랜에 책임을 지며 게시 권리가 있어야 합니다. 구매자는 구매 전 설명을 확인해야 합니다. 확인된 주문은 계정에 기록되고 작품이나 멤버십이 즉시 활성화됩니다.|ครีเอเตอร์รับผิดชอบข้อความ ราคาและแผน และต้องมีสิทธิ์เผยแพร่ ผู้ซื้อควรอ่านก่อนสั่ง ยืนยันแล้วคำสั่งซื้อจะบันทึกและผลงานหรือสมาชิกมีผลทันที|Pencipta bertanggungjawab atas kandungan, harga dan pelan serta mesti memiliki hak penerbitan. Pembeli perlu membaca butiran sebelum membeli. Pesanan disahkan direkod dan akses diaktifkan serta-merta.
+terms.hDigital|디지털 작품과 멤버십|ผลงานดิจิทัลและสมาชิก|Karya digital dan keahlian
+terms.pDigital|다운로드 콘텐츠는 크리에이터가 입력한 본문입니다. 멤버십은 가입일부터 30일이며 자동 갱신하지 않습니다. 플랜 변경 시 새 가입일부터 30일이 시작됩니다.|เนื้อหาดาวน์โหลดคือข้อความที่ครีเอเตอร์ใส่ สมาชิกใช้ได้ 30 วันจากวันสมัคร ไม่ต่ออายุอัตโนมัติ เมื่อเปลี่ยนแผนเริ่มนับใหม่|Kandungan muat turun ialah teks disediakan pencipta. Keahlian sah 30 hari dari tarikh mula tanpa pembaharuan automatik. Pertukaran pelan memulakan tempoh 30 hari baharu.
+terms.pPlay|구매 후 play.fanstar에서 크리에이터의 만화, 오디오, 동영상, 소설 또는 HTML을 열 수 있습니다. 다운로드는 크리에이터 본문이며 동일 작품은 한 번 구매합니다.|หลังซื้อเปิดมังงะ เสียง วิดีโอ นิยายหรือ HTML ของครีเอเตอร์ใน play.fanstar ได้ ไฟล์ดาวน์โหลดเป็นข้อความของครีเอเตอร์ แต่ละผลงานซื้อครั้งเดียว|Selepas membeli, buka komik, audio, video, novel atau HTML pencipta dalam play.fanstar. Muat turun kekal sebagai teks pencipta. Setiap karya dibeli sekali.
+terms.hFee|가격과 수수료|ราคาและค่าธรรมเนียม|Harga dan yuran
+terms.pFee|구매자는 표시 가격을 지불하며 크리에이터가 8% 수수료를 부담합니다. Stripe 결제창의 방식을 이용하며 암호화폐는 달러로 환산됩니다. 카드번호와 지갑 개인키는 저장하지 않습니다. 출금 계좌는 Stripe가 수집합니다.|ผู้ซื้อจ่ายราคาที่แสดง ครีเอเตอร์รับผิดชอบค่าธรรมเนียม 8% ชำระตามวิธีใน Stripe คริปโตแปลงเป็นดอลลาร์ ไม่เก็บเลขบัตรหรือคีย์กระเป๋า Stripe เก็บข้อมูลบัญชีรับเงิน|Pembeli membayar harga tertera, pencipta menanggung yuran 8%. Bayaran melalui kaedah tersedia dalam Stripe; kripto ditukar ke USD. Nombor kad dan kunci dompet tidak disimpan. Stripe mengumpul akaun pengeluaran.
+terms.hReturn|환불 및 취소|คืนสินค้าและยกเลิก|Pemulangan dan pembatalan
+terms.pReturn|디지털 콘텐츠 제공 후 반품·환불이나 잔여 기간에 따른 멤버십 환불은 없습니다. 확인 전에 작품과 플랜 설명을 읽어 주세요.|หลังเริ่มให้เนื้อหาดิจิทัล ไม่รับคืนหรือคืนเงิน และไม่คืนค่าสมาชิกตามวันที่เหลือ โปรดอ่านก่อนยืนยัน|Selepas kandungan digital diberikan, tiada pemulangan, bayaran balik atau bayaran balik keahlian mengikut baki hari. Semak penerangan sebelum mengesahkan.
+terms.hBad|금지 콘텐츠|เนื้อหาที่ไม่อนุญาต|Kandungan dilarang
+terms.pBad|타인의 권리를 침해하거나 불법인 콘텐츠를 게시하지 마세요. fanstar는 맞춤 제작 서비스를 제공하지 않습니다.|ห้ามเผยแพร่เนื้อหาผิดกฎหมายหรือละเมิดสิทธิ์ผู้อื่น fanstar ไม่รับงานสั่งทำ|Jangan terbitkan kandungan haram atau melanggar hak pihak lain. fanstar tidak menawarkan perkhidmatan tempahan khas.
+terms.hChange|약관 변경|การปรับข้อกำหนด|Perubahan syarat
+terms.pChange|갱신된 약관은 이 페이지에 공지합니다. 변경 후 계속 이용하면 새 약관에 동의한 것으로 봅니다.|ข้อกำหนดใหม่ประกาศในหน้านี้ การใช้ต่อหลังเปลี่ยนถือว่ายอมรับ|Syarat dikemas kini diterbitkan di sini. Penggunaan berterusan bermakna menerima syarat baharu.
+terms.hContact|문의|ติดต่อ|Hubungi
+terms.pContact|약관 문의: support@fanstar.dev.|ติดต่อเรื่องข้อกำหนดที่ support@fanstar.dev|Pertanyaan syarat: support@fanstar.dev.
+privacy.title|개인정보 처리방침 · fanstar|นโยบายความเป็นส่วนตัว · fanstar|Dasar privasi · fanstar
+privacy.lead|fanstar가 저장하는 정보와 이용 목적을 설명합니다.|คำอธิบายข้อมูลที่ fanstar เก็บและการใช้งาน|Maklumat yang disimpan oleh fanstar dan tujuannya.
+privacy.urlLabel|이 페이지 주소|ที่อยู่หน้านี้|Alamat halaman ini
+privacy.statutory|다음은 일본어 공식 본문입니다.|ต่อไปนี้คือข้อความทางการภาษาญี่ปุ่น|Berikut ialah teks rasmi bahasa Jepun.
+privacy.hWho|운영자|ผู้ดำเนินการ|Pengendali
+privacy.pWho|fanstar(fanstar.dev) 운영자가 정보를 처리합니다. 문의: support@fanstar.dev.|ผู้ดำเนินการ fanstar (fanstar.dev) จัดการข้อมูล ติดต่อ support@fanstar.dev|Pengendali fanstar (fanstar.dev) memproses maklumat. Hubungi support@fanstar.dev.
+privacy.hCollect|저장하는 정보|ข้อมูลที่เราเก็บ|Maklumat disimpan
+privacy.pCollect|가입 시 이름, 이메일, 페이지 주소와 소개를 저장합니다. 비밀번호는 해시만 저장합니다. 게시물, 작품, 댓글, 팔로우, 좋아요, 주문, 멤버십, 재생 진행과 목록은 계정에 기록됩니다.|เมื่อสมัครเก็บชื่อ อีเมล ที่อยู่โปรไฟล์และประวัติ รหัสผ่านเก็บเฉพาะแฮช โพสต์ ผลงาน ความคิดเห็น การติดตาม ถูกใจ คำสั่งซื้อ สมาชิก ความคืบหน้าและรายการบันทึกในบัญชี|Nama, e-mel, alamat halaman dan bio disimpan semasa pendaftaran. Kata laluan sebagai hash sahaja. Siaran, karya, komen, ikutan, suka, pesanan, keahlian, kemajuan dan senarai direkod dalam akaun.
+privacy.hCookie|로그인 정보|ข้อมูลเข้าสู่ระบบ|Bukti log masuk
+privacy.pCookie|로그인 후 fanstar_session 쿠키가 기기의 로그인을 유지합니다. 서버만 읽을 수 있습니다.|หลังเข้าสู่ระบบ คุกกี้ fanstar_session ใช้คงสถานะบนอุปกรณ์ อ่านได้เฉพาะเซิร์ฟเวอร์|Kuki fanstar_session mengekalkan log masuk pada peranti dan hanya boleh dibaca oleh pelayan.
+privacy.pEmail|Resend로 이메일 인증 코드를 보냅니다. 이메일은 인증과 코드 전송에 사용하며 무관한 광고에 사용하지 않습니다.|Resend ส่งรหัสยืนยันทางอีเมล ใช้ยืนยันบัญชีและส่งรหัส ไม่ใช้โฆษณาที่ไม่เกี่ยวข้อง|Resend menghantar kod e-mel untuk mengesahkan akaun. E-mel tidak digunakan bagi promosi tidak berkaitan.
+privacy.hPay|결제|การชำระเงิน|Pembayaran
+privacy.pPay|전체 카드번호와 지갑 개인키는 저장하지 않습니다. Stripe가 결제와 출금을 처리하며 스튜디오에는 은행명과 끝 4자리만 표시합니다.|ไม่เก็บเลขบัตรเต็มหรือคีย์กระเป๋า Stripe จัดการชำระและถอน สตูดิโอแสดงชื่อธนาคารกับเลขท้าย 4 หลักเท่านั้น|Nombor kad penuh dan kunci dompet tidak disimpan. Stripe mengurus pembayaran dan pengeluaran. Studio hanya memaparkan nama bank dan 4 digit akhir.
+privacy.hUse|이용 목적|วัตถุประสงค์|Tujuan
+privacy.pUse|계정 제공, 작품·멤버십 전달, 비정상 로그인·발신 제한에 사용합니다. 인증 및 로그인 시 접속 주소로 횟수를 제한하며 프로필에는 표시하지 않습니다.|ใช้ให้บริการบัญชี ส่งมอบผลงานและสมาชิก และจำกัดการเข้าสู่ระบบหรือส่งผิดปกติ ใช้ที่อยู่เชื่อมต่อชั่วคราวจำกัดจำนวน ไม่แสดงบนโปรไฟล์|Digunakan untuk akaun, penghantaran karya dan keahlian serta mengehadkan log masuk dan penghantaran luar biasa. Alamat sambungan digunakan sementara untuk had kadar dan tidak dipaparkan pada profil.
+privacy.hShare|위탁 및 제공|การมอบหมายและแบ่งปัน|Pemproses dan perkongsian
+privacy.pShare|Cloudflare가 호스팅, Resend가 인증 메일, Stripe가 결제와 출금을 담당합니다. 개인정보를 판매하지 않습니다.|Cloudflare โฮสต์เว็บไซต์ Resend ส่งอีเมล Stripe จัดการชำระและถอน เราไม่ขายข้อมูลส่วนบุคคล|Cloudflare mengehos laman, Resend menghantar e-mel dan Stripe mengurus pembayaran. Kami tidak menjual maklumat peribadi.
+privacy.hKeep|보관 및 삭제|การเก็บและลบ|Penyimpanan dan pemadaman
+privacy.pKeep|계정 유지 기간에 정보를 보관합니다. 수정·삭제 문의: support@fanstar.dev.|เก็บข้อมูลขณะบัญชียังอยู่ ขอแก้หรือลบที่ support@fanstar.dev|Maklumat disimpan sepanjang akaun aktif. Pembetulan atau pemadaman: support@fanstar.dev.
+privacy.hKids|어린이|เด็ก|Kanak-kanak
+privacy.pKids|fanstar는 어린이를 대상으로 하지 않으며 어린이는 가입할 수 없습니다.|fanstar ไม่ได้ให้บริการสำหรับเด็ก โปรดอย่าให้เด็กสมัคร|fanstar tidak ditujukan kepada kanak-kanak. Jangan benarkan kanak-kanak mendaftar.
+privacy.hChange|방침 변경|การปรับนโยบาย|Perubahan dasar
+privacy.pChange|갱신된 개인정보 처리방침은 이 페이지에 공지합니다.|นโยบายใหม่จะประกาศในหน้านี้|Dasar privasi dikemas kini diterbitkan pada halaman ini.
+product.share|크리에이터 수령액 약 {amount}. 8% 수수료는 수익에서 공제되며 구매자는 표시 가격을 지불합니다.|ครีเอเตอร์รับประมาณ {amount} หักค่าธรรมเนียม 8% จากรายรับ ผู้ซื้อจ่ายราคาที่แสดง|Pencipta menerima kira-kira {amount}. Yuran 8% ditolak daripada hasil; pembeli membayar harga tertera.
+toku.docTitle|특정상거래법에 따른 표시 · fanstar|ข้อมูลตามกฎหมายธุรกรรมเชิงพาณิชย์ · fanstar|Pendedahan undang-undang perdagangan · fanstar
+toku.kicker|특정상거래법|กฎหมายธุรกรรมเชิงพาณิชย์|Undang-undang transaksi komersial
+toku.h1|특정상거래법에 따른 표시|ข้อมูลตามกฎหมายธุรกรรมเชิงพาณิชย์|Pendedahan undang-undang transaksi komersial
+toku.intro|fanstar의 디지털 작품과 30일 멤버십 판매 안내입니다. 법적 안내는 일본어 본문이 기준입니다.|ข้อมูลการขายผลงานดิจิทัลและสมาชิก 30 วันของ fanstar ข้อความญี่ปุ่นเป็นหลักทางกฎหมาย|Maklumat jualan karya digital dan keahlian 30 hari fanstar. Teks Jepun menjadi rujukan undang-undang.
+toku.statutory|다음은 일본어 법적 본문입니다.|ต่อไปนี้คือข้อมูลทางกฎหมายภาษาญี่ปุ่น|Berikut ialah teks undang-undang bahasa Jepun.
+toku.l0|상점명|ชื่อร้านค้า|Nama kedai
+toku.l1|판매자|ผู้ขาย|Penjual
+toku.v1|fanstar(fanstar.dev) 운영자|ผู้ดำเนินการ fanstar (fanstar.dev)|Pengendali fanstar (fanstar.dev)
+toku.l2|운영 책임자|ผู้รับผิดชอบดำเนินการ|Pengurus operasi
+toku.v2|fanstar 운영 책임자|ผู้รับผิดชอบดำเนินการ fanstar|Pengurus operasi fanstar
+toku.l3|주소|ที่อยู่|Alamat
+toku.v3|사업자 등록·개업 신고의 사업장 주소를 따릅니다. 아래 이메일로 문의하세요.|ตามที่อยู่ธุรกิจในทะเบียนหรือเอกสารเปิดกิจการ สอบถามทางอีเมลด้านล่าง|Mengikut alamat perniagaan dalam pendaftaran atau notis pembukaan. Hubungi melalui e-mel di bawah.
+toku.l4|전화|โทรศัพท์|Telefon
+toku.v4|아래 이메일로 문의하세요.|โปรดติดต่อทางอีเมลด้านล่าง|Sila hubungi melalui e-mel di bawah.
+toku.l5|이메일|อีเมล|E-mel
+toku.l6|판매 가격|ราคาขาย|Harga jualan
+toku.v6|각 작품·플랜의 세금 포함 표시 가격을 지불합니다.|แต่ละผลงานและแผนแสดงราคารวมภาษี ผู้ซื้อจ่ายตามนั้น|Harga termasuk cukai pada setiap karya dan pelan ialah jumlah dibayar pembeli.
+toku.l7|추가 비용|ค่าใช้จ่ายนอกเหนือราคา|Caj tambahan
+toku.v7|표시 가격이 총액이며 추가 결제 수수료는 없습니다. 통신료는 구매자 부담입니다. 8% 플랫폼 수수료는 크리에이터 수익에서 공제됩니다.|ราคาที่แสดงคือยอดรวม ไม่มีค่าธรรมเนียมเพิ่ม ผู้ซื้อรับผิดชอบค่าอินเทอร์เน็ต หักค่าธรรมเนียมแพลตฟอร์ม 8% จากรายรับครีเอเตอร์|Harga tertera ialah jumlah penuh tanpa caj tambahan. Kos internet ditanggung pembeli. Yuran platform 8% ditolak daripada hasil pencipta.
+toku.l8|결제 방식|วิธีชำระเงิน|Kaedah pembayaran
+toku.v8|주문 페이지와 Stripe 결제창의 방식에 따라 결제하세요. 암호화폐는 달러로 환산하며 스테이블코인 지원은 결제창에 따릅니다. 카드번호나 지갑 개인키는 저장하지 않습니다.|ชำระตามหน้าออเดอร์และ Stripe คริปโตแปลงเป็นดอลลาร์ การรองรับสเตเบิลคอยน์ตามหน้ารับเงิน ไม่เก็บเลขบัตรหรือคีย์กระเป๋า|Bayar mengikut halaman pesanan dan Stripe. Kripto ditukar ke USD; stablecoin tertakluk kepada halaman pembayaran. Nombor kad dan kunci dompet tidak disimpan.
+toku.l9|결제 시기|เวลาชำระ|Masa pembayaran
+toku.v9|Stripe 결제 확인 시입니다. 실제 청구 시기는 결제 방식에 따릅니다.|เมื่อ Stripe ยืนยัน การตัดเงินจริงขึ้นกับวิธีที่เลือก|Apabila Stripe mengesahkan. Masa caj sebenar mengikut kaedah dipilih.
+toku.l10|제공 시기|เวลาส่งมอบ|Masa penghantaran
+toku.v10|결제 후 디지털 콘텐츠와 멤버십이 즉시 계정에 추가됩니다. 실물 배송은 없습니다. 멤버십은 30일이며 자동 갱신하지 않습니다.|เนื้อหาและสมาชิกเข้าบัญชีทันทีหลังชำระ ไม่มีส่งของจริง สมาชิก 30 วันไม่ต่ออายุอัตโนมัติ|Kandungan dan keahlian dikredit serta-merta selepas pembayaran. Tiada penghantaran fizikal. Keahlian 30 hari tanpa pembaharuan automatik.
+toku.l11|환불 및 취소|คืนสินค้าและยกเลิก|Pemulangan dan pembatalan
+toku.v11|디지털 콘텐츠 제공 후 반품·환불이나 잔여 기간에 따른 멤버십 환불은 없습니다. 구매 전 설명을 확인하세요.|หลังเริ่มให้เนื้อหา ไม่รับคืนหรือคืนเงิน และไม่คืนค่าสมาชิกตามวันที่เหลือ โปรดอ่านก่อนซื้อ|Selepas kandungan diberikan, tiada pemulangan, bayaran balik atau pulangan mengikut baki hari keahlian. Semak penerangan sebelum membeli.
+toku.l12|자격 및 허가|คุณสมบัติและใบอนุญาต|Kelayakan dan lesen
+toku.v12|중고품, 주류, 화장품 또는 의약품을 판매하지 않으며 해당 판매 허가는 없습니다.|ไม่ขายของเก่า สุรา เครื่องสำอางหรือยา และไม่มีใบอนุญาตขายดังกล่าว|Tidak menjual barangan terpakai, alkohol, kosmetik atau ubat dan tidak mempunyai lesen jualan tersebut.
+err.pay.crypto|암호화폐 결제를 열 수 없습니다. 다른 결제 방식이나 나중에 다시 시도하세요.|เปิดชำระคริปโตไม่ได้ โปรดใช้วิธีด้านบนหรือลองภายหลัง|Pembayaran kripto tidak tersedia. Gunakan kaedah lain atau cuba kemudian.
+err.payout|출금 방식을 저장하지 못했습니다. 나중에 다시 시도하세요|บันทึกวิธีถอนเงินไม่ได้ โปรดลองภายหลัง|Gagal menyimpan kaedah pengeluaran. Cuba kemudian
+err.payout.bank|은행 계좌 확인에 실패했습니다. 계좌번호를 확인하세요.|บัญชีธนาคารไม่ผ่านการตรวจ โปรดตรวจเลขบัญชี|Akaun bank gagal disahkan. Semak nombor akaun.
+err.payout.country|이 국가·지역은 Stripe 수취를 지원하지 않습니다|ประเทศหรือภูมิภาคนี้ยังรับเงิน Stripe ไม่ได้|Negara atau wilayah ini belum menyokong penerimaan Stripe
+err.payout.platform|플랫폼의 Stripe 수취 설정이 아직 완료되지 않았습니다|แพลตฟอร์มยังตั้งค่ารับเงิน Stripe ไม่เสร็จ|Persediaan penerimaan Stripe platform belum selesai
+play.lead|구매한 작품을 라이브러리에서 여세요. 재생 목록은 오디오 연속 재생, 감상 기록은 이어보기를 지원합니다.|เปิดผลงานที่ซื้อจากคลัง เพลย์ลิสต์เล่นเสียงต่อเนื่อง ประวัติช่วยดูต่อจากเดิม|Buka karya dibeli dalam pustaka. Senarai main untuk audio berterusan; sejarah menyambung tontonan.
+play.empty|온라인으로 열 수 있는 작품이 없습니다. 상점에서 play.fanstar 표시 작품을 구매하세요.|ยังไม่มีผลงานที่เปิดในเบราว์เซอร์ได้ ซื้อผลงานที่มีสัญลักษณ์ play.fanstar ในร้าน|Belum ada karya untuk dibuka dalam pelayar. Beli karya bertanda play.fanstar di kedai.
+play.studioHint.comic|각 페이지를 한 줄의 ---로 구분하세요. 이미지 페이지 첫 줄은 image:https://…|แบ่งแต่ละหน้าด้วยบรรทัด --- หน้าแบบภาพเริ่มด้วย image:https://…|Pisahkan halaman dengan baris ---. Baris pertama halaman imej: image:https://…
+play.studioHint.voice|각 트랙을 ---로 구분하세요. 첫 줄은 제목, 다음은 본문 또는 audio:https://…|แบ่งแทร็กด้วย --- บรรทัดแรกชื่อ ตามด้วยข้อความหรือ audio:https://…|Pisahkan trek dengan ---. Baris pertama tajuk, diikuti teks atau audio:https://…
+play.studioHint.video|https 동영상 주소를 입력하세요.|ใส่ที่อยู่วิดีโอ https|Masukkan alamat video https.
+play.studioHint.novel|소설 본문을 붙여 넣으세요. 빈 줄로 문단을 구분합니다.|วางเนื้อหานิยาย บรรทัดว่างแบ่งย่อหน้า|Tampal teks novel. Baris kosong memisahkan perenggan.
+play.studioHint.game|브라우저에서 실행할 HTML을 붙여 넣으세요.|วาง HTML ที่ทำงานในเบราว์เซอร์ได้|Tampal HTML yang boleh dijalankan dalam pelayar.
+err.play.file|play에서 열 수 없는 파일입니다. 다운로드 전용으로 설정하거나 텍스트, 이미지, 오디오, 동영상 또는 HTML을 사용하세요.|ไฟล์นี้เปิดใน play ไม่ได้ ปิด play เพื่อดาวน์โหลดอย่างเดียวหรือเปลี่ยนเป็นข้อความ ภาพ เสียง วิดีโอหรือ HTML|Fail tidak boleh dibuka dalam play. Pilih muat turun sahaja atau gunakan teks, imej, audio, video atau HTML.
+err.preview.play|미리보기를 사용하려면 먼저 play를 켜세요|ต้องเปิด play ก่อนใช้ตัวอย่าง|Aktifkan play dahulu untuk pratonton
+phrase.刚来到星页。|fanstar에 새로 왔습니다.|เพิ่งเข้าร่วม fanstar|Baharu di fanstar.
+phrase.刚来到 fanstar。|fanstar에 새로 왔습니다.|เพิ่งเข้าร่วม fanstar|Baharu di fanstar.
+phrase.读者席|독자석|ที่นั่งผู้อ่าน|Ruang pembaca
+phrase.内页|내부 페이지|หน้าด้านใน|Halaman dalaman
+phrase.解锁会员动态，并下载附件。|회원 게시물과 첨부 파일을 이용하세요.|ปลดล็อกโพสต์สมาชิกและดาวน์โหลดไฟล์แนบ|Buka siaran ahli dan muat turun lampiran.
+phrase.会员动态|회원 게시물|โพสต์สมาชิก|Siaran ahli
+phrase.附件下载|첨부 파일 다운로드|ดาวน์โหลดไฟล์แนบ|Muat turun lampiran
+phrase.更早看到新作，并包含读者席的全部内容。|신작을 먼저 보고 독자석의 모든 혜택을 받으세요.|ดูผลงานใหม่ก่อนและได้เนื้อหาทั้งหมดของที่นั่งผู้อ่าน|Lihat karya baharu lebih awal, termasuk semua kandungan ruang pembaca.
+phrase.包含读者席|독자석 포함|รวมที่นั่งผู้อ่าน|Termasuk ruang pembaca
+phrase.更高档位的动态|상위 등급 게시물|โพสต์ระดับสูงกว่า|Siaran peringkat lebih tinggi
+phrase.创作者刚刚上架的数字作品。|크리에이터가 새로 올린 디지털 작품입니다.|ผลงานดิจิทัลที่ครีเอเตอร์เพิ่งวางขาย|Karya digital yang baru disenaraikan pencipta.
