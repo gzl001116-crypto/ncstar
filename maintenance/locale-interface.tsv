@@ -449,7 +449,7 @@ USD 美元|USD|USD 米ドル|USD 美元|USD 미국 달러|USD ดอลลาร
 例如：创作支持计划|e.g. Studio membership|例：創作メンバープラン|例如：創作會員計畫|예: 창작 멤버십|เช่น แผนสมาชิกครีเอเตอร์|Contoh: Keahlian studio
 保存方案|Save plan|プランを保存|儲存方案|플랜 저장|บันทึกแผน|Simpan pelan
 共 |Total: |合計 |共 |합계 |รวม |Jumlah: 
-净收入 |Net income |純収益 |淨收入 |순수익 |รายได้สุทธิ |Pendapatan bersih 
+净收入 | · Net income |・純収益 |淨收入 | · 순수익 | · รายได้สุทธิ | · Pendapatan bersih 
 分享作品：|Share work: |作品を共有：|分享作品：|작품 공유: |แชร์ผลงาน: |Kongsi karya: 
 分享已取消，或设备没有可用的分享应用。可选择下方网站或复制链接。|Sharing was canceled or no sharing app is available. Choose a site below or copy the link.|共有がキャンセルされたか、対応アプリがありません。下のサイトを選ぶかリンクをコピーしてください。|分享已取消或裝置沒有可用的分享應用程式。可選擇下方網站或複製連結。|공유가 취소되었거나 사용 가능한 앱이 없습니다. 아래 사이트를 선택하거나 링크를 복사하세요.|ยกเลิกการแชร์หรือไม่มีแอปที่ใช้ได้ เลือกเว็บไซต์ด้านล่างหรือคัดลอกลิงก์|Perkongsian dibatalkan atau tiada aplikasi sesuai. Pilih laman di bawah atau salin pautan.
 分类净收入 · |Net income by category · |カテゴリ別純収益 · |分類淨收入 · |분류별 순수익 · |รายได้สุทธิตามหมวดหมู่ · |Pendapatan bersih mengikut kategori · 
@@ -517,7 +517,7 @@ USD 美元|USD|USD 米ドル|USD 美元|USD 미국 달러|USD ดอลลาร
 等级 |Tier |レベル |等級 |등급 |ระดับ |Peringkat 
 系列顺序导航|Series navigation|シリーズナビ|系列順序導覽|시리즈 탐색|เมนูซีรีส์|Navigasi siri
 结束日期 UTC|End date UTC|終了日 UTC|結束日期 UTC|종료일 UTC|วันสิ้นสุด UTC|Tarikh tamat UTC
-统计 · UTC · |Statistics · UTC · |統計 · UTC · |統計 · UTC · |통계 · UTC · |สถิติ · UTC · |Statistik · UTC · 
+统计 · UTC · | · Statistics · UTC · |別統計 · UTC · |統計 · UTC · | 통계 · UTC · | · สถิติ · UTC · | · Statistik · UTC · 
 自动保存进度 · 方向键前后跳转 10 秒 · M 键静音|Progress saved automatically · Arrow keys skip 10s · M to mute|進捗は自動保存 · 矢印キーで10秒移動 · Mで消音|自動儲存進度 · 方向鍵跳轉 10 秒 · M 鍵靜音|진행 자동 저장 · 방향키로 10초 이동 · M 음소거|บันทึกอัตโนมัติ · ปุ่มลูกศรข้าม 10 วิ · M ปิดเสียง|Kemajuan disimpan automatik · Kekunci anak panah lompat 10s · M untuk senyap
 草稿已保存到当前设备，附件需重新选择。|Draft saved on this device. Select attachments again when restoring.|下書きを端末に保存しました。復元時に添付ファイルを選び直してください。|草稿已儲存至此裝置，附件需重新選擇。|이 기기에 초안을 저장했습니다. 복원 시 첨부 파일을 다시 선택하세요.|บันทึกฉบับร่างบนอุปกรณ์นี้แล้ว ต้องเลือกไฟล์แนบใหม่เมื่อกู้คืน|Draf disimpan pada peranti ini. Pilih semula lampiran apabila dipulihkan.
 草稿已恢复，请重新选择附件。|Draft restored. Select attachments again.|下書きを復元しました。添付ファイルを選び直してください。|草稿已還原，請重新選擇附件。|초안을 복원했습니다. 첨부 파일을 다시 선택하세요.|กู้คืนฉบับร่างแล้ว โปรดเลือกไฟล์แนบใหม่|Draf dipulihkan. Pilih semula lampiran.
@@ -526,8 +526,8 @@ USD 美元|USD|USD 米ドル|USD 美元|USD 미국 달러|USD ดอลลาร
 设备分享未能打开。可选择下方网站或复制链接。|Device sharing could not open. Choose a site below or copy the link.|端末共有を開けません。下のサイトを選ぶかリンクをコピーしてください。|無法開啟裝置分享。可選擇下方網站或複製連結。|기기 공유를 열지 못했습니다. 아래 사이트를 선택하거나 링크를 복사하세요.|เปิดการแชร์อุปกรณ์ไม่ได้ เลือกเว็บไซต์ด้านล่างหรือคัดลอกลิงก์|Perkongsian peranti tidak dapat dibuka. Pilih laman di bawah atau salin pautan.
 该系列暂无公开作品。|No public works in this series.|このシリーズに公開作品はありません。|此系列暫無公開作品。|시리즈에 공개 작품이 없습니다.|ซีรีส์นี้ยังไม่มีผลงานสาธารณะ|Tiada karya awam dalam siri ini.
 请先关闭已打开的系统分享窗口，再重试。|Close the open sharing window and retry.|開いている共有画面を閉じて再試行してください。|請先關閉已開啟的系統分享視窗，再重試。|열린 공유 창을 닫고 다시 시도하세요.|ปิดหน้าต่างแชร์ที่เปิดอยู่แล้วลองใหม่|Tutup tetingkap perkongsian yang terbuka dan cuba lagi.
-趋势（|Trend (|推移（|趨勢（|추이 (|แนวโน้ม (|Trend (
-趋势，|trend, |推移、|趨勢，|추이, |แนวโน้ม, |trend, 
+趋势（| trend (|推移（|趨勢（| 추이 (| แนวโน้ม (| trend (
+趋势，| trend, |推移、|趨勢，| 추이, | แนวโน้ม, | trend, 
 还没有会员方案|No membership plans yet|メンバーシッププランはまだありません|還沒有會員方案|아직 멤버십 플랜이 없습니다|ยังไม่มีแผนสมาชิก|Belum ada pelan keahlian
 还没有开通的会员。|No active memberships yet.|有効なメンバーシップはありません。|尚無開通的會員。|활성 멤버십이 없습니다.|ยังไม่มีสมาชิกที่ใช้งาน|Belum ada keahlian aktif.
 通知 · fanstar|Notifications · fanstar|通知 · fanstar|通知 · fanstar|알림 · fanstar|การแจ้งเตือน · fanstar|Pemberitahuan · fanstar
@@ -599,3 +599,8 @@ ZIP64 目录损坏。|Corrupt ZIP64 directory.|ZIP64ディレクトリが破損�
 会员档位|Membership tiers|メンバーシッププラン|會員等級|멤버십 등급|ระดับสมาชิก|Peringkat keahlian
 结算管理|Manage settlement|精算管理|結算管理|정산 관리|จัดการชำระรายได้|Urus penyelesaian
 创作者支持|Creator support|クリエイター支援|創作者支持|크리에이터 후원|สนับสนุนครีเอเตอร์|Sokongan pencipta
+硬币标价|Coin price|コイン価格|硬幣標價|코인 가격|ราคาเหรียญ|Harga syiling
+文件须小于 5 GB。大文件支持分片上传、暂停和继续。支持 play 时须先通过文件检查。|Files must be under 5 GB. Large files support multipart upload, pause and resume. Files must pass compatibility checks for play.|ファイルは5 GB未満。大容量ファイルの分割アップロード・一時停止・再開に対応。play利用前に形式を確認します。|檔案須小於 5 GB。大檔案支援分段上傳、暫停與繼續；支援 play 時須先通過檔案檢查。|파일은 5 GB 미만이어야 합니다. 분할 업로드, 일시 정지 및 재개를 지원합니다. play 이용 시 파일 검사가 필요합니다.|ไฟล์ต้องเล็กกว่า 5 GB รองรับแบ่งส่วน หยุดพักและต่อ ตรวจไฟล์ก่อนใช้ play|Fail mestilah di bawah 5 GB. Menyokong muat naik berbahagi, jeda dan sambung. Fail mesti lulus semakan untuk play.
+文件必须小于 5 GB|Files must be under 5 GB|ファイルは5 GB未満にしてください|檔案必須小於 5 GB|파일은 5 GB 미만이어야 합니다|ไฟล์ต้องเล็กกว่า 5 GB|Fail mestilah kurang daripada 5 GB
+作品已保存|Work saved|作品を保存しました|作品已儲存|작품을 저장했습니다|บันทึกผลงานแล้ว|Karya disimpan
+头像必须小于 10 MB，支持 PNG、JPEG、GIF、WebP|Avatar must be under 10 MB: PNG, JPEG, GIF or WebP|アイコンは10 MB未満のPNG・JPEG・GIF・WebP|頭像須小於 10 MB，支援 PNG、JPEG、GIF、WebP|프로필 사진은 10 MB 미만의 PNG, JPEG, GIF, WebP입니다|รูปโปรไฟล์ต้องเล็กกว่า 10 MB รองรับ PNG, JPEG, GIF, WebP|Avatar mestilah kurang daripada 10 MB: PNG, JPEG, GIF, WebP
