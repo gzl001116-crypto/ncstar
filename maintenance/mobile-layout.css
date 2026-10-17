@@ -1,0 +1,49 @@
+@media(max-width:760px){
+  html:has(.experience-mobile-dock){scroll-padding-bottom:calc(var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)) + 16px)}
+  .shell{padding-bottom:0;min-width:0}
+  .shell>main{min-width:0;padding-bottom:calc(var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)) + 20px)}
+  .shell>.footer{padding-bottom:calc(var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)) + 28px)}
+  .shell>.topbar{position:relative;top:auto;z-index:60;background:var(--bg,#f4f5f7)}
+  .shell>.topbar .topbar-inner{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px;min-height:0;padding:10px 0 12px}
+  .shell>.topbar .brand{grid-column:1;grid-row:1;justify-self:start;min-width:0}
+  .shell>.topbar .nav-actions{grid-column:2;grid-row:1;display:flex;align-items:center;gap:8px;margin:0;min-width:0;flex-shrink:0}
+  .shell>.topbar .topbar-inner>.catalog-header-search{display:flex;grid-column:1/-1;grid-row:2;width:100%;min-width:0;min-height:44px;margin:0;padding-left:14px}
+  .shell>.topbar .catalog-header-search input{display:block;min-height:44px;font-size:16px;padding-block:9px}
+  .shell>.topbar .catalog-header-search select{display:block;flex-basis:68px;width:68px;max-width:68px;padding-left:8px;font-size:14px;min-height:36px}
+  .shell>.topbar .catalog-header-search>button{width:40px;height:40px;flex-basis:40px}
+  .shell>.topbar .utc-clock,.shell>.topbar .mobile-panel .catalog-header-search{display:none}
+  .shell>.topbar .account{display:block;flex-shrink:0}
+  .shell>.topbar .account-btn{display:inline-flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:5px;gap:0}
+  .shell>.topbar .account-btn>.avatar{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;min-width:32px;flex-shrink:0;object-fit:cover;border-radius:50%}
+  .shell>.topbar .account-btn>.account-name{display:none}
+  .shell>.topbar .menu-btn{min-width:44px;min-height:44px;justify-content:center}
+  .shell>.topbar .account .menu-pop{width:min(248px,calc(100vw - 28px));max-height:calc(var(--mobile-visible-height,100dvh) - 76px - var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)));overflow-y:auto;overscroll-behavior:contain;z-index:2}
+  .shell>.topbar .menu-pop a,.shell>.topbar .menu-pop button{min-height:44px;white-space:normal;overflow-wrap:anywhere}
+  .shell>.topbar .mobile-panel{max-height:calc(var(--mobile-visible-height,100dvh) - 132px - var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)));overflow-y:auto;overscroll-behavior:contain}
+  .experience-mobile-dock{z-index:40;box-sizing:border-box;min-height:calc(64px + env(safe-area-inset-bottom,0px));padding-top:8px;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+  .experience-mobile-dock a{min-width:0;min-height:44px}
+  html[data-mobile-keyboard=yes] .experience-mobile-dock{display:none}
+  .shell .toasts{left:14px;right:14px;bottom:calc(var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)) + 12px);z-index:80;pointer-events:none}
+  .shell .toast{max-width:100%;overflow-wrap:anywhere}
+  .shell .tw-upload-status{left:14px;right:14px;width:auto;bottom:calc(var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)) + 12px);max-height:calc(var(--mobile-visible-height,100dvh) - var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)) - 28px);overflow-y:auto;z-index:80}
+  .shell .reading-bottom-progress{bottom:calc(var(--mobile-dock-height,64px + env(safe-area-inset-bottom,0px)) + 8px)}
+  .shell .page,.shell .panel,.shell .buybox,.shell .pay-card,.shell .tw-studio-content,.shell .studio-publish-card{min-width:0}
+  .shell .page.product{grid-template-columns:minmax(0,1fr);gap:20px}
+  .shell .product>.cover{width:132px;max-width:100%;justify-self:start}
+  .shell .hero-actions,.shell .tw-comment-compose-actions,.shell .creator-shop-result-summary{flex-wrap:wrap;gap:10px}
+  .shell .tw-work-card-title{display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+  .shell .tw-card-title-actions{justify-self:end}
+  .shell .tw-work-card-title>a{min-width:0;max-width:100%}
+  .shell .tw-work-card-bottom{min-width:0;align-items:start}
+  .shell .tw-work-card-price{min-width:0;max-width:100%;overflow-wrap:anywhere}
+  .shell .tw-work-card-price strong{white-space:normal;overflow-wrap:anywhere}
+  .shell .tw-creator-card-head{flex-wrap:wrap}
+  .shell .tw-creator-actions{flex-wrap:wrap}
+  .shell .tw-creator-actions .btn{flex:1 1 70px}
+  .shell .tw-work-community textarea{box-sizing:border-box;max-width:100%;font-size:16px}
+  .shell .experience-messages .tw-conversation-heading{position:static;top:auto}
+  .shell .experience-message-file{max-width:100%}
+  .shell .experience-message-tools>small{margin-left:0;overflow-wrap:anywhere}
+  .shell .tw-message-composer>div{flex-wrap:wrap;gap:8px}
+  .shell .tw-product-share .shop-share-dialog{max-height:calc(var(--mobile-visible-height,100dvh) - 28px);width:calc(100vw - 28px)}
+}
