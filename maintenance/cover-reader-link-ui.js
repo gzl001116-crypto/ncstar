@@ -1,4 +1,15 @@
 function workCoverTitle(value){return Array.from(String(value||'').trim()).slice(0,100).join('');}
+async function copyWorkShareLink(url,node){
+ let timer;
+ try{
+  if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');
+  await Promise.race([navigator.clipboard.writeText(url),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('clipboard timeout')),1500);})]);
+  return;
+ }catch{
+  node?.focus();node?.select();node?.setSelectionRange?.(0,url.length);
+  if(document.execCommand?.('copy')!==true)throw Error('Select and copy the link manually');
+ }finally{clearTimeout(timer);}
+}
 function WorkCover({product,ratio='4 / 3',className=''}){
  const source=On(product),[failed,setFailed]=v.useState(false),title=workCoverTitle(product.title);
  v.useEffect(()=>setFailed(false),[source]);
