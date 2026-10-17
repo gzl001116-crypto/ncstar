@@ -1,0 +1,23 @@
+import{readFileSync,writeFileSync}from'node:fs';import{fileURLToPath}from'node:url';import{protectClient}from'./protect-client.mjs';import{localeHash}from'./apply-locale.mjs';
+function once(text,before,after){if(text.split(before).length!==2)throw Error('Browser-language source changed: '+before.slice(0,90));return text.replace(before,()=>after);}
+function cutFunction(text,name,replacement=''){const a=text.indexOf('function '+name+'('),b=text.indexOf('\nfunction ',a+name.length+10);if(a<0||b<0)throw Error('Missing '+name);return text.slice(0,a)+replacement+text.slice(b);}
+export function applyBrowserLanguageMobile(app,css){
+ if(app.includes('function fanstarBrowserLanguage('))throw Error('Already applied');
+ for(const call of ['n.jsx(FanstarLanguageSelector, {compact:true}), ','n.jsx(FanstarLanguageSelector, {}), ']){const expected=call.includes('compact')?1:2;if(app.split(call).length!==expected+1)throw Error('Unexpected language entries');app=app.split(call).join('');}
+ const begin=app.indexOf('const FANSTAR_LANGUAGES='),end=app.indexOf("let fanstarActiveLanguage='zh';",begin);if(begin<0||end<0)throw Error('Missing language declarations');app=app.slice(0,begin)+app.slice(end);app=once(app,"let fanstarActiveLanguage='zh';",'let fanstarActiveLanguage=fanstarBrowserLanguage();');
+ for(const name of ['fanstarValidPreference','fanstarReadPreference','fanstarWritePreference','FanstarLanguageSelector','FanstarLanguageProvider'])app=cutFunction(app,name);
+ app+='\n'+readFileSync(new URL('browser-language-runtime.js',import.meta.url),'utf8');
+ const a=app.indexOf('function Qf()'),b=app.indexOf('\nfunction Re(',a);let shell=app.slice(a,b);
+ shell=once(shell,'if (!event.target.closest?.(\'.account\')&&!event.target.closest?.(\'.fanstar-language-dialog\')) b(false);',"if (!event.target.closest?.('.account')) b(false);");
+ shell=once(shell,'}), n.jsx("p", {\n            children: a("footer.blurb")\n          }), n.jsx(_d, {})]','}), n.jsx(_d, {})]');
+ const marker='}), n.jsxs("div", {\n          children: [n.jsx("strong", {\n            children: a("footer.account")',account=shell.indexOf(marker),accountEnd=shell.indexOf('\n        })]\n      })\n    }), n.jsx("div", {\n      className: "toasts"',account);if(account<0||accountEnd<0)throw Error('Missing footer account column');shell=shell.slice(0,account)+shell.slice(accountEnd);
+ app=app.slice(0,a)+shell+app.slice(b);
+ app=cutFunction(app,'experienceCardOpen');
+ for(const name of ['Lo','op']){const start=app.indexOf('function '+name+'('),end=app.indexOf('\nfunction ',start+20);let card=app.slice(start,end);card=once(card,'  const navigateExperience = $e();','  const cardGesture=useCardGesture();\n  const navigateExperience = $e();');card=once(card,'    role: "link",','    ...cardGesture.handlers,\n    role: "link",');card=once(card,', navigateExperience),',', navigateExperience, cardGesture.state),');app=app.slice(0,start)+card+app.slice(end);}
+ const favoriteStart=app.indexOf('function ap('),favoriteEnd=app.indexOf('\nfunction ',favoriteStart+15);let favorite=app.slice(favoriteStart,favoriteEnd);favorite=once(favorite,'disabled: u || !l.ready,','disabled: u,\n      "aria-busy": u,');favorite=once(favorite,'await l.act(a, "favorite", !b);','await experienceFavoriteAction(l,a);');favorite=once(favorite,'children: [n.jsx("svg", {','children: [u ? n.jsx("span",{className:"tap-action-spinner",role:"status","aria-label":fanstarTranslate("处理中…")}) : n.jsx("svg", {');app=app.slice(0,favoriteStart)+favorite+app.slice(favoriteEnd);
+ app+='\n'+readFileSync(new URL('card-gesture.js',import.meta.url),'utf8');
+ // Drop obsolete language-picker CSS together with its component, including responsive rules.
+ const cssStart=css.indexOf('\n.fanstar-language{');if(cssStart<0)throw Error('Missing locale CSS');css=css.slice(0,cssStart)+'\n'+readFileSync(new URL('browser-language-mobile.css',import.meta.url),'utf8')+'\nhtml:lang(ko),html:lang(ko) body{font-family:"Noto Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif}html:lang(th),html:lang(th) body{font-family:"Noto Sans Thai","Leelawadee UI",Tahoma,sans-serif}html:lang(ms),html:lang(ms) body{font-family:Inter,system-ui,sans-serif}';
+ return{app,servedApp:protectClient(app,'fanstar-browser-language.mjs'),css};
+}
+if(process.argv[1]===fileURLToPath(import.meta.url)){const[input,inputCss,out]=process.argv.slice(2),result=applyBrowserLanguageMobile(readFileSync(input,'utf8'),readFileSync(inputCss,'utf8'));for(const[key,value]of Object.entries(result))writeFileSync(out+'/'+key+(key==='css'?'.css':'.mjs'),value);console.log({sourceHash:localeHash(result.app),appHash:localeHash(result.servedApp),cssHash:localeHash(result.css)});}
