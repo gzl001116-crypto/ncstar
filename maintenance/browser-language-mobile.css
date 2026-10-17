@@ -1,0 +1,13 @@
+.footer .footer-inner{grid-template-columns:minmax(0,1fr) auto;align-items:start}
+.footer .footer-inner>div:first-child{min-width:0}
+@media(max-width:760px){
+ .footer .footer-inner{grid-template-columns:minmax(0,1fr);gap:20px}
+ .shell a,.shell button{touch-action:manipulation;-webkit-tap-highlight-color:rgba(113,81,148,.14)}
+ .shell .tw-card-title-actions{gap:4px;top:4px;right:4px}
+ .shell .tw-card-title-actions>.tw-favorite-wrap>.tw-favorite,.shell .tw-card-title-actions>.tw-product-share>.tw-share-icon{width:44px;height:44px;min-width:44px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0}
+ .shell .tw-card-title-actions>.tw-favorite-wrap>.tw-favorite svg,.shell .tw-card-title-actions>.tw-product-share>.tw-share-icon svg{pointer-events:none}
+ .shell .experience-mobile-dock a,.shell>.topbar .account-btn,.shell>.topbar .tw-header-icon,.shell>.topbar .mobile-header-bag{min-height:44px}
+ .shell .experience-mobile-dock a>svg,.shell .experience-mobile-dock a>span,.shell .experience-mobile-dock i,.shell>.topbar .badge{pointer-events:none}
+}
+
+.tap-action-spinner{display:inline-block;width:16px;height:16px;box-sizing:border-box;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:tap-action-spin .7s linear infinite}@keyframes tap-action-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.tap-action-spinner{animation:none;border-style:dotted}}
