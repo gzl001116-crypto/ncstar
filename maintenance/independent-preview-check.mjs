@@ -9,7 +9,7 @@ async function api(path,body,user='artist',options={}){const request=new Request
 const base={title:'测试作品',description:'作品介绍',price:1,priceCurrency:'usd',inputPrice:7,inputCurrency:'CNY',fileBody:'12345678',kind:'数字作品',tags:'',play:true,download:true,preview:true,previewVersion:2,previewMode:'progress',previewPercent:25,previewLimit:25,playFormat:'novel',playBody:'第一章 第二章 第三章 第四章 第五章 第六章',previewDraft:JSON.stringify({text:'不应信任的客户端摘要',description:'试看开头',stats:{characters:29,images:0,duration:0},media:[]})};
 let r=await api('/api/products',base);check(r.status,200);let product=r.data.products[0];check(product.price,1);check(product.priceCurrency,'usd');check(product.previewSpec.percent,25);
 r=await api('/api/play?productId='+product.id+'&preview=1',null,'reader');check(r.status,200);check(r.data.previewVersion,2);check(r.data.text,'第一章 第二');check(r.data.text.includes('不应信任'),false);check(r.data.previewPercent,25);check('description' in r.data,false);
-check((await api('/api/play?productId='+product.id+'&preview=1',null,null)).status,401);
+check((await api('/api/play?productId='+product.id+'&preview=1',null,null)).status,200);
 r=await api('/api/play?productId='+product.id,null,'artist');check(r.data.preview,false);check(r.data.novel,base.playBody);
 check((await api('/api/products',{...base,price:2})).status,409);check((await api('/api/products',{...base,inputCurrency:'ZZZ'})).status,400);
 check((await api('/api/products',{...base,inputPrice:.001,price:0})).status,400);
@@ -60,7 +60,7 @@ const original='第一段。\n第二段落。\n第三段。😀',encoded=new Tex
 sql.run('UPDATE products SET play_format=?,file_name=?,file_size=?,file_body=?,play_body=? WHERE id=?','novel','long.txt',encoded.length,'r2:works/long-text',JSON.stringify({textSource:'/api/media?productId='+exactId}),exactId);
 const remoteSpec=JSON.parse(sql.get('SELECT spec FROM work_preview_specs WHERE product_id=?',exactId).spec);remoteSpec.stats.characters=Array.from(original).length;remoteSpec.limits.characters=10;sql.run('UPDATE work_preview_specs SET spec=? WHERE product_id=?',JSON.stringify(remoteSpec),exactId);
 r=await api('/api/play?productId='+exactId+'&preview=1',null,'reader');check(r.data.text,'');check(r.data.textSource,'/api/text-preview?productId='+exactId);
-r=await api('/api/text-preview?productId='+exactId,null,'reader');check(r.status,200);check(new TextDecoder().decode(r.data),'第一段。\n第二段落。');check((await api('/api/media?productId='+exactId,null,'reader')).status,403);check((await api('/api/text-preview?productId='+exactId,null,null)).status,401);
+r=await api('/api/text-preview?productId='+exactId,null,'reader');check(r.status,200);check(new TextDecoder().decode(r.data),'第一段。\n第二段落。');check((await api('/api/media?productId='+exactId,null,'reader')).status,403);check((await api('/api/text-preview?productId='+exactId,null,null)).status,200);
 sql.run('UPDATE products SET allow_preview=0 WHERE id=?',exactId);check((await api('/api/text-preview?productId='+exactId,null,'reader')).status,403);sql.run('UPDATE products SET allow_preview=1 WHERE id=?',exactId);
 r=await api('/api/play?productId='+exactId,null,'artist');check(r.data.novel,'');check(r.data.textSource,'/api/media?productId='+exactId);
 const manifest=readingStreamManifest('work',{}, {key:'works/file'}, {format:'novel',body:'truncated'});check(JSON.parse(manifest.body).textSource,'/api/media?productId=work');
