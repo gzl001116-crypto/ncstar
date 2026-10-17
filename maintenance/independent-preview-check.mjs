@@ -17,11 +17,11 @@ for(const percent of[0,101,NaN])check((await api('/api/products',{...base,previe
 check((await api('/api/preview-editor?productId='+product.id,null,'reader')).status,404);check((await api('/api/preview-editor?productId='+product.id)).data.body.novel,base.playBody);
 // Currency selection without entering a new amount preserves the fixed coin price.
 r=await api('/api/products',{...base,title:'保持硬币价格',inputPrice:'',inputCurrency:'JPY'});check(r.status,200);check(r.data.products[0].price,1);
-// Percentages translate to playback seconds, and image previews select whole pages.
+// A playback time limit must not return the original media source; original-file image URLs are removed too.
 const spec=JSON.parse(sql.get('SELECT spec FROM work_preview_specs WHERE product_id=?',product.id).spec);spec.stats.duration=200;
 sql.run('UPDATE products SET play_format=?,play_body=? WHERE id=?','video',JSON.stringify({video:'/api/media?productId='+product.id}),product.id);sql.run('UPDATE work_preview_specs SET spec=? WHERE product_id=?',JSON.stringify(spec),product.id);
-r=await api('/api/play?productId='+product.id+'&preview=1',null,'reader');check(r.data.previewLimit,50);check(r.data.video.endsWith('&preview=1'),true);
-sql.run('UPDATE products SET play_format=?,play_body=? WHERE id=?','comic',JSON.stringify({pages:[1,2,3,4,5].map(number=>({image:'/api/media?productId='+number}))}),product.id);r=await api('/api/play?productId='+product.id+'&preview=1',null,'reader');check(r.data.pages.length,2);check(r.data.pages.every(page=>page.image.endsWith('&preview=1')),true);
+r=await api('/api/play?productId='+product.id+'&preview=1',null,'reader');check(r.data.previewLimit,0);check(r.data.video,undefined);
+sql.run('UPDATE products SET play_format=?,play_body=? WHERE id=?','comic',JSON.stringify({pages:[1,2,3,4,5].map(number=>({image:'/api/media?productId='+number}))}),product.id);r=await api('/api/play?productId='+product.id+'&preview=1',null,'reader');check(r.data.pages.length,0);check(!!r.data.previewNotice,true);
 sql.run('UPDATE products SET play_format=?,play_body=? WHERE id=?','novel',JSON.stringify({novel:base.playBody}),product.id);
 // Stage a real PNG through the existing upload records; ownership and signature are checked.
 const png=new Uint8Array(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jVioAAAAASUVORK5CYII=','base64'));
@@ -46,8 +46,8 @@ sql.run("UPDATE work_preview_assets SET expires=? WHERE token='rollback-image'",
 // Exact word, page and time limits are independent from the percentage.
 let exact={...base,title:'精确预览',previewDraft:JSON.stringify({text:'',stats:{characters:23,duration:200,images:5},limits:{characters:3,images:1,seconds:12.5},media:[]})};
 r=await api('/api/products',exact);check(r.status,200);const exactId=r.data.products[0].id;r=await api('/api/play?productId='+exactId+'&preview=1',null,'reader');check(r.data.text,'第一章');check(r.data.limits.characters,3);
-sql.run('UPDATE products SET play_format=?,play_body=? WHERE id=?','video',JSON.stringify({video:'/api/media?productId='+exactId}),exactId);r=await api('/api/play?productId='+exactId+'&preview=1',null,'reader');check(r.data.previewLimit,12.5);
-sql.run('UPDATE products SET play_format=?,play_body=? WHERE id=?','comic',JSON.stringify({pages:[1,2,3].map(value=>({image:'/api/media?productId='+value}))}),exactId);r=await api('/api/play?productId='+exactId+'&preview=1',null,'reader');check(r.data.pages.length,1);
+sql.run('UPDATE products SET play_format=?,play_body=? WHERE id=?','video',JSON.stringify({video:'/api/media?productId='+exactId}),exactId);r=await api('/api/play?productId='+exactId+'&preview=1',null,'reader');check(r.data.previewLimit,0);
+sql.run('UPDATE products SET play_format=?,play_body=? WHERE id=?','comic',JSON.stringify({pages:[1,2,3].map(value=>({image:'/api/media?productId='+value}))}),exactId);r=await api('/api/play?productId='+exactId+'&preview=1',null,'reader');check(r.data.pages.length,0);
 check((await api('/api/products',{...exact,previewDraft:JSON.stringify({stats:{},limits:{characters:1.5},media:[]})})).status,400);check((await api('/api/products',{...exact,previewDraft:JSON.stringify({stats:{},limits:{seconds:-1},media:[]})})).status,400);
 // A 500 MB file is checked with bounded ranges and accepted; 500 MB + 1 is rejected.
 function virtual(token,size){objects.set('works/'+token,{size,prefix:png});sql.run('INSERT INTO large_uploads(id,user_id,object_key,upload_id,name,type,size,status,expires)VALUES(?,?,?,?,?,?,?,?,?)',token,'artist','works/'+token,'multi','preview.png','image/png',size,'ready',Date.now()+86400000);}
