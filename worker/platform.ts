@@ -766,7 +766,7 @@ function requireUser(sql: Sql, request: Request) {
 
 function openCreator(sql: Sql, user: Row, extra?: { category: string; location: string; bio: string }) {
   const handle = String(user.handle);
-  const category = extra?.category || "写作";
+  const category = extra?.category ?? "写作";
   const location = extra?.location || "未填写";
   const bio = extra?.bio || String(user.bio);
   if (!sql.get("SELECT id FROM creators WHERE id = ?", handle)) {
@@ -778,7 +778,7 @@ function openCreator(sql: Sql, user: Row, extra?: { category: string; location: 
       category,
       location,
       bio,
-      JSON.stringify([category]),
+      JSON.stringify(category ? [category] : []),
       sinceNow(),
     );
   }
@@ -2178,7 +2178,7 @@ function studio(sql: Sql, request: Request, body: Record<string, unknown>) {
   const location = textOf(body.location, 40) || "未填写";
   const category = textOf(body.category, 20);
   if (Array.from(bio).length < 8) return fail("err.apply");
-  if (!CREATOR_CATEGORIES.includes(category)) return fail("err.category");
+  if (category && !CREATOR_CATEGORIES.includes(category)) return fail("err.category");
   const handle = handleOf(body.handle);
   if (!handle) return fail("err.handle");
   if (handleTaken(sql, handle, viewer)) return fail("err.handle.taken");
