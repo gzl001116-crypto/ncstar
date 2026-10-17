@@ -529,7 +529,7 @@ export const ja: Dict = {
   "page.avatarHint": "PNG、JPEG、GIF、WebP。1 MB まで。",
   "page.change": "アイコンを変更",
   "page.apply": "クリエイターに申し込む",
-  "page.applyLead": "ページのアドレスはクリエイター申請のときだけ記入します。分類、所在地、紹介を書いて送信すると、創作台を使えます。",
+  "page.applyLead": "ページのアドレスと8文字以上の紹介を入力してください。送信後、クリエイター用の制作画面を利用できます。",
   "page.note": "紹介",
   "page.notePh": "8 字以上で、公開したいものを書いてください。",
   "page.deleteH": "アカウントを削除",
