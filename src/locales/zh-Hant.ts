@@ -529,7 +529,7 @@ export const zhHant: Dict = {
   "page.avatarHint": "PNG、JPEG、GIF 或 WebP，不超過 1 MB。",
   "page.change": "更換頭像",
   "page.apply": "申請創作者",
-  "page.applyLead": "主頁地址只在申請創作者時填寫。再寫分類、所在地和一段介紹，提交之後就可以使用創作台。",
+  "page.applyLead": "填寫主頁地址和至少 8 字的介紹，提交後即可使用創作者工作台。",
   "page.note": "介紹",
   "page.notePh": "至少 8 個字，寫你想發布什麼。",
   "page.deleteH": "註銷帳號",
